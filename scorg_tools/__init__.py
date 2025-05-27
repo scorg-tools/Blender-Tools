@@ -23,7 +23,6 @@ from scdatatools.sc.localization import SCLocalization
    or do it the proper way and use the databacore to lookup the paint to 
    get the key for the localisation
  - Import the paints (tint pallets node group needs to work for this)
- - Check that the export directory includes the basic file structure
  - Attempt to fix hardpoints that have different names that cause some
    objects not to import, e.g. Asgard manned turret weapons
  '''
@@ -574,7 +573,7 @@ class SCOrg_tools_OT_SelectP4K(bpy.types.Operator):
         return {'RUNNING_MODAL'}
     
 class SCOrg_tools_AddonPreferences(AddonPreferences):
-    bl_idname = __name__
+    bl_idname = __package__
 
     p4k_path: bpy.props.StringProperty(
         name="P4K File Path",
@@ -583,7 +582,7 @@ class SCOrg_tools_AddonPreferences(AddonPreferences):
         default=r"C:\Program Files\Roberts Space Industries\StarCitizen\LIVE\Data.p4k",
     )
 
-    extract_dir: StringProperty(
+    extract_dir: bpy.props.StringProperty(
         name="Extract Directory",
         description="Directory where extracted files are stored",
         subtype='DIR_PATH',
@@ -598,6 +597,12 @@ class SCOrg_tools_AddonPreferences(AddonPreferences):
         if self.p4k_path and not self.p4k_path.lower().endswith(".p4k"):
             layout.label(text="Warning: Not a .p4k file", icon='ERROR')
         layout.prop(self, "extract_dir")
+        if self.extract_dir:
+            abs_chosen_dir = os.path.abspath(bpy.path.abspath(self.extract_dir))
+            objects_dir = os.path.join(abs_chosen_dir, "Objects")
+            if not os.path.isdir(objects_dir):
+                layout.label(text=f"Directory '{objects_dir}' not found. This doesn't appear to be the correct folder.", icon='ERROR')
+
 
 # Register and unregister
 classes = (
