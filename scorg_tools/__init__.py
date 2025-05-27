@@ -18,11 +18,14 @@ from pathlib import Path
 from scdatatools.sc import StarCitizen
 from scdatatools.sc.localization import SCLocalization
 
-######## TODO:
-'''
- - Select the base empty's collection before importing missing loadout
+''' ================================ TODO ================================
  - Fix paint name lookups for ships with multiple words, e.g. guardian_mx
+   or do it the proper way and use the databacore to lookup the paint to 
+   get the key for the localisation
+ - Import the paints (tint pallets node group needs to work for this)
  - Check that the export directory includes the basic file structure
+ - Attempt to fix hardpoints that have different names that cause some
+   objects not to import, e.g. Asgard manned turret weapons
  '''
 
 class SCOrg_tools_misc():
@@ -514,12 +517,13 @@ class VIEW3D_OT_add_modifiers(bpy.types.Operator):
         return {'FINISHED'}
 
 # Panel in the sidebar
-class VIEW3D_PT_dynamic_button_panel(bpy.types.Panel):
+class VIEW3D_PT_scorg_tools_panel(bpy.types.Panel):
     bl_label = "SCOrg.tools Blender utils"
-    bl_idname = "VIEW3D_PT_dynamic_button_panel"
+    bl_idname = "VIEW3D_PT_scorg_tools_panel"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "SCOrg.tools"
+    bl_parent_id = "VIEW3D_PT_BlenderLink_Panel"
 
     def draw(self, context):
         global ship_loaded, p4k
@@ -601,7 +605,7 @@ classes = (
     VIEW3D_OT_import_loadout,
     VIEW3D_OT_add_modifiers,
     VIEW3D_OT_dynamic_button,
-    VIEW3D_PT_dynamic_button_panel,
+    VIEW3D_PT_scorg_tools_panel,
     SCOrg_tools_AddonPreferences,
     SCOrg_tools_OT_SelectP4K,
 )
