@@ -15,6 +15,7 @@ from bpy.types import AddonPreferences
 from bpy.props import StringProperty
 import os
 from pathlib import Path
+import tqdm
 from scdatatools.sc import StarCitizen
 from scdatatools.sc.localization import SCLocalization
 
@@ -281,6 +282,92 @@ class SCOrg_tools_blender():
         SCOrg_tools_blender.add_displace_modifiers_for_pom_and_decal()
         SCOrg_tools_blender.remove_duplicate_displace_modifiers()
 
+    def select_children(obj):
+        if hasattr(obj, 'objects'):
+            children = obj.objects
+        else:
+            children = obj.children
+        for child in children:
+            child.select_set(True)
+            SCOrg_tools_blender.select_children(child)
+
+    def make_instances_real(collection_name):
+        print('Collection:'+collection_name)
+        SCOrg_tools_blender.select_children(bpy.data.collections[collection_name])
+        roots = [ _ for _ in bpy.context.selected_objects if _.instance_collection is not None ]
+        instances = set()
+        for root in roots:
+            if root.instance_collection is None:
+                continue  # we may have already made it real from another root
+            for obj in bpy.context.selected_objects:
+                obj.select_set(False)
+            SCOrg_tools_blender.select_children(root)
+            instances.add(root)
+            for obj in bpy.context.selected_objects:
+                if obj.instance_type == "COLLECTION":
+                    instances.add(obj)
+
+        for inst in tqdm.tqdm( instances, desc="Making instances real", total=len(instances) ):
+            for obj in bpy.context.selected_objects:
+               obj.select_set(False)
+            inst.select_set(True)
+            bpy.ops.object.duplicates_make_real(
+                use_base_parent=True, use_hierarchy=True
+            )
+        return {"FINISHED"}
+        
+    def get_main_collection():
+        found_base_empty = None
+        # Search for the base empty object in the scene
+        for obj in bpy.context.scene.objects:
+            if obj.type == 'EMPTY' and "container_name" in obj and obj["container_name"] == "base":
+                found_base_empty = obj
+                print(f"Found base empty: '{found_base_empty.name}'")
+                break
+
+        if not found_base_empty:
+            print("ERROR: Base empty object with 'container_name' == 'base' not found.")
+            return None
+
+        # Determine the target bpy.data.Collection (the actual collection data block)
+        target_collection = None
+        # Prioritize a non-Scene Collection as the 'direct parent'
+        for coll_data in found_base_empty.users_collection:
+            if coll_data != bpy.context.scene.collection:
+                target_collection = coll_data
+                break
+        # If only linked to the Scene Collection, use that
+        if not target_collection:
+            target_collection = bpy.context.scene.collection
+
+        if not target_collection:
+            print("ERROR: No suitable parent collection determined for the base empty.")
+            return None
+        return target_collection
+
+    def run_make_instances_real():
+        collection = SCOrg_tools_blender.get_main_collection()
+        collection_name = collection.name
+        bpy.ops.object.select_all(action='DESELECT') # Deselect all objects for a clean slate
+        # Make instance real so we can remove the StarFab collection and save data
+        SCOrg_tools_blender.make_instances_real(collection_name)
+        # Remove the StarFab collection
+        if bpy.data.scenes.find('StarFab') >= 0:
+            bpy.data.scenes.remove(bpy.data.scenes['StarFab'])
+        
+        # Tidy up orphan data to save space
+        bpy.ops.outliner.orphans_purge(do_local_ids=True, do_linked_ids=True, do_recursive=True)
+        
+        # Move the collection
+        # unlink from the scene collection
+        bpy.data.scenes['Scene'].collection.children.unlink(bpy.data.collections[collection_name])
+        # link to the Collection collection
+        bpy.data.collections['Collection'].children.link(bpy.data.collections[collection_name])
+
+    def fix_bright_lights():
+        for obj in bpy.data.objects:
+            if obj.type == "LIGHT" and obj.data.energy > 30000:
+                obj.data.energy /= 1000
 
 
 class SCOrg_tools_import_missing_loadout():
@@ -515,6 +602,14 @@ class VIEW3D_OT_add_modifiers(bpy.types.Operator):
         SCOrg_tools_blender.fix_modifiers()
         return {'FINISHED'}
 
+class VIEW3D_OT_make_instance_real(bpy.types.Operator):
+    bl_idname = "view3d.make_instance_real"
+    bl_label = "Add modifiers"
+
+    def execute(self, context):
+        SCOrg_tools_blender.run_make_instances_real()
+        return {'FINISHED'}
+
 # Panel in the sidebar
 class VIEW3D_PT_scorg_tools_panel(bpy.types.Panel):
     bl_label = "SCOrg.tools Blender utils"
@@ -527,29 +622,32 @@ class VIEW3D_PT_scorg_tools_panel(bpy.types.Panel):
     def draw(self, context):
         global ship_loaded, p4k
         layout = self.layout
-        if p4k == None:
-            prefix = "Load data.p4k & "
+        if 'StarFab' in bpy.data.scenes:
+            layout.operator("view3d.make_instance_real", text="Make Instance Real", icon='OUTLINER_OB_GROUP_INSTANCE')
         else:
-            prefix = ""
-        layout.operator("view3d.refresh_button", text=prefix+"Check Loaded Ship", icon='FILE_REFRESH')
-        extract_dir = bpy.context.preferences.addons["scorg_tools"].preferences.extract_dir
-        dir_path = Path(extract_dir)
-        if dir_path.is_dir() != True or extract_dir == "":
-            layout.label(text="To import loadout, set Extract Directory in Preferences", icon='ERROR')
-        if ship_loaded == None:
-            layout.label(text="Click Check to find ship", icon='ERROR')
-        else:
-            layout.label(text=ship_loaded, icon='CHECKBOX_HLT')
-            layout.separator()
-            if dir_path.is_dir() == True and extract_dir != "":
-                layout.operator("view3d.import_loadout", text="Import missing loadout", icon='IMPORT')
-            layout.separator()
-            layout.label(text="Paints")
-            for idx, label in enumerate(button_labels):
-                op = layout.operator("view3d.dynamic_button", text=label)
-                op.button_index = idx
-        layout.label(text="Utilities")
-        layout.operator("view3d.add_modifiers", text="Add modifiers", icon='MODIFIER')
+            if p4k == None:
+                prefix = "Load data.p4k & "
+            else:
+                prefix = ""
+            layout.operator("view3d.refresh_button", text=prefix+"Check Loaded Ship", icon='FILE_REFRESH')
+            extract_dir = bpy.context.preferences.addons["scorg_tools"].preferences.extract_dir
+            dir_path = Path(extract_dir)
+            if dir_path.is_dir() != True or extract_dir == "":
+                layout.label(text="To import loadout, set Extract Directory in Preferences", icon='ERROR')
+            if ship_loaded == None:
+                layout.label(text="Click Check to find ship", icon='ERROR')
+            else:
+                layout.label(text=ship_loaded, icon='CHECKBOX_HLT')
+                layout.separator()
+                if dir_path.is_dir() == True and extract_dir != "":
+                    layout.operator("view3d.import_loadout", text="Import missing loadout", icon='IMPORT')
+                layout.separator()
+                layout.label(text="Paints")
+                for idx, label in enumerate(button_labels):
+                    op = layout.operator("view3d.dynamic_button", text=label)
+                    op.button_index = idx
+            layout.label(text="Utilities")
+            layout.operator("view3d.add_modifiers", text="Add modifiers", icon='MODIFIER')
 
 
 class SCOrg_tools_OT_SelectP4K(bpy.types.Operator):
@@ -608,6 +706,7 @@ class SCOrg_tools_AddonPreferences(AddonPreferences):
 classes = (
     VIEW3D_OT_refresh_button,
     VIEW3D_OT_import_loadout,
+    VIEW3D_OT_make_instance_real,
     VIEW3D_OT_add_modifiers,
     VIEW3D_OT_dynamic_button,
     VIEW3D_PT_scorg_tools_panel,
