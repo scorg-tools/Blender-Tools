@@ -20,6 +20,7 @@ from scdatatools.sc import StarCitizen
 from scdatatools.sc.localization import SCLocalization
 
 ''' ================================ TODO ================================
+ - When changing .p4k, unload and force a reload
  - Fix paint name lookups for ships with multiple words, e.g. guardian_mx
    or do it the proper way and use the databacore to lookup the paint to 
    get the key for the localisation
@@ -130,17 +131,18 @@ class SCOrg_tools_tint():
     bl_idname = __name__
     def get_tint_pallet_list(record):
         tints = []
-        for i, comp in enumerate(record.properties.Components):
-            if comp.name == 'SGeometryResourceParams':
-                try:
-                    # Default tint first
-                    guid = str(comp.properties.Geometry.properties.Geometry.properties.Palette.properties.RootRecord)
-                    tints.append(guid)
-                    for subgeo in comp.properties.Geometry.properties.SubGeometry:
-                        guid = str(subgeo.properties.Geometry.properties.Palette.properties.RootRecord)
+        if hasattr(record, 'properties') and hasattr(record.properties, 'Components'):
+            for i, comp in enumerate(record.properties.Components):
+                if comp.name == 'SGeometryResourceParams':
+                    try:
+                        # Default tint first
+                        guid = str(comp.properties.Geometry.properties.Geometry.properties.Palette.properties.RootRecord)
                         tints.append(guid)
-                except AttributeError as e:
-                    print(f"⚠️ Missing attribute accessing geometry tint pallet in component {i}: {e}")
+                        for subgeo in comp.properties.Geometry.properties.SubGeometry:
+                            guid = str(subgeo.properties.Geometry.properties.Palette.properties.RootRecord)
+                            tints.append(guid)
+                    except AttributeError as e:
+                        print(f"⚠️ Missing attribute accessing geometry tint pallet in component {i}: {e}")
         return tints
 
     def convert_paint_name(s):
@@ -368,6 +370,54 @@ class SCOrg_tools_blender():
         for obj in bpy.data.objects:
             if obj.type == "LIGHT" and obj.data.energy > 30000:
                 obj.data.energy /= 1000
+
+
+class SCOrg_tools_import():
+    def import_by_guid(guid):
+        global dcb
+        print(f"Received GUID: {guid}")
+
+        #Load item by GUID
+        record = dcb.records_by_guid.get(str(guid))
+
+        if not record:
+            # TODO: nice error
+            print(f"Could not find record for GUID: {guid} - are you using the correct Data.p4k?")
+            return False
+
+        print(record)
+        hardpoint_map = {}
+        #Loop through Components -> SItemPortContainerComponentParams -> Ports
+        if hasattr(record, 'properties') and hasattr(record.properties, 'Components'):
+            for i, comp in enumerate(record.properties.Components):
+                print("here1")
+                if comp.name == 'SItemPortContainerComponentParams':
+                    print("here2")
+                    try:
+                        for port in comp.properties.Ports:
+                            print("here3")
+                            print(port.properties)
+                            #get hardpoint name: port->AttachmentImplementation->Helper->Helper->Name
+                            hardpoint = port.properties.AttachmentImplementation.properties.Helper.properties.Helper.properties.Name
+                            #If hardpoint name found
+                            if hardpoint:
+                                print("here4")
+                                #map SItemPortDef-> name : hardpoint name
+                                port_name = SItemPortDef.properties.Name
+                                if port_name:
+                                    print("here5")
+                                    hardpoint_map[port_name] = hardpoint
+                    except AttributeError as e:
+                        print(f"⚠️ Missing attribute accessing record for import_by_guid: {e}")
+
+        print(hardpoint_map)
+
+            #Loop through Components -> SEntityComponentDefaultLoadoutParams -> loadout -> entries
+                #get SItemPortLoadoutEntryParams -> itemPortName
+                    #if map contains itemPortName
+                        #map hardpoint name : SItemPortLoadoutEntryParams -> entityClassReference
+
+            #Loop through empties with ...??
 
 
 class SCOrg_tools_import_missing_loadout():
@@ -610,6 +660,14 @@ class VIEW3D_OT_make_instance_real(bpy.types.Operator):
         SCOrg_tools_blender.run_make_instances_real()
         return {'FINISHED'}
 
+class VIEW3D_OT_import_by_guid(bpy.types.Operator):
+    bl_idname = "view3d.import_by_guid"
+    bl_label = "Import"
+
+    def execute(self, context):
+        SCOrg_tools_import.import_by_guid()
+        return {'FINISHED'}
+    
 # Panel in the sidebar
 class VIEW3D_PT_scorg_tools_panel(bpy.types.Panel):
     bl_label = "SCOrg.tools Blender utils"
@@ -619,6 +677,12 @@ class VIEW3D_PT_scorg_tools_panel(bpy.types.Panel):
     bl_category = "SCOrg.tools"
     bl_parent_id = "VIEW3D_PT_BlenderLink_Panel"
 
+    # We still use poll to ensure it's only drawn if the parent is there
+    # This prevents UI errors even if registered, if the parent isn't ready at draw time
+    @classmethod
+    def poll(cls, context):
+        return hasattr(bpy.types, PARENT_PANEL_BL_IDNAME)
+    
     def draw(self, context):
         global ship_loaded, p4k
         layout = self.layout
@@ -633,7 +697,7 @@ class VIEW3D_PT_scorg_tools_panel(bpy.types.Panel):
             extract_dir = bpy.context.preferences.addons["scorg_tools"].preferences.extract_dir
             dir_path = Path(extract_dir)
             if dir_path.is_dir() != True or extract_dir == "":
-                layout.label(text="To import loadout, set Extract Directory in Preferences", icon='ERROR')
+                layout.label(text="To import loadout, set Data Extract Directory in Preferences", icon='ERROR')
             if ship_loaded == None:
                 layout.label(text="Click Check to find ship", icon='ERROR')
             else:
@@ -648,6 +712,7 @@ class VIEW3D_PT_scorg_tools_panel(bpy.types.Panel):
                     op.button_index = idx
             layout.label(text="Utilities")
             layout.operator("view3d.add_modifiers", text="Add modifiers", icon='MODIFIER')
+            layout.operator(GetGUIDOperator.bl_idname, icon='IMPORT')
 
 
 class SCOrg_tools_OT_SelectP4K(bpy.types.Operator):
@@ -681,8 +746,8 @@ class SCOrg_tools_AddonPreferences(AddonPreferences):
     )
 
     extract_dir: bpy.props.StringProperty(
-        name="Extract Directory",
-        description="Directory where extracted files are stored",
+        name="Data Extract Directory",
+        description="Data directory where extracted files are stored",
         subtype='DIR_PATH',
     )
 
@@ -701,7 +766,28 @@ class SCOrg_tools_AddonPreferences(AddonPreferences):
             if not os.path.isdir(objects_dir):
                 layout.label(text=f"Directory '{objects_dir}' not found. This doesn't appear to be the correct folder.", icon='ERROR')
 
+class GetGUIDOperator(bpy.types.Operator):
+    bl_idname = "wm.get_guid_operator"
+    bl_label = "Import by GUID"
 
+    guid: bpy.props.StringProperty(
+        name="GUID",
+        description="Please enter the GUID",
+        default=""
+    )
+
+    def invoke(self, context, event):
+        wm = context.window_manager
+        return wm.invoke_props_dialog(self)
+
+    def execute(self, context):
+        if self.guid:
+            SCOrg_tools_import.import_by_guid(self.guid)
+            return {'FINISHED'}
+        else:
+            self.report({'WARNING'}, "No GUID entered.")
+            return {'CANCELLED'}
+        
 # Register and unregister
 classes = (
     VIEW3D_OT_refresh_button,
@@ -709,18 +795,86 @@ classes = (
     VIEW3D_OT_make_instance_real,
     VIEW3D_OT_add_modifiers,
     VIEW3D_OT_dynamic_button,
-    VIEW3D_PT_scorg_tools_panel,
+    VIEW3D_OT_import_by_guid,
+    GetGUIDOperator,
     SCOrg_tools_AddonPreferences,
     SCOrg_tools_OT_SelectP4K,
 )
 
+# --- Deferred Registration Logic ---
+_timer_retries = 0
+_max_timer_retries = 10 # Try up to 10 times
+_retry_interval = 2  # Check every 0.5 seconds
+PARENT_PANEL_BL_IDNAME = 'VIEW3D_PT_BlenderLink_Panel'
+# Flag to track if the panel has been successfully registered
+_panel_registered_successfully = False
+
+def delayed_panel_registration():
+    global _timer_retries
+    global _panel_registered_successfully
+
+    # If the panel has already been successfully registered, stop the timer
+    if _panel_registered_successfully:
+        print("VIEW3D_PT_scorg_tools_panel already successfully registered. Stopping timer.")
+        return None
+
+    # Check if our VIEW3D_PT_scorg_tools_panel class itself is registered with Blender
+    # This is the correct way to check if a class is registered
+    if VIEW3D_PT_scorg_tools_panel.is_registered:
+        print("VIEW3D_PT_scorg_tools_panel found in bpy.types. Stopping timer.")
+        _panel_registered_successfully = True # Mark as registered
+        return None
+
+    # Proceed with checking for the parent panel
+    if hasattr(bpy.types, PARENT_PANEL_BL_IDNAME):
+        # Parent panel found, register our panel
+        print(f"Parent panel '{PARENT_PANEL_BL_IDNAME}' found. Registering VIEW3D_PT_scorg_tools_panel.")
+        try:
+            bpy.utils.register_class(VIEW3D_PT_scorg_tools_panel)
+            _panel_registered_successfully = True # Mark as registered
+            print("VIEW3D_PT_scorg_tools_panel registered successfully.")
+            return None # Return None to unregister the timer (success)
+        except Exception as e:
+            # Handle potential registration errors, though less common here
+            print(f"Error registering VIEW3D_PT_scorg_tools_panel: {e}")
+            # Continue retrying if it's an intermittent error
+            _timer_retries += 1
+            if _timer_retries <= _max_timer_retries:
+                print(f"Retrying registration in {_retry_interval} seconds (Attempt {_timer_retries}/{_max_timer_retries}).")
+                return _retry_interval
+            else:
+                print(f"Max retries reached for VIEW3D_PT_scorg_tools_panel registration after error.")
+                return None
+    else:
+        # Parent panel not found, retry after a delay
+        _timer_retries += 1
+        if _timer_retries <= _max_timer_retries:
+            print(f"Parent panel '{PARENT_PANEL_BL_IDNAME}' not found. Retrying in {_retry_interval} seconds (Attempt {_timer_retries}/{_max_timer_retries}).")
+            return _retry_interval # Return interval for next call
+        else:
+            print(f"Failed to register VIEW3D_PT_scorg_tools_panel: Parent panel '{PARENT_PANEL_BL_IDNAME}' not found after {_max_timer_retries} attempts.")
+            return None # Max retries reached, unregister the timer (failure)
+
+
 def register():
     for cls in classes:
         bpy.utils.register_class(cls)
+    print("My addon: Attempting to register SCOrg_tools panel in Starfab...")
+    bpy.app.timers.register(delayed_panel_registration, first_interval=_retry_interval, persistent=True)
 
 def unregister():
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
+    # Unregister VIEW3D_PT_scorg_tools_panel if it was successfully registered
+    if _panel_registered_successfully and VIEW3D_PT_scorg_tools_panel.is_registered:
+        print("Unregistering MyPanel...")
+        bpy.utils.unregister_class(VIEW3D_PT_scorg_tools_panel)
+        _panel_registered_successfully = False
+
+    # Always make sure to unregister the timer
+    if bpy.app.timers.is_registered(delayed_panel_registration):
+        print("Unregistering delayed_panel_registration timer...")
+        bpy.app.timers.unregister(delayed_panel_registration)
 
 dcb = None
 p4k = None
