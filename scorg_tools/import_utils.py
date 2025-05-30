@@ -1,0 +1,245 @@
+import bpy
+from pathlib import Path
+import os
+import sys
+
+# Import globals
+from . import globals_and_threading
+from . import misc_utils # For SCOrg_tools_misc.error, get_ship_record, select_base_collection
+from . import blender_utils # For SCOrg_tools_blender.fix_modifiers
+
+class SCOrg_tools_import():
+    def import_by_guid(guid):
+        # Access global dcb and p4k
+        dcb = globals_and_threading.dcb
+        p4k = globals_and_threading.p4k
+
+        print(f"Received GUID: {guid}")
+        
+        if not dcb:
+            misc_utils.SCOrg_tools_misc.error(f"Please load Data.p4k first")
+            return False
+        
+        #Load item by GUID
+        record = dcb.records_by_guid.get(str(guid))
+
+        if not record:
+            misc_utils.SCOrg_tools_misc.error(f"Could not find record for GUID: {guid} - are you using the correct Data.p4k?")
+            print(dcb)
+            print(p4k)
+            return False
+
+        print(record)
+        hardpoint_map = {}
+        #Loop through Components -> SItemPortContainerComponentParams -> Ports
+        if hasattr(record, 'properties') and hasattr(record.properties, 'Components'):
+            for i, comp in enumerate(record.properties.Components):
+                print("here1")
+                if comp.name == 'SItemPortContainerComponentParams':
+                    print("here2")
+                    try:
+                        for port in comp.properties.Ports:
+                            print("here3")
+                            print(port.properties)
+                            #get hardpoint name: port->AttachmentImplementation->Helper->Helper->Name
+                            hardpoint = port.properties.AttachmentImplementation.properties.Helper.properties.Helper.properties.Name
+                            #If hardpoint name found
+                            if hardpoint:
+                                print("here4")
+                                #map SItemPortDef-> name : hardpoint name
+                                # FIX: SItemPortDef is not defined here. It should be port.properties.Name
+                                port_name = port.properties.Name # Corrected: Access port.properties.Name directly
+                                if port_name:
+                                    print("here5")
+                                    hardpoint_map[port_name] = hardpoint
+                    except AttributeError as e:
+                        print(f"⚠️ Missing attribute accessing record for import_by_guid: {e}")
+
+        print(hardpoint_map)
+
+            #Loop through Components -> SEntityComponentDefaultLoadoutParams -> loadout -> entries
+                #get SItemPortLoadoutEntryParams -> itemPortName
+                    #if map contains itemPortName
+                        #map hardpoint name : SItemPortLoadoutEntryParams -> entityClassReference
+
+            #Loop through empties with ...??
+
+
+class SCOrg_tools_import_missing_loadout():
+    INCLUDE_HARDPOINTS = []
+    imported_guid_objects = {}
+    extract_dir = None
+    
+    def get_geometry_path_from_guid(dcb, guid):
+        try:
+            record = dcb.records_by_guid.get(str(guid))
+            if not record:
+                print(f"⚠️  No record found for GUID: {guid}")
+                return None
+            for i, comp in enumerate(record.properties.Components):
+                if comp.name == 'SGeometryResourceParams':
+                    try:
+                        path = comp.properties.Geometry.properties.Geometry.properties.Geometry.properties.path
+                        dae_path = Path(path).with_suffix('.dae')
+                        return SCOrg_tools_import_missing_loadout.extract_dir / dae_path
+                    except AttributeError as e:
+                        print(f"⚠️ Missing attribute accessing geometry path in component {i}: {e}")
+            return None
+        except Exception as e:
+            print(f"❌ Error processing GUID {guid}: {e}")
+            return None
+
+    def get_hardpoint_mapping_from_guid(dcb, guid):
+        mapping = {}
+        try:
+            record = dcb.records_by_guid.get(str(guid))
+            if not record:
+                print(f"⚠️  No record found for GUID: {guid}")
+                return None
+            for i, comp in enumerate(record.properties.Components):
+                if comp.name == 'SItemPortContainerComponentParams':
+                    try:
+                        ports = comp.properties.Ports
+                        for port in ports:
+                            helper_name = port.properties['AttachmentImplementation'].properties['Helper'].properties['Helper'].properties['Name']
+                            port_name = port.properties['Name']
+                            mapping[helper_name] = port_name
+                        return mapping
+                    except AttributeError as e:
+                        print(f"⚠️ Error accessing ports in component {comp.name}: {e}")
+            return None
+        except Exception as e:
+            print(f"❌ Error in get_hardpoint_mapping_from_guid GUID {guid}: {e}")
+            return None
+
+    def duplicate_hierarchy_linked(original_obj, parent_empty):
+        new_obj = original_obj.copy()
+        new_obj.data = original_obj.data  # share mesh data (linked duplicate)
+        new_obj.animation_data_clear()
+        bpy.context.collection.objects.link(new_obj)
+
+        new_obj.parent = parent_empty
+        new_obj.matrix_parent_inverse.identity()
+
+        for child in original_obj.children:
+            SCOrg_tools_import_missing_loadout.duplicate_hierarchy_linked(child, new_obj)
+
+    def import_hardpoint_hierarchy(loadout, empties_to_fill, is_top_level=True):        
+        entries = loadout.properties.get('entries', [])
+        print(f"DEBUG: import_hardpoint_hierarchy called with {len(entries)} entries, empties to fill: {len(empties_to_fill)}, is_top_level={is_top_level}")
+        for entry in entries:
+            props = entry.properties
+            item_port_name = props.get('itemPortName')
+            guid = props.get('entityClassReference')
+            nested_loadout = props.get('loadout')
+
+            print(f"DEBUG: Processing entry '{item_port_name}' GUID {guid}")
+
+            if not item_port_name or not guid:
+                print("DEBUG: Missing item_port_name or guid, skipping")
+                continue
+
+            # Apply filter ONLY at top level
+            if is_top_level and SCOrg_tools_import_missing_loadout.INCLUDE_HARDPOINTS and item_port_name not in SCOrg_tools_import_missing_loadout.INCLUDE_HARDPOINTS:
+                print(f"DEBUG: Skipping '{item_port_name}' due to top-level filter")
+                continue
+
+            matching_empty = next((e for e in empties_to_fill if e.get('orig_name') == item_port_name), None)
+            if not matching_empty:
+                print(f"WARNING: No matching empty found for hardpoint '{item_port_name}'")
+                continue
+
+            guid_str = str(guid)
+            if guid_str == '00000000-0000-0000-0000-000000000000':
+                print("DEBUG: GUID is all zeros, skipping")
+                continue
+
+            if guid_str in SCOrg_tools_import_missing_loadout.imported_guid_objects:
+                original_root = SCOrg_tools_import_missing_loadout.imported_guid_objects[guid_str]
+                SCOrg_tools_import_missing_loadout.duplicate_hierarchy_linked(original_root, matching_empty)
+                print(f"Duplicated hierarchy for '{item_port_name}' from GUID {guid_str}")
+            else:
+                geometry_path = SCOrg_tools_import_missing_loadout.get_geometry_path_from_guid(globals_and_threading.dcb, guid_str)
+                if geometry_path is None or not geometry_path.exists():
+                    print(f"ERROR: Geometry file missing for GUID {guid_str}: {geometry_path}")
+                    continue
+
+                bpy.ops.object.select_all(action='DESELECT')
+                result = bpy.ops.wm.collada_import(filepath=str(geometry_path))
+                if 'FINISHED' not in result:
+                    print(f"ERROR: Failed to import DAE for {guid_str}: {geometry_path}")
+                    continue
+
+                imported_objs = [obj for obj in bpy.context.selected_objects]
+                root_objs = [obj for obj in imported_objs if obj.parent is None]
+                if not root_objs:
+                    print(f"WARNING: No root object found for: {geometry_path}")
+                    continue
+
+                root_obj = root_objs[0]
+                root_obj.parent = matching_empty
+                root_obj.matrix_parent_inverse.identity()
+                SCOrg_tools_import_missing_loadout.imported_guid_objects[guid_str] = root_obj
+
+                imported_empties = [
+                    obj for obj in imported_objs
+                    if obj.type == 'EMPTY'
+                ]
+
+                mapping = SCOrg_tools_import_missing_loadout.get_hardpoint_mapping_from_guid(globals_and_threading.dcb, guid_str) or {}
+                for empty in imported_empties:
+                    if empty.name in mapping:
+                        empty['orig_name'] = mapping[empty.name]
+
+                print(f"Imported object for '{item_port_name}' GUID {guid_str} → {geometry_path}")
+
+                # Recurse into nested loadout with is_top_level=False
+                if nested_loadout:
+                    entries_count = len(nested_loadout.properties.get('entries', []))
+                    print(f"DEBUG: Nested loadout detected with {entries_count} entries, recursing...")
+                    SCOrg_tools_import_missing_loadout.import_hardpoint_hierarchy(nested_loadout, imported_empties, is_top_level=False)
+                else:
+                    print("DEBUG: No nested loadout found, recursion ends here")
+
+
+    def run_import():
+        # Access global dcb
+        dcb = globals_and_threading.dcb
+
+        os.system('cls')
+        SCOrg_tools_import_missing_loadout.imported_guid_objects = {}
+        SCOrg_tools_import_missing_loadout.INCLUDE_HARDPOINTS = [] # all
+        
+        # Access addon preferences via bpy.context
+        prefs = bpy.context.preferences.addons["scorg_tools"].preferences
+        SCOrg_tools_import_missing_loadout.extract_dir = Path(prefs.extract_dir) # Ensure Path object
+        
+        misc_utils.SCOrg_tools_misc.select_base_collection() # Ensure the base collection is active before importing
+        record = misc_utils.SCOrg_tools_misc.get_ship_record(dcb)
+        
+        # Check if record is None before trying to access its properties
+        if record is None:
+            misc_utils.SCOrg_tools_misc.error("Could not get ship record. Please ensure a 'base' empty object exists and Data.p4k is loaded correctly.")
+            return
+
+        # Safely access Components and loadout
+        top_level_loadout = None
+        if hasattr(record, 'properties') and hasattr(record.properties, 'Components') and len(record.properties.Components) > 1:
+            if hasattr(record.properties.Components[1], 'reference') and hasattr(record.properties.Components[1].reference, 'properties'):
+                top_level_loadout = record.properties.Components[1].reference.properties.get('loadout')
+
+        if top_level_loadout is None:
+            misc_utils.SCOrg_tools_misc.error("Could not find top-level loadout in ship record. Check the structure of the record.")
+            return
+
+        empties_to_fill = [
+            obj for obj in bpy.data.objects
+            if obj.type == 'EMPTY'
+            and 'orig_name' in obj.keys()
+            and obj['orig_name'].startswith('hardpoint_')
+        ]
+
+        print(f"Total hardpoints to import: {len(empties_to_fill)}")
+
+        SCOrg_tools_import_missing_loadout.import_hardpoint_hierarchy(top_level_loadout, empties_to_fill)
+        blender_utils.SCOrg_tools_blender.fix_modifiers()
