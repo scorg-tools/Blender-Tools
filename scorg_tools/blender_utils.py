@@ -142,7 +142,7 @@ class SCOrg_tools_blender():
 
     def make_instances_real(collection_name):
         print('Collection:'+collection_name)
-        misc_utils.SCOrg_tools_misc.select_children(bpy.data.collections[collection_name]) # Use misc_utils function
+        SCOrg_tools_blender.select_children(bpy.data.collections[collection_name])
         roots = [ _ for _ in bpy.context.selected_objects if _.instance_collection is not None ]
         instances = set()
         for root in roots:
@@ -150,7 +150,7 @@ class SCOrg_tools_blender():
                 continue  # we may have already made it real from another root
             for obj in bpy.context.selected_objects:
                 obj.select_set(False)
-            misc_utils.SCOrg_tools_misc.select_children(root) # Use misc_utils function
+            SCOrg_tools_blender.select_children(root)
             instances.add(root)
             for obj in bpy.context.selected_objects:
                 if obj.instance_type == "COLLECTION":
