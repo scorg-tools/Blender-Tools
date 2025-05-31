@@ -14,6 +14,9 @@ import bpy
 import os
 import sys
 
+# TODO: make a friendly error when installing to detect if the starfab addon is not installed
+
+
 # Add addon directory to sys.path to allow relative imports
 if __package__ in sys.modules:
     addon_path = os.path.dirname(os.path.abspath(__file__))
