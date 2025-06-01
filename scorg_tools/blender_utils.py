@@ -1,10 +1,6 @@
 import bpy
 import tqdm
 
-# Import globals
-from . import globals_and_threading
-from . import misc_utils # For SCOrg_tools_misc.select_children, get_main_collection
-
 class SCOrg_tools_blender():
     def add_weld_and_weighted_normal_modifiers():
         for obj in bpy.data.objects:
@@ -71,9 +67,9 @@ class SCOrg_tools_blender():
                 continue
 
             for mat_index, mat in enumerate(mesh.materials):
-                if mat and SCOrg_tools_blender.material_matches(mat.name):
+                if mat and __class__.material_matches(mat.name):
                     group_name = mat.name
-                    vg = SCOrg_tools_blender.ensure_vertex_group(obj, mat_index, group_name)
+                    vg = __class__.ensure_vertex_group(obj, mat_index, group_name)
 
                     # 1) Check if a Displace modifier for this vertex group already exists
                     modifier_exists = False
@@ -127,9 +123,9 @@ class SCOrg_tools_blender():
                     #print(f"Removed duplicate Displace modifier '{mod_name}' from '{obj.name}'.")
                     
     def fix_modifiers():
-        SCOrg_tools_blender.add_weld_and_weighted_normal_modifiers()
-        SCOrg_tools_blender.add_displace_modifiers_for_pom_and_decal()
-        SCOrg_tools_blender.remove_duplicate_displace_modifiers()
+        __class__.add_weld_and_weighted_normal_modifiers()
+        __class__.add_displace_modifiers_for_pom_and_decal()
+        __class__.remove_duplicate_displace_modifiers()
 
     def select_children(obj):
         if hasattr(obj, 'objects'):
@@ -138,11 +134,11 @@ class SCOrg_tools_blender():
             children = obj.children
         for child in children:
             child.select_set(True)
-            SCOrg_tools_blender.select_children(child)
+            __class__.select_children(child)
 
     def make_instances_real(collection_name):
         print('Collection:'+collection_name)
-        SCOrg_tools_blender.select_children(bpy.data.collections[collection_name])
+        __class__.select_children(bpy.data.collections[collection_name])
         roots = [ _ for _ in bpy.context.selected_objects if _.instance_collection is not None ]
         instances = set()
         for root in roots:
@@ -150,7 +146,7 @@ class SCOrg_tools_blender():
                 continue  # we may have already made it real from another root
             for obj in bpy.context.selected_objects:
                 obj.select_set(False)
-            SCOrg_tools_blender.select_children(root)
+            __class__.select_children(root)
             instances.add(root)
             for obj in bpy.context.selected_objects:
                 if obj.instance_type == "COLLECTION":
@@ -195,11 +191,11 @@ class SCOrg_tools_blender():
         return target_collection
 
     def run_make_instances_real():
-        collection = SCOrg_tools_blender.get_main_collection()
+        collection = __class__.get_main_collection()
         collection_name = collection.name
         bpy.ops.object.select_all(action='DESELECT') # Deselect all objects for a clean slate
         # Make instance real so we can remove the StarFab collection and save data
-        SCOrg_tools_blender.make_instances_real(collection_name)
+        __class__.make_instances_real(collection_name)
         # Remove the StarFab collection
         if bpy.data.scenes.find('StarFab') >= 0:
             bpy.data.scenes.remove(bpy.data.scenes['StarFab'])
