@@ -25,6 +25,7 @@ class SCOrg_tools_AddonPreferences(bpy.types.AddonPreferences):
         name="Star Citizen Data.p4k Path",
         subtype='FILE_PATH',
         description="Path to your Star Citizen Data.p4k file (e.g., C:\\Program Files\\Roberts Space Industries\\StarCitizen\\LIVE\\Data.p4k)",
+        default=r"C:\Program Files\Roberts Space Industries\StarCitizen\LIVE\Data.p4k",
         update=update_p4k_path_callback
     )
 
@@ -49,12 +50,19 @@ class SCOrg_tools_AddonPreferences(bpy.types.AddonPreferences):
 
     def draw(self, context):
         layout = self.layout
-        layout.label(text="SCOrg.tools Add-on Preferences")
-        
-        row = layout.row(align=True)
-        row.prop(self, "p4k_path")
-        row.operator("scorg_tools.select_p4k", icon='FILE_FOLDER', text="")
+        layout.label(text="SCOrg.tools Settings")
+        layout.label(text=f"Current P4K: {self.p4k_path}")
+        layout.operator("scorg_tools.select_p4k", text="Select .p4k File")
+
+        if self.p4k_path and not self.p4k_path.lower().endswith(".p4k"):
+            layout.label(text="Warning: Not a .p4k file", icon='ERROR')
         layout.prop(self, "extract_dir")
+        if self.extract_dir:
+            from os import path
+            abs_chosen_dir = path.abspath(bpy.path.abspath(self.extract_dir))
+            objects_dir = path.join(abs_chosen_dir, "Objects")
+            if not path.isdir(objects_dir):
+                layout.label(text=f"Directory '{objects_dir}' not found. This doesn't appear to be the correct folder.", icon='ERROR')
 
         # Display load progress if a message exists
         if self.p4k_load_message:
