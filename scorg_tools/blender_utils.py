@@ -16,7 +16,7 @@ class SCOrg_tools_blender():
             if not has_weld:
                 weld = obj.modifiers.new(name="Weld", type='WELD')
                 weld.merge_threshold = 0.000001
-                print(f"Added Weld modifier to {obj.name}")
+                #print(f"Added Weld modifier to {obj.name}")
 
             # Check if Weighted Normal modifier already exists
             has_weighted_normal = any(mod.type == 'WEIGHTED_NORMAL' for mod in obj.modifiers)
@@ -26,7 +26,7 @@ class SCOrg_tools_blender():
                 wn.weight = 50
                 wn.keep_sharp = True
                 wn.thresh = 0.01  # Corrected attribute name
-                print(f"Added Weighted Normal modifier to {obj.name}")
+                #print(f"Added Weighted Normal modifier to {obj.name}")
 
 
     def material_matches(name):
@@ -79,7 +79,7 @@ class SCOrg_tools_blender():
                     modifier_exists = False
                     for mod in obj.modifiers:
                         if mod.type == 'DISPLACE' and mod.vertex_group == vg.name:
-                            print(f"Displace modifier for {obj.name} using group '{vg.name}' already exists. Skipping.")
+                            #print(f"Displace modifier for {obj.name} using group '{vg.name}' already exists. Skipping.")
                             modifier_exists = True
                             break
 
@@ -89,7 +89,7 @@ class SCOrg_tools_blender():
                         mod.strength = 0.005
                         mod.mid_level = 0
                         mod.vertex_group = vg.name
-                        print(f"Added Displace modifier for {obj.name} using group '{vg.name}'")
+                        #print(f"Added Displace modifier for {obj.name} using group '{vg.name}'")
 
     def remove_duplicate_displace_modifiers():
         for obj in bpy.data.objects:
@@ -116,7 +116,7 @@ class SCOrg_tools_blender():
                         # We've already seen a DISPLACE modifier for this vertex group.
                         # This one is a duplicate, so mark its name for removal.
                         modifier_names_to_remove.append(mod.name)
-                        print(f"Marked duplicate Displace modifier '{mod.name}' from '{obj.name}' for vertex group '{mod.vertex_group}' for removal.")
+                        #print(f"Marked duplicate Displace modifier '{mod.name}' from '{obj.name}' for vertex group '{mod.vertex_group}' for removal.")
             
             # Now, remove the marked modifiers by name.
             # Iterate in reverse when removing, to ensure indices don't shift unexpectedly
@@ -124,7 +124,7 @@ class SCOrg_tools_blender():
             for mod_name in reversed(modifier_names_to_remove):
                 if mod_name in obj.modifiers: # Check if it still exists (e.g., not manually removed)
                     obj.modifiers.remove(obj.modifiers[mod_name])
-                    print(f"Removed duplicate Displace modifier '{mod_name}' from '{obj.name}'.")
+                    #print(f"Removed duplicate Displace modifier '{mod_name}' from '{obj.name}'.")
                     
     def fix_modifiers():
         SCOrg_tools_blender.add_weld_and_weighted_normal_modifiers()
