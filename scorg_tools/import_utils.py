@@ -128,6 +128,9 @@ class SCOrg_tools_import():
 
                 # add modifiers
                 blender_utils.SCOrg_tools_blender.fix_modifiers();
+                if missing_files.count:
+                    print("The following files were missing, please extract them with StarFab:")
+                    print(missing_files)
 
     def get_all_empties(hardpoints_only = False):
         if hardpoints_only:
@@ -244,6 +247,7 @@ class SCOrg_tools_import_missing_loadout():
 
     def import_hardpoint_hierarchy(loadout, empties_to_fill, is_top_level=True):        
         entries = loadout.properties.get('entries', [])
+        missing_files = []
         print(f"DEBUG: import_hardpoint_hierarchy called with {len(entries)} entries, empties to fill: {len(empties_to_fill)}, is_top_level={is_top_level}")
         for entry in entries:
             props = entry.properties
@@ -278,8 +282,14 @@ class SCOrg_tools_import_missing_loadout():
                 print(f"Duplicated hierarchy for '{item_port_name}' from GUID {guid_str}")
             else:
                 geometry_path = SCOrg_tools_import_missing_loadout.get_geometry_path_from_guid(globals_and_threading.dcb, guid_str)
-                if geometry_path is None or not geometry_path.exists():
-                    print(f"ERROR: Geometry file missing for GUID {guid_str}: {geometry_path}")
+                if geometry_path is None:
+                    print(f"ERROR: No geometry for GUID {guid_str}: {geometry_path}")
+                    continue
+
+                if not geometry_path.exists():
+                    misc_utils.SCOrg_tools_misc.error(f"Error: .DAE file not found at: {geometry_path}")
+                    print(f"DEBUG: Attempted DAE import path: {geometry_path}, but file was missing")
+                    missing_files.append(geometry_path);
                     continue
 
                 bpy.ops.object.select_all(action='DESELECT')
@@ -318,6 +328,9 @@ class SCOrg_tools_import_missing_loadout():
                     SCOrg_tools_import_missing_loadout.import_hardpoint_hierarchy(nested_loadout, imported_empties, is_top_level=False)
                 else:
                     print("DEBUG: No nested loadout found, recursion ends here")
+        if missing_files.count:
+            print("The following files were missing, please extract them with StarFab if you want a more complete loadout:")
+            print(missing_files)
 
 
     def run_import():
