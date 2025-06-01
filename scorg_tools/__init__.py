@@ -1,11 +1,12 @@
-# __init__.py
 bl_info = {
-    "name": "SCOrg.tools",
+    "name": "SCOrg.tools Blender Tools alpha",
     "author": "Star-Destroyer@scorg.tools",
-    "version": (1, 0, 0),
+    "version": (1, 0, 7),
     "blender": (3, 6, 0),
     "location": "View3D > Sidebar > SCOrg.tools",
     "description": "Tools to supplement StarFab",
+    "warning": "EXPERIMENTAL ALPHA VERSION! Use with caution.",
+    "doc_url": "https://github.com/scorg-tools/Blender-Tools/",
     "category": "3D View"
 }
 bl_idname = "scorg_tools"
@@ -30,7 +31,7 @@ from . import tint_utils
 from . import blender_utils
 from . import import_utils
 from . import operators
-from . import panels # Keep this import, as we reference panels.VIEW3D_PT_scorg_tools_panel
+from . import panels
 from . import preferences
 
 # Classes to register (EXCLUDE panels.VIEW3D_PT_scorg_tools_panel from here)
