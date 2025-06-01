@@ -1,7 +1,5 @@
 import bpy
 from pathlib import Path
-import os
-import sys
 
 # Import globals
 from . import globals_and_threading

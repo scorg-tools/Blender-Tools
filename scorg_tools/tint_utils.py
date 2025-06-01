@@ -30,4 +30,4 @@ class SCOrg_tools_tint():
     # Function to call when a button is pressed
     def on_button_pressed(index):
         print(f"Button {index} pressed: {globals_and_threading.button_labels[index]}")
-        # Add your custom logic here
+        # TODO: apply the tint
