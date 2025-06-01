@@ -1,7 +1,7 @@
 bl_info = {
     "name": "SCOrg.tools Blender Tools alpha",
     "author": "Star-Destroyer@scorg.tools",
-    "version": (1, 0, 7),
+    "version": (1, 0, 8),
     "blender": (3, 6, 0),
     "location": "View3D > Sidebar > SCOrg.tools",
     "description": "Tools to supplement StarFab",
@@ -41,6 +41,20 @@ from . import operators
 from . import panels
 from . import preferences
 
+try:
+    import scdatatools
+    dependencies_met = True
+except ImportError:
+    # If scdatatools is not found, set the flag to False.
+    dependencies_met = False
+    print("\n" * 3) # Add some blank lines for visibility
+    print("=" * 70)
+    print("SCOrg.tools ERROR: Required 'scdatatools' module not found! Please install the StarFab addon")
+
+for module_name in ['starfab_addon', 'scdt_addon']:
+    if not module_name in bpy.context.preferences.addons:
+        dependencies_met = False
+
 # Classes to register (EXCLUDE panels.VIEW3D_PT_scorg_tools_panel from here)
 # This panel will be registered exclusively by the delayed_panel_registration timer.
 classes = (
@@ -56,7 +70,7 @@ classes = (
     preferences.SCOrg_tools_OT_SelectP4K,
 )
 
-# --- Deferred Panel Registration Logic ---
+# Deferred Panel Registration Logic
 _timer_retries = 0
 _max_timer_retries = 30 # Increased retries to give StarFab more time to load
 _retry_interval = 0.25 # Reduced interval for faster checks
@@ -119,6 +133,19 @@ def delayed_panel_registration():
 
 def register():
     # Register all classes EXCEPT the main panel (which is handled by the timer)
+    if not dependencies_met:
+        # If dependencies are NOT met, show the popup and print to console.
+        # This popup will appear immediately when the user tries to enable the add-on.
+        def draw_error_message(self, context):
+            layout = self.layout
+            layout.label(text="Error: StarFab addon not found or not enabled!")
+            layout.label(text="Please install and enable StarFab Blender Addon.")
+            layout.separator()
+            layout.label(text="Restart Blender after installation.")
+
+        # Show the popup menu. This will be triggered when the add-on is enabled.
+        bpy.context.window_manager.popup_menu(draw_error_message, title="SCOrg.tools Installation Error", icon='ERROR')
+
     for cls in classes:
         try:
             bpy.utils.register_class(cls)
