@@ -104,7 +104,7 @@ class SCOrg_tools_import():
                                 if not geometry_path.is_file():
                                     misc_utils.SCOrg_tools_misc.error(f"Error: .DAE file not found at: {geometry_path}")
                                     print(f"DEBUG: Attempted DAE import path: {geometry_path}, but file was missing")
-                                    missing_files.append(geometry_path);
+                                    missing_files.append(str(geometry_path));
                                     #return {'CANCELLED'}
                                 else:
                                     result = bpy.ops.wm.collada_import(filepath=str(geometry_path))
@@ -289,7 +289,7 @@ class SCOrg_tools_import_missing_loadout():
                 if not geometry_path.exists():
                     misc_utils.SCOrg_tools_misc.error(f"Error: .DAE file not found at: {geometry_path}")
                     print(f"DEBUG: Attempted DAE import path: {geometry_path}, but file was missing")
-                    missing_files.append(geometry_path);
+                    missing_files.append(str(geometry_path));
                     continue
 
                 bpy.ops.object.select_all(action='DESELECT')
