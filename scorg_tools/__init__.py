@@ -16,7 +16,8 @@ import os
 import sys
 
 # TODO: make a friendly error when installing to detect if the starfab addon is not installed
-
+# TODO: add functionality to add POM material and replace in-place with existing textures
+# TODO: fix importing fps weapons in import by guid
 
 # Add addon directory to sys.path to allow relative imports
 if __package__ in sys.modules:
