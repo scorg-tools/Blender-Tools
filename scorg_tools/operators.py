@@ -5,7 +5,8 @@ from . import globals_and_threading
 from . import misc_utils
 from . import tint_utils
 from . import import_utils
-from . import blender_utils # <-- ADD THIS LINE
+from . import blender_utils
+from pathlib import Path
 
 class VIEW3D_OT_dynamic_button(bpy.types.Operator):
     bl_idname = "view3d.dynamic_button"

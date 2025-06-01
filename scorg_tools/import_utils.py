@@ -31,38 +31,156 @@ class SCOrg_tools_import():
 
         print(record)
         hardpoint_map = {}
-        #Loop through Components -> SItemPortContainerComponentParams -> Ports
+        hardpoint_guid_map = {}
+        geometry_path = __class__.get_dae_path_by_guid(guid)
+        prefs = bpy.context.preferences.addons["scorg_tools"].preferences
+        extract_path = Path(prefs.extract_dir)
+        #Loop through Components
         if hasattr(record, 'properties') and hasattr(record.properties, 'Components'):
             for i, comp in enumerate(record.properties.Components):
-                print("here1")
                 if comp.name == 'SItemPortContainerComponentParams':
-                    print("here2")
                     try:
+                        # loop though SItemPortContainerComponentParams -> Ports
                         for port in comp.properties.Ports:
-                            print("here3")
                             print(port.properties)
                             #get hardpoint name: port->AttachmentImplementation->Helper->Helper->Name
                             hardpoint = port.properties.AttachmentImplementation.properties.Helper.properties.Helper.properties.Name
                             #If hardpoint name found
                             if hardpoint:
-                                print("here4")
                                 #map SItemPortDef-> name : hardpoint name
-                                # FIX: SItemPortDef is not defined here. It should be port.properties.Name
                                 port_name = port.properties.Name # Corrected: Access port.properties.Name directly
-                                if port_name:
-                                    print("here5")
+                                if port_name and port_name not in hardpoint_map:
                                     hardpoint_map[port_name] = hardpoint
                     except AttributeError as e:
                         print(f"⚠️ Missing attribute accessing record for import_by_guid: {e}")
+            # restart the loop over components as we need to build up the map first
+            for i, comp in enumerate(record.properties.Components):
+                if comp.name == 'SEntityComponentDefaultLoadoutParams':
+                    try:
+                        #Loop through loadout -> entries
+                        for entry in comp.properties.loadout.properties.entries:
+                            print(entry.properties)
+                            #get SItemPortLoadoutEntryParams -> itemPortName
+                            if entry.properties.itemPortName and entry.properties.entityClassReference and entry.properties.entityClassReference != "00000000-0000-0000-0000-000000000000":
+                                itemPortName = entry.properties.itemPortName
+                                hardpoint_guid = str(entry.properties.entityClassReference)
+                                print(f"found {itemPortName}: {hardpoint_guid}")
+                                if itemPortName in hardpoint_map:
+                                    print("Mapping to "+hardpoint_map[itemPortName])
+                                    hardpoint_key = hardpoint_map[itemPortName]
+                                    hardpoint_guid_map.setdefault(hardpoint_key, []).append(hardpoint_guid) # safe way to add items to non existing elements
+                    except AttributeError as e:
+                        print(f"⚠️ Missing attribute accessing record for import_by_guid: {e}")
 
-        print(hardpoint_map)
+            print(hardpoint_map)
+            print(hardpoint_guid_map)
 
-            #Loop through Components -> SEntityComponentDefaultLoadoutParams -> loadout -> entries
-                #get SItemPortLoadoutEntryParams -> itemPortName
-                    #if map contains itemPortName
-                        #map hardpoint name : SItemPortLoadoutEntryParams -> entityClassReference
+            missing_files = []
+            # load the main .dae
+            if geometry_path:
+                print(f"Loading geo: {geometry_path}")
+                bpy.ops.object.select_all(action='DESELECT')
+                result = bpy.ops.wm.collada_import(filepath=str(geometry_path))
+                if 'FINISHED' not in result:
+                    print(f"ERROR: Failed to import DAE for {guid}: {geometry_path}")
+                    return None
 
-            #Loop through empties with ...??
+                imported_objs = [obj for obj in bpy.context.selected_objects]
+                # TODO: get base empty & set GUID as custom property on object
+
+                empties_to_fill = __class__.get_all_empties()
+                print("empties:")
+                print(empties_to_fill)
+                for hardpoint, guid_list in hardpoint_guid_map.items():
+                    for guid in guid_list:
+                        print(f"{hardpoint}: {guid}")
+                        matching_empty = next((e for e in empties_to_fill if e.name == hardpoint), None)
+                        if (matching_empty):
+                            print(f'Matching empty: {matching_empty}')
+                            # get dae for guid
+                            geometry_path = __class__.get_dae_path_by_guid(guid)
+                            # import dae
+                            if geometry_path:
+                                if not geometry_path.is_file():
+                                    misc_utils.SCOrg_tools_misc.error(f"Error: .DAE file not found at: {geometry_path}")
+                                    print(f"DEBUG: Attempted DAE import path: {geometry_path}, but file was missing")
+                                    missing_files.append(geometry_path);
+                                    #return {'CANCELLED'}
+                                else:
+                                    result = bpy.ops.wm.collada_import(filepath=str(geometry_path))
+                                    if 'FINISHED' not in result:
+                                        print(f"ERROR: Failed to import DAE for {guid}: {geometry_path}")
+                                        return None
+                                    # Get all the imported objects
+                                    imported_objs = [obj for obj in bpy.context.selected_objects]
+                                    root_objs = [obj for obj in imported_objs if obj.parent is None]
+                                    if not root_objs:
+                                        print(f"WARNING: No root object found for: {geometry_path}")
+                                        continue
+                                    root_obj = root_objs[0]
+                                    # Parent the base empty
+                                    root_obj.parent = matching_empty
+                                    root_obj.matrix_parent_inverse.identity() # set the inverse parent
+                            else:
+                                print(f"Skipping {hardpoint}: {guid}: no geometry")
+                        else:
+                            print(f"Skipping {hardpoint}: {guid}: no matching empty")
+
+                # add modifiers
+                blender_utils.SCOrg_tools_blender.fix_modifiers();
+
+    def get_all_empties(hardpoints_only = False):
+        if hardpoints_only:
+            return [
+                obj for obj in bpy.data.objects
+                if obj.type == 'EMPTY'
+                and obj.name.startswith('hardpoint_')
+            ]
+        else:
+            return [
+                obj for obj in bpy.data.objects
+                if obj.type == 'EMPTY'
+            ]
+    
+    def get_all_empties_blueprint():
+        return [
+            obj for obj in bpy.data.objects
+            if obj.type == 'EMPTY'
+            and 'orig_name' in obj.keys()
+            and obj['orig_name'].startswith('hardpoint_')
+        ]
+    
+    def get_dae_path_by_guid(guid):
+        dcb = globals_and_threading.dcb
+        p4k = globals_and_threading.p4k
+        
+        if not dcb:
+            misc_utils.SCOrg_tools_misc.error(f"Please load Data.p4k first")
+            return False
+        
+        # Load item by GUID
+        record = dcb.records_by_guid.get(str(guid))
+
+        if not record:
+            misc_utils.SCOrg_tools_misc.error(f"Could not find record for GUID: {guid} - are you using the correct Data.p4k?")
+            return False
+
+        geometry_path = None
+        prefs = bpy.context.preferences.addons["scorg_tools"].preferences
+        extract_path = Path(prefs.extract_dir)
+        # Loop through Components
+        if hasattr(record, 'properties') and hasattr(record.properties, 'Components'):
+            for i, comp in enumerate(record.properties.Components):
+                # Get geometry file
+                if comp.name == 'SGeometryResourceParams':
+                    try:
+                        path = comp.properties.Geometry.properties.Geometry.properties.Geometry.properties.path
+                        dae_path = Path(path).with_suffix('.dae')
+                        print(f'Found geometry: {dae_path}')
+                        return extract_path / dae_path
+                    except AttributeError as e:
+                        print(f"⚠️ Missing attribute accessing geometry path in component {i}: {e}")
+                        return None
 
 
 class SCOrg_tools_import_missing_loadout():
@@ -232,12 +350,7 @@ class SCOrg_tools_import_missing_loadout():
             misc_utils.SCOrg_tools_misc.error("Could not find top-level loadout in ship record. Check the structure of the record.")
             return
 
-        empties_to_fill = [
-            obj for obj in bpy.data.objects
-            if obj.type == 'EMPTY'
-            and 'orig_name' in obj.keys()
-            and obj['orig_name'].startswith('hardpoint_')
-        ]
+        empties_to_fill = SCOrg_tools_import.get_all_empties_blueprint()
 
         print(f"Total hardpoints to import: {len(empties_to_fill)}")
 
