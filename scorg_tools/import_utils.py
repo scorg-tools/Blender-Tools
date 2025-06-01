@@ -1,7 +1,6 @@
 import bpy
 from pathlib import Path
 import os
-import sys
 
 # Import globals
 from . import globals_and_threading
@@ -79,6 +78,14 @@ class SCOrg_tools_import():
             # load the main .dae
             if geometry_path:
                 print(f"Loading geo: {geometry_path}")
+                if not geometry_path.is_file():
+                    misc_utils.SCOrg_tools_misc.error(f"Error: .DAE file not found at: {geometry_path}")
+                    print(f"DEBUG: Attempted DAE import path: {geometry_path}, but file was missing")
+                    missing_files.append(str(geometry_path));
+                    print(f"ERROR: Failed to import DAE for {guid}: {geometry_path} - file missing")
+                    print("The following files were missing, please extract them with StarFab, under Data -> Data.p4k:")
+                    print(missing_files)
+                    return None
                 bpy.ops.object.select_all(action='DESELECT')
                 result = bpy.ops.wm.collada_import(filepath=str(geometry_path))
                 if 'FINISHED' not in result:
@@ -129,7 +136,7 @@ class SCOrg_tools_import():
                 # add modifiers
                 blender_utils.SCOrg_tools_blender.fix_modifiers();
                 if missing_files.count:
-                    print("The following files were missing, please extract them with StarFab:")
+                    print("The following files were missing, please extract them with StarFab, under Data -> Data.p4k:")
                     print(missing_files)
 
     def get_all_empties(hardpoints_only = False):
@@ -202,7 +209,7 @@ class SCOrg_tools_import_missing_loadout():
                     try:
                         path = comp.properties.Geometry.properties.Geometry.properties.Geometry.properties.path
                         dae_path = Path(path).with_suffix('.dae')
-                        return SCOrg_tools_import_missing_loadout.extract_dir / dae_path
+                        return __class__.extract_dir / dae_path
                     except AttributeError as e:
                         print(f"⚠️ Missing attribute accessing geometry path in component {i}: {e}")
             return None
@@ -243,7 +250,7 @@ class SCOrg_tools_import_missing_loadout():
         new_obj.matrix_parent_inverse.identity()
 
         for child in original_obj.children:
-            SCOrg_tools_import_missing_loadout.duplicate_hierarchy_linked(child, new_obj)
+            __class__.duplicate_hierarchy_linked(child, new_obj)
 
     def import_hardpoint_hierarchy(loadout, empties_to_fill, is_top_level=True):        
         entries = loadout.properties.get('entries', [])
@@ -262,7 +269,7 @@ class SCOrg_tools_import_missing_loadout():
                 continue
 
             # Apply filter ONLY at top level
-            if is_top_level and SCOrg_tools_import_missing_loadout.INCLUDE_HARDPOINTS and item_port_name not in SCOrg_tools_import_missing_loadout.INCLUDE_HARDPOINTS:
+            if is_top_level and __class__.INCLUDE_HARDPOINTS and item_port_name not in __class__.INCLUDE_HARDPOINTS:
                 print(f"DEBUG: Skipping '{item_port_name}' due to top-level filter")
                 continue
 
@@ -276,12 +283,12 @@ class SCOrg_tools_import_missing_loadout():
                 print("DEBUG: GUID is all zeros, skipping")
                 continue
 
-            if guid_str in SCOrg_tools_import_missing_loadout.imported_guid_objects:
-                original_root = SCOrg_tools_import_missing_loadout.imported_guid_objects[guid_str]
-                SCOrg_tools_import_missing_loadout.duplicate_hierarchy_linked(original_root, matching_empty)
+            if guid_str in __class__.imported_guid_objects:
+                original_root = __class__.imported_guid_objects[guid_str]
+                __class__.duplicate_hierarchy_linked(original_root, matching_empty)
                 print(f"Duplicated hierarchy for '{item_port_name}' from GUID {guid_str}")
             else:
-                geometry_path = SCOrg_tools_import_missing_loadout.get_geometry_path_from_guid(globals_and_threading.dcb, guid_str)
+                geometry_path = __class__.get_geometry_path_from_guid(globals_and_threading.dcb, guid_str)
                 if geometry_path is None:
                     print(f"ERROR: No geometry for GUID {guid_str}: {geometry_path}")
                     continue
@@ -307,14 +314,14 @@ class SCOrg_tools_import_missing_loadout():
                 root_obj = root_objs[0]
                 root_obj.parent = matching_empty
                 root_obj.matrix_parent_inverse.identity()
-                SCOrg_tools_import_missing_loadout.imported_guid_objects[guid_str] = root_obj
+                __class__.imported_guid_objects[guid_str] = root_obj
 
                 imported_empties = [
                     obj for obj in imported_objs
                     if obj.type == 'EMPTY'
                 ]
 
-                mapping = SCOrg_tools_import_missing_loadout.get_hardpoint_mapping_from_guid(globals_and_threading.dcb, guid_str) or {}
+                mapping = __class__.get_hardpoint_mapping_from_guid(globals_and_threading.dcb, guid_str) or {}
                 for empty in imported_empties:
                     if empty.name in mapping:
                         empty['orig_name'] = mapping[empty.name]
@@ -325,11 +332,11 @@ class SCOrg_tools_import_missing_loadout():
                 if nested_loadout:
                     entries_count = len(nested_loadout.properties.get('entries', []))
                     print(f"DEBUG: Nested loadout detected with {entries_count} entries, recursing...")
-                    SCOrg_tools_import_missing_loadout.import_hardpoint_hierarchy(nested_loadout, imported_empties, is_top_level=False)
+                    __class__.import_hardpoint_hierarchy(nested_loadout, imported_empties, is_top_level=False)
                 else:
                     print("DEBUG: No nested loadout found, recursion ends here")
         if missing_files.count:
-            print("The following files were missing, please extract them with StarFab if you want a more complete loadout:")
+            print("The following files were missing, please extract them with StarFab, under Data -> Data.p4k if you want a more complete loadout:")
             print(missing_files)
 
 
@@ -338,12 +345,12 @@ class SCOrg_tools_import_missing_loadout():
         dcb = globals_and_threading.dcb
 
         os.system('cls')
-        SCOrg_tools_import_missing_loadout.imported_guid_objects = {}
-        SCOrg_tools_import_missing_loadout.INCLUDE_HARDPOINTS = [] # all
+        __class__.imported_guid_objects = {}
+        __class__.INCLUDE_HARDPOINTS = [] # all
         
         # Access addon preferences via bpy.context
         prefs = bpy.context.preferences.addons["scorg_tools"].preferences
-        SCOrg_tools_import_missing_loadout.extract_dir = Path(prefs.extract_dir) # Ensure Path object
+        __class__.extract_dir = Path(prefs.extract_dir) # Ensure Path object
         
         misc_utils.SCOrg_tools_misc.select_base_collection() # Ensure the base collection is active before importing
         record = misc_utils.SCOrg_tools_misc.get_ship_record(dcb)
@@ -367,5 +374,5 @@ class SCOrg_tools_import_missing_loadout():
 
         print(f"Total hardpoints to import: {len(empties_to_fill)}")
 
-        SCOrg_tools_import_missing_loadout.import_hardpoint_hierarchy(top_level_loadout, empties_to_fill)
+        __class__.import_hardpoint_hierarchy(top_level_loadout, empties_to_fill)
         blender_utils.SCOrg_tools_blender.fix_modifiers()
