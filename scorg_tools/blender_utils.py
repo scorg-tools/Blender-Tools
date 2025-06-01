@@ -208,10 +208,11 @@ class SCOrg_tools_blender():
         bpy.ops.outliner.orphans_purge(do_local_ids=True, do_linked_ids=True, do_recursive=True)
         
         # Move the collection
-        # unlink from the scene collection
-        bpy.data.scenes['Scene'].collection.children.unlink(bpy.data.collections[collection_name])
-        # link to the Collection collection
-        bpy.data.collections['Collection'].children.link(bpy.data.collections[collection_name])
+        if 'Collection' in bpy.data.collections:
+            # unlink from the scene collection
+            bpy.data.scenes['Scene'].collection.children.unlink(bpy.data.collections[collection_name])
+            # link to the Collection collection
+            bpy.data.collections['Collection'].children.link(bpy.data.collections[collection_name])
 
     def fix_bright_lights():
         for obj in bpy.data.objects:
