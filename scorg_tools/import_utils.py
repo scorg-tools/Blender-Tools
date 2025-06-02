@@ -192,32 +192,8 @@ class SCOrg_tools_import():
                         return None
         return None
 
-
-class SCOrg_tools_import_missing_loadout():
-    INCLUDE_HARDPOINTS = []
-    imported_guid_objects = {}
-    extract_dir = None
-    
-    def get_geometry_path_from_guid(dcb, guid):
-        try:
-            record = dcb.records_by_guid.get(str(guid))
-            if not record:
-                print(f"⚠️  No record found for GUID: {guid}")
-                return None
-            for i, comp in enumerate(record.properties.Components):
-                if comp.name == 'SGeometryResourceParams':
-                    try:
-                        path = comp.properties.Geometry.properties.Geometry.properties.Geometry.properties.path
-                        dae_path = Path(path).with_suffix('.dae')
-                        return __class__.extract_dir / dae_path
-                    except AttributeError as e:
-                        print(f"⚠️ Missing attribute accessing geometry path in component {i}: {e}")
-            return None
-        except Exception as e:
-            print(f"❌ Error processing GUID {guid}: {e}")
-            return None
-
-    def get_hardpoint_mapping_from_guid(dcb, guid):
+    def get_hardpoint_mapping_from_guid(guid):
+        dcb = globals_and_threading.dcb
         mapping = {}
         try:
             record = dcb.records_by_guid.get(str(guid))
@@ -240,6 +216,12 @@ class SCOrg_tools_import_missing_loadout():
             print(f"❌ Error in get_hardpoint_mapping_from_guid GUID {guid}: {e}")
             return None
 
+
+class SCOrg_tools_import_missing_loadout():
+    INCLUDE_HARDPOINTS = []
+    imported_guid_objects = {}
+    extract_dir = None
+    
     def duplicate_hierarchy_linked(original_obj, parent_empty):
         new_obj = original_obj.copy()
         new_obj.data = original_obj.data  # share mesh data (linked duplicate)
@@ -260,7 +242,7 @@ class SCOrg_tools_import_missing_loadout():
         # For nested calls, get the mapping for the parent_guid
         hardpoint_mapping = {}
         if not is_top_level and parent_guid:
-            hardpoint_mapping = __class__.get_hardpoint_mapping_from_guid(globals_and_threading.dcb, parent_guid) or {}
+            hardpoint_mapping = SCOrg_tools_import.get_hardpoint_mapping_from_guid(parent_guid) or {}
             print(f"DEBUG: hardpoint_mapping for parent_guid {parent_guid}: {hardpoint_mapping}")
 
         for i, entry in enumerate(entries):
@@ -346,7 +328,7 @@ class SCOrg_tools_import_missing_loadout():
                     if obj.type == 'EMPTY'
                 ]
 
-                mapping = __class__.get_hardpoint_mapping_from_guid(globals_and_threading.dcb, guid_str) or {}
+                mapping = SCOrg_tools_import.get_hardpoint_mapping_from_guid(guid_str) or {}
                 print(f"DEBUG: Imported empties: {[e.name for e in imported_empties]}")
                 print(f"DEBUG: Mapping for imported GUID {guid_str}: {mapping}")
                 for empty in imported_empties:
