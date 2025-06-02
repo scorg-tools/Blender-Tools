@@ -109,7 +109,7 @@ class VIEW3D_OT_import_loadout(bpy.types.Operator):
         extract_dir_path = Path(prefs.extract_dir)
 
         if extract_dir_path.is_dir() and str(extract_dir_path) != "": # Also check if it's not an empty string
-            import_utils.SCOrg_tools_import_missing_loadout.run_import()
+            import_utils.SCOrg_tools_import.run_import()
         else:
             misc_utils.SCOrg_tools_misc.error("Error: Data Extract Directory not set or does not exist. Please set it in preferences.")
         return {'FINISHED'}

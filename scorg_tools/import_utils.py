@@ -216,12 +216,6 @@ class SCOrg_tools_import():
             print(f"❌ Error in get_hardpoint_mapping_from_guid GUID {guid}: {e}")
             return None
 
-
-class SCOrg_tools_import_missing_loadout():
-    INCLUDE_HARDPOINTS = []
-    imported_guid_objects = {}
-    extract_dir = None
-    
     def duplicate_hierarchy_linked(original_obj, parent_empty):
         new_obj = original_obj.copy()
         new_obj.data = original_obj.data  # share mesh data (linked duplicate)
@@ -233,7 +227,7 @@ class SCOrg_tools_import_missing_loadout():
 
         for child in original_obj.children:
             __class__.duplicate_hierarchy_linked(child, new_obj)
-
+    
     def import_hardpoint_hierarchy(loadout, empties_to_fill, is_top_level=True, parent_guid=None):        
         entries = loadout.properties.get('entries', [])
         missing_files = []
@@ -242,7 +236,7 @@ class SCOrg_tools_import_missing_loadout():
         # For nested calls, get the mapping for the parent_guid
         hardpoint_mapping = {}
         if not is_top_level and parent_guid:
-            hardpoint_mapping = SCOrg_tools_import.get_hardpoint_mapping_from_guid(parent_guid) or {}
+            hardpoint_mapping = __class__.get_hardpoint_mapping_from_guid(parent_guid) or {}
             print(f"DEBUG: hardpoint_mapping for parent_guid {parent_guid}: {hardpoint_mapping}")
 
         for i, entry in enumerate(entries):
@@ -270,7 +264,7 @@ class SCOrg_tools_import_missing_loadout():
 
             print(f"DEBUG: Looking for matching empty with orig_name='{mapped_name}' (from item_port_name='{item_port_name}')")
             matching_empty = next(
-                (e for e in empties_to_fill if _matches_blender_name(e.get('orig_name', ''), mapped_name)),
+                (e for e in empties_to_fill if __class__.matches_blender_name(e.get('orig_name', ''), mapped_name)),
                 None
             )
             if not matching_empty:
@@ -294,8 +288,8 @@ class SCOrg_tools_import_missing_loadout():
                 __class__.duplicate_hierarchy_linked(original_root, matching_empty)
                 print(f"Duplicated hierarchy for '{item_port_name}' from GUID {guid_str}")
             else:
-                # Use SCOrg_tools_import.get_geometry_path_by_guid instead of __class__.get_geometry_path_by_guid
-                geometry_path = SCOrg_tools_import.get_geometry_path_by_guid(guid_str)
+                # Use __class__.get_geometry_path_by_guid instead of __class__.get_geometry_path_by_guid
+                geometry_path = __class__.get_geometry_path_by_guid(guid_str)
                 if geometry_path is None:
                     print(f"ERROR: No geometry for GUID {guid_str}: {geometry_path}")
                     continue
@@ -328,13 +322,13 @@ class SCOrg_tools_import_missing_loadout():
                     if obj.type == 'EMPTY'
                 ]
 
-                mapping = SCOrg_tools_import.get_hardpoint_mapping_from_guid(guid_str) or {}
+                mapping = __class__.get_hardpoint_mapping_from_guid(guid_str) or {}
                 print(f"DEBUG: Imported empties: {[e.name for e in imported_empties]}")
                 print(f"DEBUG: Mapping for imported GUID {guid_str}: {mapping}")
                 for empty in imported_empties:
                     # Set orig_name to the mapping key if the name matches, otherwise to the base name without suffix
                     for key in mapping:
-                        if _matches_blender_name(empty.name, key):
+                        if __class__.matches_blender_name(empty.name, key):
                             empty['orig_name'] = mapping[key]
                             break
                     else:
@@ -352,7 +346,6 @@ class SCOrg_tools_import_missing_loadout():
         if missing_files.count:
             print("The following files were missing, please extract them with StarFab, under Data -> Data.p4k if you want a more complete loadout:")
             print(missing_files)
-
 
     def run_import():
         # Access global dcb
@@ -384,12 +377,12 @@ class SCOrg_tools_import_missing_loadout():
             misc_utils.SCOrg_tools_misc.error("Could not find top-level loadout in ship record. Check the structure of the record.")
             return
 
-        empties_to_fill = SCOrg_tools_import.get_all_empties_blueprint()
+        empties_to_fill = __class__.get_all_empties_blueprint()
 
         print(f"Total hardpoints to import: {len(empties_to_fill)}")
 
         __class__.import_hardpoint_hierarchy(top_level_loadout, empties_to_fill)
         blender_utils.SCOrg_tools_blender.fix_modifiers()
 
-def _matches_blender_name(name, target):
-    return name == target or re.match(rf"^{re.escape(target)}\.\d+$", name)
+    def matches_blender_name(name, target):
+        return name == target or re.match(rf"^{re.escape(target)}\.\d+$", name)
