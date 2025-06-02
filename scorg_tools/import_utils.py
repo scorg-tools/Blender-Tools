@@ -32,7 +32,7 @@ class SCOrg_tools_import():
         print(record)
         hardpoint_map = {}
         hardpoint_guid_map = {}
-        geometry_path = __class__.get_dae_path_by_guid(guid)
+        geometry_path = __class__.get_geometry_path_by_guid(guid)
         prefs = bpy.context.preferences.addons["scorg_tools"].preferences
         extract_path = Path(prefs.extract_dir)
         #Loop through Components
@@ -106,7 +106,7 @@ class SCOrg_tools_import():
                         if (matching_empty):
                             print(f'Matching empty: {matching_empty}')
                             # get dae for guid
-                            geometry_path = __class__.get_dae_path_by_guid(guid)
+                            geometry_path = __class__.get_geometry_path_by_guid(guid)
                             # import dae
                             if geometry_path:
                                 if not geometry_path.is_file():
@@ -161,22 +161,20 @@ class SCOrg_tools_import():
             and obj['orig_name'].startswith('hardpoint_')
         ]
     
-    def get_dae_path_by_guid(guid):
+    def get_geometry_path_by_guid(guid):
         dcb = globals_and_threading.dcb
-        p4k = globals_and_threading.p4k
-        
+
         if not dcb:
             misc_utils.SCOrg_tools_misc.error(f"Please load Data.p4k first")
-            return False
-        
+            return None
+
         # Load item by GUID
         record = dcb.records_by_guid.get(str(guid))
 
         if not record:
             misc_utils.SCOrg_tools_misc.error(f"Could not find record for GUID: {guid} - are you using the correct Data.p4k?")
-            return False
+            return None
 
-        geometry_path = None
         prefs = bpy.context.preferences.addons["scorg_tools"].preferences
         extract_path = Path(prefs.extract_dir)
         # Loop through Components
@@ -192,6 +190,7 @@ class SCOrg_tools_import():
                     except AttributeError as e:
                         print(f"⚠️ Missing attribute accessing geometry path in component {i}: {e}")
                         return None
+        return None
 
 
 class SCOrg_tools_import_missing_loadout():
@@ -313,7 +312,8 @@ class SCOrg_tools_import_missing_loadout():
                 __class__.duplicate_hierarchy_linked(original_root, matching_empty)
                 print(f"Duplicated hierarchy for '{item_port_name}' from GUID {guid_str}")
             else:
-                geometry_path = __class__.get_geometry_path_from_guid(globals_and_threading.dcb, guid_str)
+                # Use SCOrg_tools_import.get_geometry_path_by_guid instead of __class__.get_geometry_path_by_guid
+                geometry_path = SCOrg_tools_import.get_geometry_path_by_guid(guid_str)
                 if geometry_path is None:
                     print(f"ERROR: No geometry for GUID {guid_str}: {geometry_path}")
                     continue
