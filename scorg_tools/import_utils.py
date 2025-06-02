@@ -1,6 +1,7 @@
 import bpy
 from pathlib import Path
 import os
+import re
 
 # Import globals
 from . import globals_and_threading
@@ -252,17 +253,24 @@ class SCOrg_tools_import_missing_loadout():
         for child in original_obj.children:
             __class__.duplicate_hierarchy_linked(child, new_obj)
 
-    def import_hardpoint_hierarchy(loadout, empties_to_fill, is_top_level=True):        
+    def import_hardpoint_hierarchy(loadout, empties_to_fill, is_top_level=True, parent_guid=None):        
         entries = loadout.properties.get('entries', [])
         missing_files = []
-        print(f"DEBUG: import_hardpoint_hierarchy called with {len(entries)} entries, empties to fill: {len(empties_to_fill)}, is_top_level={is_top_level}")
-        for entry in entries:
+        print(f"DEBUG: import_hardpoint_hierarchy called with {len(entries)} entries, empties to fill: {len(empties_to_fill)}, is_top_level={is_top_level}, parent_guid={parent_guid}")
+
+        # For nested calls, get the mapping for the parent_guid
+        hardpoint_mapping = {}
+        if not is_top_level and parent_guid:
+            hardpoint_mapping = __class__.get_hardpoint_mapping_from_guid(globals_and_threading.dcb, parent_guid) or {}
+            print(f"DEBUG: hardpoint_mapping for parent_guid {parent_guid}: {hardpoint_mapping}")
+
+        for i, entry in enumerate(entries):
             props = entry.properties
             item_port_name = props.get('itemPortName')
             guid = props.get('entityClassReference')
             nested_loadout = props.get('loadout')
 
-            print(f"DEBUG: Processing entry '{item_port_name}' GUID {guid}")
+            print(f"DEBUG: Entry {i}: item_port_name='{item_port_name}', guid={guid}, has_nested_loadout={nested_loadout is not None}")
 
             if not item_port_name or not guid:
                 print("DEBUG: Missing item_port_name or guid, skipping")
@@ -273,14 +281,31 @@ class SCOrg_tools_import_missing_loadout():
                 print(f"DEBUG: Skipping '{item_port_name}' due to top-level filter")
                 continue
 
-            matching_empty = next((e for e in empties_to_fill if e.get('orig_name') == item_port_name), None)
+            # Use mapping if available (for nested)
+            if not is_top_level and hardpoint_mapping:
+                mapped_name = hardpoint_mapping.get(item_port_name, item_port_name)
+            else:
+                mapped_name = item_port_name
+
+            print(f"DEBUG: Looking for matching empty with orig_name='{mapped_name}' (from item_port_name='{item_port_name}')")
+            matching_empty = next(
+                (e for e in empties_to_fill if _matches_blender_name(e.get('orig_name', ''), mapped_name)),
+                None
+            )
             if not matching_empty:
-                print(f"WARNING: No matching empty found for hardpoint '{item_port_name}'")
+                print(f"WARNING: No matching empty found for hardpoint '{mapped_name}' (original item_port_name: '{item_port_name}')")
                 continue
 
             guid_str = str(guid)
             if guid_str == '00000000-0000-0000-0000-000000000000':
-                print("DEBUG: GUID is all zeros, skipping")
+                print("DEBUG: GUID is all zeros, skipping geometry import")
+                # Still recurse into nested loadout if present
+                if nested_loadout:
+                    entries_count = len(nested_loadout.properties.get('entries', []))
+                    print(f"DEBUG: Nested loadout detected with {entries_count} entries, recursing into GUID {guid_str} (all zeros)...")
+                    __class__.import_hardpoint_hierarchy(nested_loadout, empties_to_fill, is_top_level=False, parent_guid=guid_str)
+                else:
+                    print("DEBUG: No nested loadout found, recursion ends here")
                 continue
 
             if guid_str in __class__.imported_guid_objects:
@@ -322,17 +347,24 @@ class SCOrg_tools_import_missing_loadout():
                 ]
 
                 mapping = __class__.get_hardpoint_mapping_from_guid(globals_and_threading.dcb, guid_str) or {}
+                print(f"DEBUG: Imported empties: {[e.name for e in imported_empties]}")
+                print(f"DEBUG: Mapping for imported GUID {guid_str}: {mapping}")
                 for empty in imported_empties:
-                    if empty.name in mapping:
-                        empty['orig_name'] = mapping[empty.name]
+                    # Set orig_name to the mapping key if the name matches, otherwise to the base name without suffix
+                    for key in mapping:
+                        if _matches_blender_name(empty.name, key):
+                            empty['orig_name'] = mapping[key]
+                            break
+                    else:
+                        empty['orig_name'] = re.sub(r'\.\d+$', '', empty.name)
 
                 print(f"Imported object for '{item_port_name}' GUID {guid_str} → {geometry_path}")
 
-                # Recurse into nested loadout with is_top_level=False
+                # Recurse into nested loadout with is_top_level=False and pass guid_str as parent_guid
                 if nested_loadout:
                     entries_count = len(nested_loadout.properties.get('entries', []))
-                    print(f"DEBUG: Nested loadout detected with {entries_count} entries, recursing...")
-                    __class__.import_hardpoint_hierarchy(nested_loadout, imported_empties, is_top_level=False)
+                    print(f"DEBUG: Nested loadout detected with {entries_count} entries, recursing into GUID {guid_str}...")
+                    __class__.import_hardpoint_hierarchy(nested_loadout, imported_empties, is_top_level=False, parent_guid=guid_str)
                 else:
                     print("DEBUG: No nested loadout found, recursion ends here")
         if missing_files.count:
@@ -376,3 +408,6 @@ class SCOrg_tools_import_missing_loadout():
 
         __class__.import_hardpoint_hierarchy(top_level_loadout, empties_to_fill)
         blender_utils.SCOrg_tools_blender.fix_modifiers()
+
+def _matches_blender_name(name, target):
+    return name == target or re.match(rf"^{re.escape(target)}\.\d+$", name)
