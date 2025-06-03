@@ -15,6 +15,7 @@ import bpy
 import os
 import sys
 
+# TODO: make imrpot by GUID work with non-guid items in the loadout
 # TODO: make a friendly error when installing to detect if the starfab addon is not installed
 # TODO: add functionality to add POM material and replace in-place with existing textures
 # TODO: fix importing fps weapons in import by guid
@@ -22,8 +23,6 @@ import sys
 #       or do it the proper way and use the databacore to lookup the paint to 
 #       get the key for the localisation
 # TODO: Import the paints (tint pallets node group needs to work for this)
-# TODO: Attempt to fix hardpoints that have different names that cause some
-#       objects not to import, e.g. Asgard manned turret weapons
 
 # Add addon directory to sys.path to allow relative imports
 if __package__ in sys.modules:
