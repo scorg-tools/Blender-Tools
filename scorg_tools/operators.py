@@ -129,22 +129,13 @@ class VIEW3D_OT_make_instance_real(bpy.types.Operator):
     def execute(self, context):
         blender_utils.SCOrg_tools_blender.run_make_instances_real()
         return {'FINISHED'}
-
-class VIEW3D_OT_import_by_guid(bpy.types.Operator):
-    bl_idname = "view3d.import_by_guid"
-    bl_label = "Import"
-
-    def execute(self, context):
-        # This operator is deprecated. The GetGUIDOperator handles the actual import logic.
-        self.report({'ERROR'}, "This operator is deprecated. Use 'Import by GUID' dialog.")
-        return {'CANCELLED'}
     
 class GetGUIDOperator(bpy.types.Operator):
     bl_idname = "wm.get_guid_operator"
-    bl_label = "Import by GUID"
+    bl_label = "Import by ID"
 
     guid: bpy.props.StringProperty(
-        name="GUID",
+        name="GUID ",
         description="Please enter the GUID",
         default=""
     )
@@ -155,7 +146,7 @@ class GetGUIDOperator(bpy.types.Operator):
 
     def execute(self, context):
         if self.guid:
-            import_utils.SCOrg_tools_import.import_by_guid(self.guid)
+            import_utils.SCOrg_tools_import.import_by_id(self.guid)
             return {'FINISHED'}
         else:
             self.report({'WARNING'}, "No GUID entered.")

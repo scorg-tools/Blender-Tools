@@ -63,7 +63,6 @@ classes = (
     operators.VIEW3D_OT_import_loadout,
     operators.VIEW3D_OT_add_modifiers,
     operators.VIEW3D_OT_make_instance_real,
-    operators.VIEW3D_OT_import_by_guid,
     operators.GetGUIDOperator,
     preferences.SCOrg_tools_AddonPreferences,
     preferences.SCOrg_tools_OT_SelectP4K,

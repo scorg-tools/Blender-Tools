@@ -41,32 +41,30 @@ class SCOrg_tools_import():
         else:
             return None
     
-    def import_by_guid(guid):
-        # Access global dcb and p4k
-        dcb = globals_and_threading.dcb
-        p4k = globals_and_threading.p4k
+    def import_by_id(id):
 
-        print(f"Received GUID: {guid}")
-        
-        if not dcb:
-            misc_utils.SCOrg_tools_misc.error(f"⚠️ Please load Data.p4k first")
+        os.system('cls')
+        print(f"Received ID: {id}")
+        if __class__.is_guid(id):
+            guid = str(id)
+        else:
+            guid = __class__.get_guid_by_name(id)
+        print(f"Resolved GUID: {guid}")
+        if not __class__.is_guid(guid):
+            misc_utils.SCOrg_tools_misc.error(f"⚠️ Invalid: {guid}")
             return False
         
         #Load item by GUID
-        record = dcb.records_by_guid.get(str(guid))
+        record = __class__.get_record(guid)
 
         if not record:
             misc_utils.SCOrg_tools_misc.error(f"⚠️ Could not find record for GUID: {guid} - are you using the correct Data.p4k?")
-            print(dcb)
-            print(p4k)
             return False
 
-        print(record)
         hardpoint_map = {}
         hardpoint_guid_map = {}
         geometry_path = __class__.get_geometry_path_by_guid(guid)
-        prefs = bpy.context.preferences.addons["scorg_tools"].preferences
-        extract_path = Path(prefs.extract_dir)
+
         #Loop through Components
         if hasattr(record, 'properties') and hasattr(record.properties, 'Components'):
             for i, comp in enumerate(record.properties.Components):
