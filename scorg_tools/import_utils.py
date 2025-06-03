@@ -9,6 +9,38 @@ from . import misc_utils # For SCOrg_tools_misc.error, get_ship_record, select_b
 from . import blender_utils # For SCOrg_tools_blender.fix_modifiers
 
 class SCOrg_tools_import():
+    def get_record(id):
+        """
+        Get a record by GUID from the global dcb.
+        If name is provided, it will return the record with that name.
+        """
+        dcb = globals_and_threading.dcb
+        if not dcb:
+            misc_utils.SCOrg_tools_misc.error("Please load Data.p4k first")
+            return None
+        id = str(id).strip()  # Ensure id is a string and strip whitespace
+        if __class__.is_guid(id): # is a non-zero GUID format
+            record = dcb.records_by_guid.get(id)
+            if record:
+                return record
+            else:
+                misc_utils.SCOrg_tools_misc.error(f"⚠️ Could not find record for GUID: {guid} - are you using the correct Data.p4k?")
+                return None
+        else:
+            # Otherwise, try to get by name
+            for record in dcb.records:
+                if hasattr(record, 'name') and record.name.lower() == id.lower():
+                    return record
+            misc_utils.SCOrg_tools_misc.error(f"⚠️ Could not find record with name: {id}")
+            return None
+
+    def get_guid_by_name(name):
+        record = __class__.get_record(name)
+        if record:
+            return str(record.id)
+        else:
+            return None
+    
     def import_by_guid(guid):
         # Access global dcb and p4k
         dcb = globals_and_threading.dcb
@@ -17,14 +49,14 @@ class SCOrg_tools_import():
         print(f"Received GUID: {guid}")
         
         if not dcb:
-            misc_utils.SCOrg_tools_misc.error(f"Please load Data.p4k first")
+            misc_utils.SCOrg_tools_misc.error(f"⚠️ Please load Data.p4k first")
             return False
         
         #Load item by GUID
         record = dcb.records_by_guid.get(str(guid))
 
         if not record:
-            misc_utils.SCOrg_tools_misc.error(f"Could not find record for GUID: {guid} - are you using the correct Data.p4k?")
+            misc_utils.SCOrg_tools_misc.error(f"⚠️ Could not find record for GUID: {guid} - are you using the correct Data.p4k?")
             print(dcb)
             print(p4k)
             return False
@@ -136,7 +168,7 @@ class SCOrg_tools_import():
 
                 # add modifiers
                 blender_utils.SCOrg_tools_blender.fix_modifiers();
-                if missing_files.count:
+                if len(missing_files) > 0:
                     print("The following files were missing, please extract them with StarFab, under Data -> Data.p4k:")
                     print(missing_files)
 
@@ -154,22 +186,46 @@ class SCOrg_tools_import():
             ]
     
     def get_all_empties_blueprint():
-        return [
+        # find all objects that are empties and have no children
+        empty_hardpoints = [
+            obj for obj in bpy.data.objects
+            if obj.type == 'EMPTY'
+            and obj.name.startswith("hardpoint_")
+            and len(obj.children)==0
+        ]
+        # find all objects that are empties and have children
+        filled_hardpoints = [
+            obj for obj in bpy.data.objects
+            if obj.type == 'EMPTY'
+            and obj.name.startswith("hardpoint_")
+            and len(obj.children)>0
+        ]
+        # find all objects that are empties and have an orig_name key
+        original_hardpoints = [
             obj for obj in bpy.data.objects
             if obj.type == 'EMPTY'
             and 'orig_name' in obj.keys()
             and obj['orig_name'].startswith('hardpoint_')
+            and len(obj.children)==0
         ]
+        empty_names = [obj.name for obj in empty_hardpoints]
+        filled_names = [obj.name for obj in filled_hardpoints]
+        for obj in original_hardpoints:
+            # add objects to empty_hardpoints unles the orig_name matches the name of an existing hardpoint
+            # or the orig_name matches the name of an existing filled hardpoint
+            if obj['orig_name'] not in empty_names and obj['orig_name'] not in filled_names:
+                empty_hardpoints.append(obj)
+        return empty_hardpoints
     
     def get_geometry_path_by_guid(guid):
         dcb = globals_and_threading.dcb
 
         if not dcb:
-            misc_utils.SCOrg_tools_misc.error(f"Please load Data.p4k first")
+            misc_utils.SCOrg_tools_misc.error(f"⚠️ Please load Data.p4k first")
             return None
 
-        # Load item by GUID
-        record = dcb.records_by_guid.get(str(guid))
+        # Load item
+        record = __class__.get_record(guid)
 
         if not record:
             misc_utils.SCOrg_tools_misc.error(f"Could not find record for GUID: {guid} - are you using the correct Data.p4k?")
@@ -204,6 +260,8 @@ class SCOrg_tools_import():
                 if comp.name == 'SItemPortContainerComponentParams':
                     try:
                         ports = comp.properties.Ports
+                        if not ports or len(ports) == 0:
+                            print(f"⚠️  No Ports defined in SItemPortContainerComponentParams for GUID: {guid}")
                         for port in ports:
                             helper_name = port.properties['AttachmentImplementation'].properties['Helper'].properties['Helper'].properties['Name']
                             port_name = port.properties['Name']
@@ -240,15 +298,25 @@ class SCOrg_tools_import():
             print(f"DEBUG: hardpoint_mapping for parent_guid {parent_guid}: {hardpoint_mapping}")
 
         for i, entry in enumerate(entries):
-            props = entry.properties
+            # --- FIX: Support both dict and object style entries ---
+            if isinstance(entry, dict) and len(entry) == 1:
+                # DataForge JSON: {"SItemPortLoadoutEntryParams": {...}}
+                props = list(entry.values())[0]
+            else:
+                props = getattr(entry, 'properties', entry)
+
             item_port_name = props.get('itemPortName')
             guid = props.get('entityClassReference')
             nested_loadout = props.get('loadout')
 
-            print(f"DEBUG: Entry {i}: item_port_name='{item_port_name}', guid={guid}, has_nested_loadout={nested_loadout is not None}")
+            entity_class_name = getattr(props, 'entityClassName', None)
+            if entity_class_name is None and isinstance(props, dict):
+                entity_class_name = props.get('entityClassName', None)
+            # Always print debug for every entry
+            print(f"DEBUG: Entry {i}: item_port_name='{item_port_name}', guid={guid}, entityClassName={entity_class_name}, has_nested_loadout={nested_loadout is not None}")
 
-            if not item_port_name or not guid:
-                print("DEBUG: Missing item_port_name or guid, skipping")
+            if not item_port_name or (not guid and not entity_class_name):
+                print("DEBUG: Missing item_port_name or guid and name, skipping")
                 continue
 
             # Apply filter ONLY at top level
@@ -270,25 +338,32 @@ class SCOrg_tools_import():
             if not matching_empty:
                 print(f"WARNING: No matching empty found for hardpoint '{mapped_name}' (original item_port_name: '{item_port_name}')")
                 continue
+            else:
+                print(f"DEBUG: Found matching empty: {matching_empty.name} for hardpoint '{mapped_name}'")
 
             guid_str = str(guid)
-            if guid_str == '00000000-0000-0000-0000-000000000000':
-                print("DEBUG: GUID is all zeros, skipping geometry import")
-                # Still recurse into nested loadout if present
-                if nested_loadout:
-                    entries_count = len(nested_loadout.properties.get('entries', []))
-                    print(f"DEBUG: Nested loadout detected with {entries_count} entries, recursing into GUID {guid_str} (all zeros)...")
-                    __class__.import_hardpoint_hierarchy(nested_loadout, empties_to_fill, is_top_level=False, parent_guid=guid_str)
+            if not __class__.is_guid(guid_str):
+                if not entity_class_name:
+                    print("DEBUG: GUID is all zeros, but no entityClassName found, skipping geometry import")
+                    # Still recurse into nested loadout if present
+                    if nested_loadout:
+                        entries_count = len(nested_loadout.properties.get('entries', []))
+                        print(f"DEBUG: Nested loadout detected with {entries_count} entries, recursing into GUID {guid_str} (all zeros)...")
+                        __class__.import_hardpoint_hierarchy(nested_loadout, empties_to_fill, is_top_level=False, parent_guid=guid_str)
+                    else:
+                        print("DEBUG: No nested loadout found, recursion ends here")
+                    continue
                 else:
-                    print("DEBUG: No nested loadout found, recursion ends here")
-                continue
+                    # Get the GUID from the entity_class_name
+                    guid_str = __class__.get_guid_by_name(entity_class_name)
 
             if guid_str in __class__.imported_guid_objects:
+                # If the GUID is already imported, duplicate the hierarchy linked
                 original_root = __class__.imported_guid_objects[guid_str]
                 __class__.duplicate_hierarchy_linked(original_root, matching_empty)
                 print(f"Duplicated hierarchy for '{item_port_name}' from GUID {guid_str}")
             else:
-                # Use __class__.get_geometry_path_by_guid instead of __class__.get_geometry_path_by_guid
+                # The item was not imported yet, so we need to import it
                 geometry_path = __class__.get_geometry_path_by_guid(guid_str)
                 if geometry_path is None:
                     print(f"ERROR: No geometry for GUID {guid_str}: {geometry_path}")
@@ -343,14 +418,12 @@ class SCOrg_tools_import():
                     __class__.import_hardpoint_hierarchy(nested_loadout, imported_empties, is_top_level=False, parent_guid=guid_str)
                 else:
                     print("DEBUG: No nested loadout found, recursion ends here")
-        if missing_files.count:
+        if len(missing_files) > 0:
             print("The following files were missing, please extract them with StarFab, under Data -> Data.p4k if you want a more complete loadout:")
             print(missing_files)
 
     def run_import():
-        # Access global dcb
-        dcb = globals_and_threading.dcb
-
+        
         os.system('cls')
         __class__.imported_guid_objects = {}
         __class__.INCLUDE_HARDPOINTS = [] # all
@@ -360,7 +433,7 @@ class SCOrg_tools_import():
         __class__.extract_dir = Path(prefs.extract_dir) # Ensure Path object
         
         misc_utils.SCOrg_tools_misc.select_base_collection() # Ensure the base collection is active before importing
-        record = misc_utils.SCOrg_tools_misc.get_ship_record(dcb)
+        record = misc_utils.SCOrg_tools_misc.get_ship_record()
         
         # Check if record is None before trying to access its properties
         if record is None:
@@ -386,3 +459,11 @@ class SCOrg_tools_import():
 
     def matches_blender_name(name, target):
         return name == target or re.match(rf"^{re.escape(target)}\.\d+$", name)
+
+    def is_guid(s):
+        """
+        Returns True if s is a valid GUID and non-zero string.
+        """
+        if s == "00000000-0000-0000-0000-000000000000":
+            return False
+        return bool(re.match(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", str(s)))
