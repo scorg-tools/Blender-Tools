@@ -126,6 +126,7 @@ class SCOrg_tools_blender():
         __class__.add_weld_and_weighted_normal_modifiers()
         __class__.add_displace_modifiers_for_pom_and_decal()
         __class__.remove_duplicate_displace_modifiers()
+        __class__.remove_proxy_material_geometry()
 
     def select_children(obj):
         if hasattr(obj, 'objects'):
@@ -214,3 +215,30 @@ class SCOrg_tools_blender():
         for obj in bpy.data.objects:
             if obj.type == "LIGHT" and obj.data.energy > 30000:
                 obj.data.energy /= 1000
+
+    def remove_proxy_material_geometry():
+        for obj in bpy.data.objects:
+            if obj.type != 'MESH':
+                continue
+            # Find all slots with a _mtl_proxy material
+            slots_to_remove = []
+            for i, slot in enumerate(obj.material_slots):
+                mat = slot.material
+                if mat and mat.name.endswith('_mtl_proxy'):
+                    # Enter edit mode to delete geometry assigned to this material
+                    bpy.context.view_layer.objects.active = obj
+                    bpy.ops.object.mode_set(mode='EDIT')
+                    bpy.ops.mesh.select_all(action='DESELECT')
+                    bpy.ops.object.mode_set(mode='OBJECT')
+                    # Select faces with this material index
+                    for poly in obj.data.polygons:
+                        if poly.material_index == i:
+                            poly.select = True
+                    bpy.ops.object.mode_set(mode='EDIT')
+                    bpy.ops.mesh.delete(type='FACE')
+                    bpy.ops.object.mode_set(mode='OBJECT')
+                    slots_to_remove.append(i)
+            # Remove material slots (do in reverse order to avoid index shift)
+            for i in sorted(slots_to_remove, reverse=True):
+                obj.active_material_index = i
+                bpy.ops.object.material_slot_remove()
