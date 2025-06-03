@@ -298,20 +298,12 @@ class SCOrg_tools_import():
             print(f"DEBUG: hardpoint_mapping for parent_guid {parent_guid}: {hardpoint_mapping}")
 
         for i, entry in enumerate(entries):
-            # --- FIX: Support both dict and object style entries ---
-            if isinstance(entry, dict) and len(entry) == 1:
-                # DataForge JSON: {"SItemPortLoadoutEntryParams": {...}}
-                props = list(entry.values())[0]
-            else:
-                props = getattr(entry, 'properties', entry)
-
+            props = getattr(entry, 'properties', entry)
             item_port_name = props.get('itemPortName')
             guid = props.get('entityClassReference')
             nested_loadout = props.get('loadout')
 
             entity_class_name = getattr(props, 'entityClassName', None)
-            if entity_class_name is None and isinstance(props, dict):
-                entity_class_name = props.get('entityClassName', None)
             # Always print debug for every entry
             print(f"DEBUG: Entry {i}: item_port_name='{item_port_name}', guid={guid}, entityClassName={entity_class_name}, has_nested_loadout={nested_loadout is not None}")
 
@@ -342,7 +334,7 @@ class SCOrg_tools_import():
                 print(f"DEBUG: Found matching empty: {matching_empty.name} for hardpoint '{mapped_name}'")
 
             guid_str = str(guid)
-            if not __class__.is_guid(guid_str):
+            if not __class__.is_guid(guid_str): # must be 00000000-0000-0000-0000-000000000000 or blank
                 if not entity_class_name:
                     print("DEBUG: GUID is all zeros, but no entityClassName found, skipping geometry import")
                     # Still recurse into nested loadout if present
@@ -356,6 +348,25 @@ class SCOrg_tools_import():
                 else:
                     # Get the GUID from the entity_class_name
                     guid_str = __class__.get_guid_by_name(entity_class_name)
+                    if not guid_str or not __class__.is_guid(guid_str):
+                        print(f"DEBUG: Could not resolve GUID for entityClassName '{entity_class_name}', skipping import")
+                        continue
+
+            if not nested_loadout:
+                # If no nested loadout, load the record for the GUID and check for a default loadout
+                print (f"DEBUG: No nested loadout found, loading record for GUID: {guid_str}")
+                child_record = __class__.get_record(guid_str)
+                if child_record:
+                    nested_loadout = __class__.get_loadout_from_record(child_record)
+                    if not nested_loadout:
+                       print(f"DEBUG: Could not find a nested loadout for GUID {guid_str}: {nested_loadout}")
+                    else:
+                        print(f"DEBUG: Found nested loadout for GUID {guid_str}: {nested_loadout}")
+                        from pprint import pprint
+                        pprint(child_record)
+                        pprint(nested_loadout)
+
+
 
             if guid_str in __class__.imported_guid_objects:
                 # If the GUID is already imported, duplicate the hierarchy linked
@@ -441,10 +452,7 @@ class SCOrg_tools_import():
             return
 
         # Safely access Components and loadout
-        top_level_loadout = None
-        if hasattr(record, 'properties') and hasattr(record.properties, 'Components') and len(record.properties.Components) > 1:
-            if hasattr(record.properties.Components[1], 'reference') and hasattr(record.properties.Components[1].reference, 'properties'):
-                top_level_loadout = record.properties.Components[1].reference.properties.get('loadout')
+        top_level_loadout = __class__.get_loadout_from_record(record)
 
         if top_level_loadout is None:
             misc_utils.SCOrg_tools_misc.error("Could not find top-level loadout in ship record. Check the structure of the record.")
@@ -457,6 +465,20 @@ class SCOrg_tools_import():
         __class__.import_hardpoint_hierarchy(top_level_loadout, empties_to_fill)
         blender_utils.SCOrg_tools_blender.fix_modifiers()
 
+    def get_loadout_from_record(record):
+        print(f"DEBUG: get_loadout_from_record called with record: {record.name}")
+        loadout = None
+        # Try object style first
+        if hasattr(record, 'properties') and hasattr(record.properties, 'Components'):
+            print("DEBUG: Record has Components, checking for loadout...")
+            for comp in record.properties.Components:
+                if hasattr(comp, 'name') and comp.name == "SEntityComponentDefaultLoadoutParams":
+                    if hasattr(comp.properties, 'loadout'):
+                        print("DEBUG: Found loadout")
+                        return comp.properties.loadout
+        print("DEBUG: Record has no loadout")
+        return None
+    
     def matches_blender_name(name, target):
         return name == target or re.match(rf"^{re.escape(target)}\.\d+$", name)
 
