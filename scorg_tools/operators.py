@@ -65,7 +65,7 @@ class VIEW3D_OT_refresh_button(bpy.types.Operator):
             return {'CANCELLED'}
 
         #Load the record for the ship
-        record = misc_utils.SCOrg_tools_misc.get_ship_record(dcb)
+        record = misc_utils.SCOrg_tools_misc.get_ship_record()
         
         if record is None:
             misc_utils.SCOrg_tools_misc.error("Could not find ship record. Ensure a 'base' empty object exists.")
