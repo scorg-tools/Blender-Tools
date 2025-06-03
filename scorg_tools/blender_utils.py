@@ -224,7 +224,7 @@ class SCOrg_tools_blender():
             slots_to_remove = []
             for i, slot in enumerate(obj.material_slots):
                 mat = slot.material
-                if mat and mat.name.endswith('_mtl_proxy'):
+                if mat and (mat.name.endswith('_mtl_proxy') or mat.name.endswith('_NoDraw')):
                     # Enter edit mode to delete geometry assigned to this material
                     bpy.context.view_layer.objects.active = obj
                     bpy.ops.object.mode_set(mode='EDIT')
