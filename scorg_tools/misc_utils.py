@@ -5,7 +5,8 @@ from pathlib import Path
 from . import globals_and_threading
 
 class SCOrg_tools_misc():
-    def get_ship_record(dcb):
+    def get_ship_record():
+        dcb = globals_and_threading.dcb
         empty_name = SCOrg_tools_misc.find_base_name()
         if empty_name:
             print(f"Found Empty object: {empty_name}")
