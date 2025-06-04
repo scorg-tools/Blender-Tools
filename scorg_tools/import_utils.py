@@ -9,6 +9,7 @@ from . import misc_utils # For SCOrg_tools_misc.error, get_ship_record, select_b
 from . import blender_utils # For SCOrg_tools_blender.fix_modifiers
 
 class SCOrg_tools_import():
+    _process_bones_file = None
     def get_record(id):
         """
         Get a record by GUID from the global dcb.
@@ -66,10 +67,27 @@ class SCOrg_tools_import():
         if not record:
             misc_utils.SCOrg_tools_misc.error(f"⚠️ Could not find record for GUID: {guid} - are you using the correct Data.p4k?")
             return False
-
+        
+        missing_files = []
+        
         geometry_path = __class__.get_geometry_path_by_guid(guid)
 
-        missing_files = []
+        # If the process_bones_file is set, we need to import the bones DAE and convert it to empties
+        if __class__._process_bones_file:
+            if __class__._process_bones_file.is_file():
+                print(f"DEBUG: Using bones file: {__class__._process_bones_file}")
+                bones_path = __class__._process_bones_file
+                bpy.ops.object.select_all(action='DESELECT')
+                result = bpy.ops.wm.collada_import(filepath=str(bones_path))
+                if 'FINISHED' not in result:
+                    print(f"⚠️ ERROR: Failed to import bones DAE for {guid}: {bones_path}")
+                    return None
+                print(f"Converting bones to empties for {guid}: {bones_path}")
+                blender_utils.SCOrg_tools_blender.convert_armatures_to_empties()
+            else:
+                print(f"⚠️ Bones file not found: {__class__._process_bones_file}. Please extract it with StarFab, under Data -> Data.p4k")
+                missing_files.append(str(__class__._process_bones_file))
+        
         # load the main .dae
         if geometry_path:
             print(f"Loading geo: {geometry_path}")
@@ -78,14 +96,14 @@ class SCOrg_tools_import():
                 print(f"DEBUG: Attempted DAE import path: {geometry_path}, but file was missing")
                 if str(geometry_path) not in missing_files:
                     missing_files.append(str(geometry_path))
-                print(f"ERROR: Failed to import DAE for {guid}: {geometry_path} - file missing")
+                print(f"⚠️ ERROR: Failed to import DAE for {guid}: {geometry_path} - file missing")
                 print("The following files were missing, please extract them with StarFab, under Data -> Data.p4k:")
                 print(missing_files)
                 return None
             bpy.ops.object.select_all(action='DESELECT')
             result = bpy.ops.wm.collada_import(filepath=str(geometry_path))
             if 'FINISHED' not in result:
-                print(f"ERROR: Failed to import DAE for {guid}: {geometry_path}")
+                print(f"⚠️ ERROR: Failed to import DAE for {guid}: {geometry_path}")
                 return None
 
             imported_objs = [obj for obj in bpy.context.selected_objects]
@@ -157,7 +175,7 @@ class SCOrg_tools_import():
 
         prefs = bpy.context.preferences.addons["scorg_tools"].preferences
         extract_path = Path(prefs.extract_dir)
-        # Loop through Components
+        # Loop through Components to get geometry path
         try:
             if hasattr(record, 'properties'):
                 if hasattr(record.properties, 'Components'):
@@ -168,7 +186,31 @@ class SCOrg_tools_import():
                                 path = comp.properties.Geometry.properties.Geometry.properties.Geometry.properties.path
                                 if path:
                                     path = path.removeprefix("Data/") # Rare objects have this prefix and they shouldn't see b8f6e23e-8a06-47e4-81c9-3f22c34b99e9
-                                    dae_path = Path(path).with_suffix('.dae')
+                                    file_path = extract_path / Path(path)
+                                    if file_path.suffix.lower() == '.cdf':
+                                        if file_path.is_file():
+                                            # This is likely a weapon or similar, this is an XML file that points to the real base geometry
+                                            print(f"Found CDF XML: {file_path}")
+                                            # Read the CDF XML file to find the DAE path
+                                            from scdatatools.engine import cryxml
+                                            tree = cryxml.etree_from_cryxml_file(file_path)
+                                            root = tree.getroot()
+                                            geo_path = None
+                                            for attachment_list in root.findall("AttachmentList"):
+                                                for attachment in attachment_list.findall("Attachment"):
+                                                    if attachment.attrib.get("Type") == "CA_BONE":
+                                                        # As this is connected to bones, save the original file path for later processing
+                                                        __class__._process_bones_file = extract_path / file_path.with_suffix('.dae')
+                                                        binding = attachment.attrib.get("Binding")
+                                                        geo_path = (extract_path / Path(binding)).with_suffix('.dae')
+                                                        print(f"Found geometry path in CDF XML: {geo_path}")
+                                                        return geo_path
+                                            print(f"⚠️ No geometry path found in CDF XML file: {file_path}")
+                                            return None
+                                        else:
+                                            print(f"⚠️ CDF XML file not found: {file_path}. Please extract it with StarFab, under Data -> Data.p4k")
+                                            return None
+                                    dae_path = file_path.with_suffix('.dae')
                                     print(f'Found geometry: {dae_path}')
                                     return (extract_path / dae_path)
                                 print(f"⚠️ Missing geometry path in component {i}")

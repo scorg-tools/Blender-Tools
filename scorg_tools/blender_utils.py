@@ -1,5 +1,6 @@
 import bpy
 import tqdm
+from mathutils import Matrix
 
 class SCOrg_tools_blender():
     def add_weld_and_weighted_normal_modifiers():
@@ -242,3 +243,32 @@ class SCOrg_tools_blender():
             for i in sorted(slots_to_remove, reverse=True):
                 obj.active_material_index = i
                 bpy.ops.object.material_slot_remove()
+    
+    def convert_bones_to_empties(armature_obj):
+        bpy.ops.object.mode_set(mode='OBJECT')
+        armature = armature_obj.data
+        empties = {}
+
+        # Create empties for each bone
+        for bone in armature.bones:
+            empty = bpy.data.objects.new(bone.name, None)
+            # Set empty's location in world space
+            empty.matrix_world = armature_obj.matrix_world @ bone.matrix_local
+            empty['orig_name'] = bone.name  # Store original bone name
+            bpy.context.collection.objects.link(empty)
+            empties[bone.name] = empty
+
+        # Parent empties to match bone hierarchy
+        for bone in armature.bones:
+            if bone.parent:
+                empties[bone.name].parent = empties[bone.parent.name]
+
+        return empties
+
+    def convert_armatures_to_empties():
+        # Process all armatures in the scene
+        for obj in bpy.data.objects:
+            if obj.type == 'ARMATURE':
+                empties = __class__.convert_bones_to_empties(obj)
+                # Optionally, delete the armature
+                bpy.data.objects.remove(obj, do_unlink=True)
