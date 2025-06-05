@@ -248,9 +248,13 @@ class SCOrg_tools_blender():
         bpy.ops.object.mode_set(mode='OBJECT')
         armature = armature_obj.data
         empties = {}
+        root_name = None
 
         # Create empties for each bone
         for bone in armature.bones:
+            if not root_name:
+                # the first bone will be the root, so save the name
+                root_name = bone.name
             empty = bpy.data.objects.new(bone.name, None)
             # Set empty's location in world space
             empty.matrix_world = armature_obj.matrix_world @ bone.matrix_local
@@ -263,12 +267,19 @@ class SCOrg_tools_blender():
             if bone.parent:
                 empties[bone.name].parent = empties[bone.parent.name]
 
-        return empties
+        return root_name
 
     def convert_armatures_to_empties():
         # Process all armatures in the scene
+        root_object_name = None
+        empties = []
         for obj in bpy.data.objects:
             if obj.type == 'ARMATURE':
-                empties = __class__.convert_bones_to_empties(obj)
-                # Optionally, delete the armature
+                # convert the bones to empties
+                root = __class__.convert_bones_to_empties(obj)
+                if not root_object_name:
+                    root_object_name = root
+
+                # Delete the armature
                 bpy.data.objects.remove(obj, do_unlink=True)
+        return root_object_name

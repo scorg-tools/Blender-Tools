@@ -9,7 +9,6 @@ from . import misc_utils # For SCOrg_tools_misc.error, get_ship_record, select_b
 from . import blender_utils # For SCOrg_tools_blender.fix_modifiers
 
 class SCOrg_tools_import():
-    _process_bones_file = None
     def get_record(id):
         """
         Get a record by GUID from the global dcb.
@@ -41,7 +40,37 @@ class SCOrg_tools_import():
             return str(record.id)
         else:
             return None
-    
+
+    def replace_selected_mesh_with_empties():
+        for obj in list(bpy.context.selected_objects):
+            if obj.type == 'MESH':
+                # Store transform and parent info
+                obj_name = obj.name
+                obj_loc = obj.location.copy()
+                obj_rot = obj.rotation_euler.copy()
+                obj_scale = obj.scale.copy()
+                obj_parent = obj.parent
+                obj_matrix_parent_inverse = obj.matrix_parent_inverse.copy()
+                children = list(obj.children)
+
+                # Delete the mesh object first
+                bpy.data.objects.remove(obj, do_unlink=True)
+
+                # Create the empty with the original name
+                empty = bpy.data.objects.new(obj_name, None)
+                empty.location = obj_loc
+                empty.rotation_euler = obj_rot
+                empty.scale = obj_scale
+                bpy.context.collection.objects.link(empty)
+                empty.parent = obj_parent
+                if obj_parent:
+                    empty.matrix_parent_inverse = obj_matrix_parent_inverse
+
+                # Re-parent all children to the new empty and preserve transforms
+                for child in children:
+                    child.parent = empty
+                    child.matrix_parent_inverse.identity()
+
     def import_by_id(id):
         os.system('cls')
         print(f"Received ID: {id}")
@@ -55,7 +84,9 @@ class SCOrg_tools_import():
             return False
 
         __class__.imported_guid_objects = {}
+        __class__.skip_imported_files = {}
         __class__.INCLUDE_HARDPOINTS = [] # all
+        __class__.missing_files = []
         
         # Access addon preferences via bpy.context
         prefs = bpy.context.preferences.addons["scorg_tools"].preferences
@@ -68,50 +99,74 @@ class SCOrg_tools_import():
             misc_utils.SCOrg_tools_misc.error(f"⚠️ Could not find record for GUID: {guid} - are you using the correct Data.p4k?")
             return False
         
-        missing_files = []
-        
         geometry_path = __class__.get_geometry_path_by_guid(guid)
+        process_bones_file = False
+        # if the geometry path is an array, it means we have a CDF XML file that points to the real geometry
+        if isinstance(geometry_path, list):
+            print(f"DEBUG: CDF XML file found with references to: {geometry_path}")
+            process_bones_file = geometry_path
+            geometry_path = process_bones_file.pop(0)  # Get the first file in the array, which is the base armature DAE file (or sometimes the base geometry)
 
-        # If the process_bones_file is set, we need to import the bones DAE and convert it to empties
-        if __class__._process_bones_file:
-            if __class__._process_bones_file.is_file():
-                print(f"DEBUG: Using bones file: {__class__._process_bones_file}")
-                bones_path = __class__._process_bones_file
-                bpy.ops.object.select_all(action='DESELECT')
-                result = bpy.ops.wm.collada_import(filepath=str(bones_path))
-                if 'FINISHED' not in result:
-                    print(f"⚠️ ERROR: Failed to import bones DAE for {guid}: {bones_path}")
-                    return None
-                print(f"Converting bones to empties for {guid}: {bones_path}")
-                blender_utils.SCOrg_tools_blender.convert_armatures_to_empties()
-            else:
-                print(f"⚠️ Bones file not found: {__class__._process_bones_file}. Please extract it with StarFab, under Data -> Data.p4k")
-                missing_files.append(str(__class__._process_bones_file))
-        
         # load the main .dae
         if geometry_path:
             print(f"Loading geo: {geometry_path}")
             if not geometry_path.is_file():
                 misc_utils.SCOrg_tools_misc.error(f"Error: .DAE file not found at: {geometry_path}")
                 print(f"DEBUG: Attempted DAE import path: {geometry_path}, but file was missing")
-                if str(geometry_path) not in missing_files:
-                    missing_files.append(str(geometry_path))
+                if str(geometry_path) not in __class__.missing_files:
+                    __class__.missing_files.append(str(geometry_path))
                 print(f"⚠️ ERROR: Failed to import DAE for {guid}: {geometry_path} - file missing")
                 print("The following files were missing, please extract them with StarFab, under Data -> Data.p4k:")
-                print(missing_files)
+                print(__class__.missing_files)
                 return None
+            
+            # Get a set of all objects before import
+            before = set(bpy.data.objects)
+
             bpy.ops.object.select_all(action='DESELECT')
             result = bpy.ops.wm.collada_import(filepath=str(geometry_path))
             if 'FINISHED' not in result:
                 print(f"⚠️ ERROR: Failed to import DAE for {guid}: {geometry_path}")
                 return None
 
-            imported_objs = [obj for obj in bpy.context.selected_objects]
-            # TODO: get base empty & set GUID as custom property on object
+            # Get a set of all objects after import
+            after = set(bpy.data.objects)
 
+            # The difference is the set of newly imported objects
+            imported_objs = list(after - before)
 
-            # Safely access Components and loadout
+            # Find root objects (those without a parent)
+            root_objs = [obj for obj in imported_objs if obj.parent is None]
+            root_object_name = None
+            if root_objs:
+                root_object_name = geometry_path.stem
+                root_objs[0].name = root_object_name  # Set the name to the file name (without extension)
+                # set GUID as custom property on object
+                root_objs[0]['guid'] = guid
+                root_objs[0]['orig_name'] = root_object_name
+                root_objs[0]['geometry_path'] = str(geometry_path)
+
             top_level_loadout = __class__.get_loadout_from_record(record)
+
+            if process_bones_file:
+                print("Deleting meshes for initial CDF base import")
+                # Delete all meshes to avoid conflicts with CDF imports, the imported .dae objects will be selected
+                __class__.replace_selected_mesh_with_empties()
+
+                print(f"Converting bones to empties for {guid}: {geometry_path}")
+                blender_utils.SCOrg_tools_blender.convert_armatures_to_empties()
+                if not root_object_name:
+                    print(f"WARNING: No root object found for: {geometry_path}")
+
+                for file in process_bones_file:
+                    if not file.is_file():
+                        print(f"⚠️ ERROR: Bones file missing: {file}")
+                        if str(file) not in __class__.missing_files:
+                            __class__.missing_files.append(str(file))
+                        continue
+                    print(f"Processing bones file: {file}")
+                    __class__.import_file(file, root_object_name)
+                print("DEBUG: Finished processing bones files")
 
             if top_level_loadout is None:
                 misc_utils.SCOrg_tools_misc.error("Could not find top-level loadout in ship record. Check the structure of the record.")
@@ -126,9 +181,9 @@ class SCOrg_tools_import():
 
             # add modifiers
             blender_utils.SCOrg_tools_blender.fix_modifiers();
-            if len(missing_files) > 0:
+            if len(__class__.missing_files) > 0:
                 print("The following files were missing, please extract them with StarFab, under Data -> Data.p4k:")
-                print(missing_files)
+                print(__class__.missing_files)
     
     def get_all_empties_blueprint():
         # find all objects that are empties and have no children
@@ -188,6 +243,7 @@ class SCOrg_tools_import():
                                     path = path.removeprefix("Data/") # Rare objects have this prefix and they shouldn't see b8f6e23e-8a06-47e4-81c9-3f22c34b99e9
                                     file_path = extract_path / Path(path)
                                     if file_path.suffix.lower() == '.cdf':
+                                        file_array = [extract_path / file_path.with_suffix('.dae')] # add the base armature dae file to the array
                                         if file_path.is_file():
                                             # This is likely a weapon or similar, this is an XML file that points to the real base geometry
                                             print(f"Found CDF XML: {file_path}")
@@ -198,15 +254,12 @@ class SCOrg_tools_import():
                                             geo_path = None
                                             for attachment_list in root.findall("AttachmentList"):
                                                 for attachment in attachment_list.findall("Attachment"):
-                                                    if attachment.attrib.get("Type") == "CA_BONE":
-                                                        # As this is connected to bones, save the original file path for later processing
-                                                        __class__._process_bones_file = extract_path / file_path.with_suffix('.dae')
-                                                        binding = attachment.attrib.get("Binding")
-                                                        geo_path = (extract_path / Path(binding)).with_suffix('.dae')
-                                                        print(f"Found geometry path in CDF XML: {geo_path}")
-                                                        return geo_path
-                                            print(f"⚠️ No geometry path found in CDF XML file: {file_path}")
-                                            return None
+                                                    binding = attachment.attrib.get("Binding")
+                                                    geo_path = (extract_path / Path(binding)).with_suffix('.dae')
+                                                    print(f"Found geometry path in CDF XML: {geo_path}")
+                                                    file_array.append(geo_path)
+                                            print(f"Returning geometry file array: {file_array}")
+                                            return file_array
                                         else:
                                             print(f"⚠️ CDF XML file not found: {file_path}. Please extract it with StarFab, under Data -> Data.p4k")
                                             return None
@@ -264,7 +317,7 @@ class SCOrg_tools_import():
     
     def import_hardpoint_hierarchy(loadout, empties_to_fill, is_top_level=True, parent_guid=None):        
         entries = loadout.properties.get('entries', [])
-        missing_files = []
+
         print(f"DEBUG: import_hardpoint_hierarchy called with {len(entries)} entries, empties to fill: {len(empties_to_fill)}, is_top_level={is_top_level}, parent_guid={parent_guid}")
 
         # For nested calls, get the mapping for the parent_guid
@@ -367,8 +420,8 @@ class SCOrg_tools_import():
                 if not geometry_path.exists():
                     misc_utils.SCOrg_tools_misc.error(f"Error: .DAE file not found at: {geometry_path}")
                     print(f"DEBUG: Attempted DAE import path: {geometry_path}, but file was missing")
-                    if str(geometry_path) not in missing_files:
-                        missing_files.append(str(geometry_path));
+                    if str(geometry_path) not in __class__.missing_files:
+                        __class__.missing_files.append(str(geometry_path));
                     continue
 
                 bpy.ops.object.select_all(action='DESELECT')
@@ -418,15 +471,61 @@ class SCOrg_tools_import():
                     __class__.import_hardpoint_hierarchy(nested_loadout, imported_empties, is_top_level=False, parent_guid=guid_str)
                 else:
                     print("DEBUG: No nested loadout found, recursion ends here")
-        if len(missing_files) > 0:
+        if len(__class__.missing_files) > 0:
             print("The following files were missing, please extract them with StarFab, under Data -> Data.p4k if you want a more complete loadout:")
-            print(missing_files)
+            print(__class__.missing_files)
+
+    def import_file(geometry_path, parent_empty_name):
+        """
+        Import a single file without recursion.
+        """
+        print(f"DEBUG: import_file called with geometry_path: {geometry_path}, parent_empty_name: {parent_empty_name}")
+        if geometry_path is None:
+            print(f"❌ ERROR: import_file called with no geometry_path")
+            return
+
+        if not geometry_path.exists():
+            misc_utils.SCOrg_tools_misc.error(f"Error: .DAE file not found at: {geometry_path}")
+            print(f"DEBUG: Attempted DAE import path: {geometry_path}, but file was missing")
+            if str(geometry_path) not in __class__.missing_files:
+                __class__.missing_files.append(str(geometry_path));
+            return
+
+        # Get a set of all objects before import
+        before = set(bpy.data.objects)
+
+        bpy.ops.object.select_all(action='DESELECT')
+        result = bpy.ops.wm.collada_import(filepath=str(geometry_path))
+        if 'FINISHED' not in result:
+            print(f"❌ ERROR: Failed to import DAE for {guid_str}: {geometry_path}")
+            return
+        
+        # Get a set of all objects after import
+        after = set(bpy.data.objects)
+
+        # The difference is the set of newly imported objects
+        imported_objs = list(after - before)
+
+        # Find root objects (those without a parent)
+        root_objs = [obj for obj in imported_objs if obj.parent is None]
+
+        if not root_objs:
+            print(f"WARNING: No root object found for: {geometry_path}")
+            return
+        if parent_empty_name:
+            print(f"DEBUG: Parenting to: {parent_empty_name}, and setting name to {geometry_path.stem}")
+            # Parent the root object to the provided parent_empty
+            root_obj = root_objs[0]
+            root_obj.name = geometry_path.stem  # Set the name to the file name (without extension)
+            root_obj.parent = bpy.data.objects.get(parent_empty_name)
+            root_obj.matrix_parent_inverse.identity()
 
     def run_import():
         
         os.system('cls')
         __class__.imported_guid_objects = {}
         __class__.INCLUDE_HARDPOINTS = [] # all
+        __class__.missing_files = []
         
         # Access addon preferences via bpy.context
         prefs = bpy.context.preferences.addons["scorg_tools"].preferences
@@ -456,15 +555,14 @@ class SCOrg_tools_import():
 
     def get_loadout_from_record(record):
         print(f"DEBUG: get_loadout_from_record called with record: {record.name}")
-        loadout = None
         try:
             if hasattr(record, 'properties') and hasattr(record.properties, 'Components'):
-                    print("DEBUG: Record has Components, checking for loadout...")
-                    for comp in record.properties.Components:
-                        if hasattr(comp, 'name') and comp.name == "SEntityComponentDefaultLoadoutParams":
-                            if hasattr(comp.properties, 'loadout'):
-                                print("DEBUG: Found loadout")
-                                return comp.properties.loadout
+                print("DEBUG: Record has Components, checking for loadout...")
+                for comp in record.properties.Components:
+                    if hasattr(comp, 'name') and comp.name == "SEntityComponentDefaultLoadoutParams":
+                        if hasattr(comp.properties, 'loadout'):
+                            print("DEBUG: Found loadout")
+                            return comp.properties.loadout
         except Exception as e:
             print(f"DEBUG: Error accessing Components in record {record.name}: {e}")
         print("DEBUG: Record has no loadout")
