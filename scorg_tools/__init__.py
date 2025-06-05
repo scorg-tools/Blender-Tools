@@ -1,7 +1,7 @@
 bl_info = {
     "name": "SCOrg.tools Blender Tools alpha",
     "author": "Star-Destroyer@scorg.tools",
-    "version": (1, 0, 10),
+    "version": (1, 0, 11),
     "blender": (3, 6, 0),
     "location": "View3D > Sidebar > SCOrg.tools",
     "description": "Tools to supplement StarFab",
@@ -15,7 +15,6 @@ import bpy
 import os
 import sys
 
-# TODO: make imrpot by GUID work with non-guid items in the loadout
 # TODO: make a friendly error when installing to detect if the starfab addon is not installed
 # TODO: add functionality to add POM material and replace in-place with existing textures
 # TODO: fix importing fps weapons in import by guid
