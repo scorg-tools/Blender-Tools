@@ -1,7 +1,7 @@
 bl_info = {
     "name": "SCOrg.tools Blender Tools alpha",
     "author": "Star-Destroyer@scorg.tools",
-    "version": (1, 0, 12),
+    "version": (1, 0, 13),
     "blender": (3, 6, 0),
     "location": "View3D > Sidebar > SCOrg.tools",
     "description": "Tools to supplement StarFab",
@@ -15,13 +15,14 @@ import bpy
 import os
 import sys
 
-# TODO: make a friendly error when installing to detect if the starfab addon is not installed
+# TODO: Add tint pallet node group to the scene and send it to the material import
 # TODO: add functionality to add POM material and replace in-place with existing textures
 # TODO: fix extra thrusters on front of retro thrusters on Gladius
+# TODO: Import the paints (tint pallets node group needs to work for this)
+# TODO: make a friendly error when installing to detect if the starfab addon is not installed
 # TODO: Fix paint name lookups for ships with multiple words, e.g. guardian_mx
 #       or do it the proper way and use the databacore to lookup the paint to 
 #       get the key for the localisation
-# TODO: Import the paints (tint pallets node group needs to work for this)
 
 # Add addon directory to sys.path to allow relative imports
 if __package__ in sys.modules:
