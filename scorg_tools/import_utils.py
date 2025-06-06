@@ -545,6 +545,7 @@ class SCOrg_tools_import():
         top_level_loadout = __class__.get_loadout_from_record(record)
 
         if top_level_loadout is None:
+            blender_utils.SCOrg_tools_blender.fix_modifiers()
             misc_utils.SCOrg_tools_misc.error("Could not find top-level loadout in ship record. Check the structure of the record.")
             return
 
