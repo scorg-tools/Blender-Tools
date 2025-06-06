@@ -15,10 +15,11 @@ import bpy
 import os
 import sys
 
+# TODO: reduce the POM/Decal displacement 0.0005 for CDF imported
+# TODO: add my .00x material re-mapper script
 # TODO: make a friendly error when installing to detect if the starfab addon is not installed
 # TODO: add functionality to add POM material and replace in-place with existing textures
 # TODO: fix extra thrusters on front of retro thrusters on Gladius
-# TODO: fix parenting on imported weapons
 # TODO: Fix paint name lookups for ships with multiple words, e.g. guardian_mx
 #       or do it the proper way and use the databacore to lookup the paint to 
 #       get the key for the localisation
