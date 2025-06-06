@@ -9,6 +9,12 @@ from . import misc_utils # For SCOrg_tools_misc.error, get_ship_record, select_b
 from . import blender_utils # For SCOrg_tools_blender.fix_modifiers
 
 class SCOrg_tools_import():
+    def init():
+        print("SCOrg_tools_import initialized")
+        __class__.prefs = bpy.context.preferences.addons["scorg_tools"].preferences
+        __class__.extract_dir = Path(__class__.prefs.extract_dir) # Ensure Path object
+        __class__.missing_files = []  # List to track missing files
+
     def get_record(id):
         """
         Get a record by GUID from the global dcb.
@@ -87,10 +93,6 @@ class SCOrg_tools_import():
         __class__.skip_imported_files = {}
         __class__.INCLUDE_HARDPOINTS = [] # all
         __class__.missing_files = []
-        
-        # Access addon preferences via bpy.context
-        prefs = bpy.context.preferences.addons["scorg_tools"].preferences
-        __class__.extract_dir = Path(prefs.extract_dir) # Ensure Path object
                 
         #Load item by GUID
         record = __class__.get_record(guid)
@@ -148,9 +150,11 @@ class SCOrg_tools_import():
             print(f"DEBUG: post-import root object: {root_object_name}")
 
             top_level_loadout = __class__.get_loadout_from_record(record)
-
+            displacement_strength = 0.005
             if process_bones_file:
                 print("Deleting meshes for initial CDF base import")
+                # Usually used for smaller items like weapons, so change the POM/Decal displacement strength to 0.5mm
+                displacement_strength = 0.0005
                 # Delete all meshes to avoid conflicts with CDF imports, the imported .dae objects will be selected
                 __class__.replace_selected_mesh_with_empties()
                 
@@ -182,7 +186,7 @@ class SCOrg_tools_import():
             __class__.import_hardpoint_hierarchy(top_level_loadout, empties_to_fill, is_top_level=False, parent_guid=guid)
 
             # add modifiers
-            blender_utils.SCOrg_tools_blender.fix_modifiers();
+            blender_utils.SCOrg_tools_blender.fix_modifiers(displacement_strength);
             if len(__class__.missing_files) > 0:
                 print("The following files were missing, please extract them with StarFab, under Data -> Data.p4k:")
                 print(__class__.missing_files)
@@ -217,6 +221,7 @@ class SCOrg_tools_import():
         return empty_hardpoints
     
     def get_geometry_path_by_guid(guid):
+        hasattr(__class__, 'extract_dir') or __class__.init()
         dcb = globals_and_threading.dcb
 
         if not dcb:
@@ -230,8 +235,6 @@ class SCOrg_tools_import():
             misc_utils.SCOrg_tools_misc.error(f"Could not find record for GUID: {guid} - are you using the correct Data.p4k?")
             return None
 
-        prefs = bpy.context.preferences.addons["scorg_tools"].preferences
-        extract_path = Path(prefs.extract_dir)
         # Loop through Components to get geometry path
         try:
             if hasattr(record, 'properties'):
@@ -243,9 +246,9 @@ class SCOrg_tools_import():
                                 path = comp.properties.Geometry.properties.Geometry.properties.Geometry.properties.path
                                 if path:
                                     path = path.removeprefix("Data/") # Rare objects have this prefix and they shouldn't see b8f6e23e-8a06-47e4-81c9-3f22c34b99e9
-                                    file_path = extract_path / Path(path)
+                                    file_path = __class__.extract_dir / Path(path)
                                     if file_path.suffix.lower() == '.cdf':
-                                        file_array = [extract_path / file_path.with_suffix('.dae')] # add the base armature dae file to the array
+                                        file_array = [__class__.extract_dir / file_path.with_suffix('.dae')] # add the base armature dae file to the array
                                         if file_path.is_file():
                                             # This is likely a weapon or similar, this is an XML file that points to the real base geometry
                                             print(f"Found CDF XML: {file_path}")
@@ -257,7 +260,7 @@ class SCOrg_tools_import():
                                             for attachment_list in root.findall("AttachmentList"):
                                                 for attachment in attachment_list.findall("Attachment"):
                                                     binding = attachment.attrib.get("Binding")
-                                                    geo_path = (extract_path / Path(binding)).with_suffix('.dae')
+                                                    geo_path = (__class__.extract_dir / Path(binding)).with_suffix('.dae')
                                                     print(f"Found geometry path in CDF XML: {geo_path}")
                                                     file_array.append(geo_path)
                                             print(f"Returning geometry file array: {file_array}")
@@ -267,7 +270,7 @@ class SCOrg_tools_import():
                                             return None
                                     dae_path = file_path.with_suffix('.dae')
                                     print(f'Found geometry: {dae_path}')
-                                    return (extract_path / dae_path)
+                                    return (__class__.extract_dir / dae_path)
                                 print(f"⚠️ Missing geometry path in component {i}")
                                 return None
                             except AttributeError as e:
@@ -529,10 +532,6 @@ class SCOrg_tools_import():
         __class__.INCLUDE_HARDPOINTS = [] # all
         __class__.missing_files = []
         
-        # Access addon preferences via bpy.context
-        prefs = bpy.context.preferences.addons["scorg_tools"].preferences
-        __class__.extract_dir = Path(prefs.extract_dir) # Ensure Path object
-        
         misc_utils.SCOrg_tools_misc.select_base_collection() # Ensure the base collection is active before importing
         record = misc_utils.SCOrg_tools_misc.get_ship_record()
         
@@ -582,3 +581,62 @@ class SCOrg_tools_import():
         if s == "00000000-0000-0000-0000-000000000000":
             return False
         return bool(re.match(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", str(s)))
+    
+    def import_missing_materials(path = None):
+        hasattr(__class__, 'extract_dir') or __class__.init()
+        if not __class__.extract_dir:
+            print("ERROR: extract_dir is not set. Please set it in the addon preferences.")
+            return None
+
+        p4k = globals_and_threading.p4k
+        file_cache = {}
+        missing_checked = []
+        if not p4k:
+            misc_utils.SCOrg_tools_misc.error("Please load Data.p4k first")
+            return None
+
+        # Loop through all materials in the scene
+        for mat in bpy.data.materials:
+            # Check if the material name contains '_mtl_' and if it is a vanilla material (with only Principled BSDF)
+            if "_mtl_" in mat.name and blender_utils.SCOrg_tools_blender.is_material_vanilla(mat):
+                # Get the filename by removing '_mtl' and adding '.mtl'
+                file_found = False
+                filename = __class__.get_material_filename(mat.name)
+                if not filename in file_cache and filename not in missing_checked:
+                    # if a path is provided, check it fist
+                    if path:
+                        filepath = Path(path) / filename
+                        if filepath.exists():
+                            file_found = True
+
+                    if not file_found:
+                        # If not found in the provided path, search in the p4k for the file
+                        print("searching p4k for material file:", filename)
+                        matches = p4k.search(file_filters=[filename], ignore_case = True, mode='endswith')
+                        if matches:
+                            print("Found material file in p4k:", matches[0].filename.removeprefix("Data/"))
+                            filepath = __class__.extract_dir / matches[0].filename.removeprefix("Data/")
+                            if filepath.exists():
+                                file_found = True
+                                file_cache[filename] = filepath
+                                print(f"DEBUG: Extracted Material file found: {filepath}")
+                            else:
+                                print(f"⚠️ ERROR: Extracted material file expected: {filepath} not found, please extract it with StarFab, under Data -> Data.p4k")
+                                if str(filepath) not in __class__.missing_files:
+                                    __class__.missing_files.append(str(filepath))
+                                missing_checked.append(filename)
+        print(f"DEBUG: Material file search completed, found {len(file_cache)} files")
+        print(file_cache)
+        if len(file_cache) > 0:
+            # Import the materials using scdatatools
+            from scdatatools.blender import materials
+            print("Importing materials from files")
+            materials.load_materials(list(file_cache.values()), data_dir='')
+
+    def get_material_filename(material_name):
+        before, sep, after = material_name.partition('_mtl')
+        if sep:
+            result = before + '.mtl'
+        else:
+            result = material_name  # _mtl not found, leave unchanged
+        return result

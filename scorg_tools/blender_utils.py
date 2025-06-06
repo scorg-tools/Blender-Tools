@@ -1,6 +1,8 @@
 import bpy
 import tqdm
+import re
 from mathutils import Matrix
+from . import import_utils # For import_utils.SCOrg_tools_import.import_missing_materials
 
 class SCOrg_tools_blender():
     def add_weld_and_weighted_normal_modifiers():
@@ -56,7 +58,7 @@ class SCOrg_tools_blender():
 
         return vg
 
-    def add_displace_modifiers_for_pom_and_decal():
+    def add_displace_modifiers_for_pom_and_decal(displacement_strength = 0.005):
         for obj in bpy.data.objects:
             if obj.type != 'MESH':
                 continue
@@ -83,7 +85,7 @@ class SCOrg_tools_blender():
                     if not modifier_exists:
                         # Create displace modifier
                         mod = obj.modifiers.new(name=f"Displace_{group_name}", type='DISPLACE')
-                        mod.strength = 0.005
+                        mod.strength = displacement_strength
                         mod.mid_level = 0
                         mod.vertex_group = vg.name
                         #print(f"Added Displace modifier for {obj.name} using group '{vg.name}'")
@@ -123,11 +125,13 @@ class SCOrg_tools_blender():
                     obj.modifiers.remove(obj.modifiers[mod_name])
                     #print(f"Removed duplicate Displace modifier '{mod_name}' from '{obj.name}'.")
                     
-    def fix_modifiers():
+    def fix_modifiers(displacement_strength=0.005):
         __class__.add_weld_and_weighted_normal_modifiers()
-        __class__.add_displace_modifiers_for_pom_and_decal()
+        __class__.add_displace_modifiers_for_pom_and_decal(displacement_strength)
         __class__.remove_duplicate_displace_modifiers()
         __class__.remove_proxy_material_geometry()
+        __class__.remap_material_users()
+        import_utils.SCOrg_tools_import.import_missing_materials()
 
     def select_children(obj):
         if hasattr(obj, 'objects'):
@@ -295,3 +299,54 @@ class SCOrg_tools_blender():
                 # Rename the empty to match the original armature name
                 bpy.data.objects[empty_name].name = name
         return True
+    
+    def get_original_material(name):
+        # Regex pattern to detect material names like "Material.001"
+        suffix_pattern = re.compile(r"(.*)\.(\d{3})$")
+        match = suffix_pattern.match(name)
+        if match:
+            base_name = match.group(1)
+            if base_name in bpy.data.materials:
+                return bpy.data.materials[base_name]
+        return None
+
+    def remap_material_users():
+        # Regex pattern to detect material names like "Material.001"
+        suffix_pattern = re.compile(r"(.*)\.(\d{3})$")
+
+        for mat in bpy.data.materials:
+            match = suffix_pattern.match(mat.name)
+            if not match:
+                continue
+
+            original = __class__.get_original_material(mat.name)
+            if original is None:
+                continue
+
+            # Reassign users
+            for obj in bpy.data.objects:
+                if obj.type == 'MESH':
+                    for i, slot in enumerate(obj.material_slots):
+                        if slot.material == mat:
+                            slot.material = original
+                            print(f"Reassigned material on {obj.name} slot {i} from {mat.name} to {original.name}")
+
+            # Remove the duplicate material if no users left
+            if mat.users == 0:
+                print(f"Removing unused material: {mat.name}")
+                bpy.data.materials.remove(mat)
+    
+    def is_material_vanilla(mat):
+        """
+        Check if the material is a vanilla material.
+        """
+        if mat.use_nodes:
+            nodes = mat.node_tree.nodes
+            node_types = {node.type for node in nodes}
+            if len(nodes) == 2 and 'BSDF_PRINCIPLED' in node_types and 'OUTPUT_MATERIAL' in node_types:
+                # Material has only a Principled BSDF and Material Output node
+                return True
+            else:
+                return False
+        else:
+            return True  # Non-node materials are considered vanilla
