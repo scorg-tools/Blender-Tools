@@ -1,7 +1,7 @@
 bl_info = {
     "name": "SCOrg.tools Blender Tools alpha",
     "author": "Star-Destroyer@scorg.tools",
-    "version": (1, 0, 11),
+    "version": (1, 0, 12),
     "blender": (3, 6, 0),
     "location": "View3D > Sidebar > SCOrg.tools",
     "description": "Tools to supplement StarFab",
@@ -15,8 +15,6 @@ import bpy
 import os
 import sys
 
-# TODO: reduce the POM/Decal displacement 0.0005 for CDF imported
-# TODO: add my .00x material re-mapper script
 # TODO: make a friendly error when installing to detect if the starfab addon is not installed
 # TODO: add functionality to add POM material and replace in-place with existing textures
 # TODO: fix extra thrusters on front of retro thrusters on Gladius
