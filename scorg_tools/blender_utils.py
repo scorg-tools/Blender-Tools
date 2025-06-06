@@ -245,17 +245,29 @@ class SCOrg_tools_blender():
                 bpy.ops.object.material_slot_remove()
     
     def convert_bones_to_empties(armature_obj):
+        print(f"DEBUG: Converting bones to empties for armature: {armature_obj.name}")
         bpy.ops.object.mode_set(mode='OBJECT')
         armature = armature_obj.data
         empties = {}
-        root_name = None
+        root_name = armature_obj.name
+        if hasattr(armature_obj, 'parent') and armature_obj.parent:
+            # If the armature has a parent, use its name as the root name
+            root_name = armature_obj.parent.name
+        print(f"DEBUG: Root name set to: {root_name} (parent found)")
 
         # Create empties for each bone
-        for bone in armature.bones:
-            if not root_name:
+        for i, bone in enumerate(armature.bones):
+            # if the root_name is not set and the armature object has a parent attribute
+            if i==0:
                 # the first bone will be the root, so save the name
-                root_name = bone.name
-            empty = bpy.data.objects.new(bone.name, None)
+                name = root_name
+                empty = bpy.data.objects.new(name, None)
+                return_name = empty.name # The name will add .001 etc as the armature currently exists, so remember the name to rename it 
+            else:
+                name = bone.name
+                empty = bpy.data.objects.new(name, None)
+            empty['orig_name'] = name
+
             # Set empty's location in world space
             empty.matrix_world = armature_obj.matrix_world @ bone.matrix_local
             empty['orig_name'] = bone.name  # Store original bone name
@@ -267,19 +279,19 @@ class SCOrg_tools_blender():
             if bone.parent:
                 empties[bone.name].parent = empties[bone.parent.name]
 
-        return root_name
+        return return_name
 
     def convert_armatures_to_empties():
         # Process all armatures in the scene
-        root_object_name = None
         empties = []
         for obj in bpy.data.objects:
             if obj.type == 'ARMATURE':
                 # convert the bones to empties
-                root = __class__.convert_bones_to_empties(obj)
-                if not root_object_name:
-                    root_object_name = root
+                empty_name =__class__.convert_bones_to_empties(obj)
 
                 # Delete the armature
+                name = obj.name
                 bpy.data.objects.remove(obj, do_unlink=True)
-        return root_object_name
+                # Rename the empty to match the original armature name
+                bpy.data.objects[empty_name].name = name
+        return True

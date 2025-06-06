@@ -106,3 +106,38 @@ class SCOrg_tools_misc():
             title="Error",
             icon='ERROR'
         )
+
+    def reload_addon():
+        """
+        Reloads the current addon, useful for applying changes without restarting Blender.
+        """
+        import importlib
+        import sys
+
+        # Unregister the addon if it's already loaded
+        if "scorg_tools" in sys.modules:
+            try:
+                scorg_tools.unregister()
+            except Exception as e:
+                print(f"Error during unregister: {e}")
+
+            # List of submodules to reload (order matters: submodules first, then __init__)
+            submodules = [
+                "scorg_tools.globals_and_threading",
+                "scorg_tools.misc_utils",
+                "scorg_tools.tint_utils",
+                "scorg_tools.blender_utils",
+                "scorg_tools.import_utils",
+                "scorg_tools.operators",
+                "scorg_tools.panels",
+                "scorg_tools.preferences",
+                "scorg_tools",  # __init__.py last
+            ]
+
+            for modname in submodules:
+                if modname in sys.modules:
+                    importlib.reload(sys.modules[modname])
+
+            # Now re-register the addon
+            import scorg_tools
+            scorg_tools.register()

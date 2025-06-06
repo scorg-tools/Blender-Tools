@@ -124,10 +124,18 @@ class VIEW3D_OT_add_modifiers(bpy.types.Operator):
 
 class VIEW3D_OT_make_instance_real(bpy.types.Operator):
     bl_idname = "view3d.make_instance_real"
-    bl_label = "Make Instance Real" # Corrected label
+    bl_label = "Make Instance Real"
     
     def execute(self, context):
         blender_utils.SCOrg_tools_blender.run_make_instances_real()
+        return {'FINISHED'}
+
+class VIEW3D_OT_reload(bpy.types.Operator):
+    bl_idname = "view3d.reload"
+    bl_label = "Reload Addon" 
+    
+    def execute(self, context):
+        misc_utils.SCOrg_tools_misc.reload_addon()
         return {'FINISHED'}
     
 class GetGUIDOperator(bpy.types.Operator):

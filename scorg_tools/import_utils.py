@@ -145,6 +145,7 @@ class SCOrg_tools_import():
                 root_objs[0]['guid'] = guid
                 root_objs[0]['orig_name'] = root_object_name
                 root_objs[0]['geometry_path'] = str(geometry_path)
+            print(f"DEBUG: post-import root object: {root_object_name}")
 
             top_level_loadout = __class__.get_loadout_from_record(record)
 
@@ -152,12 +153,13 @@ class SCOrg_tools_import():
                 print("Deleting meshes for initial CDF base import")
                 # Delete all meshes to avoid conflicts with CDF imports, the imported .dae objects will be selected
                 __class__.replace_selected_mesh_with_empties()
-
+                
                 print(f"Converting bones to empties for {guid}: {geometry_path}")
                 blender_utils.SCOrg_tools_blender.convert_armatures_to_empties()
+                
                 if not root_object_name:
                     print(f"WARNING: No root object found for: {geometry_path}")
-
+                
                 for file in process_bones_file:
                     if not file.is_file():
                         print(f"⚠️ ERROR: Bones file missing: {file}")

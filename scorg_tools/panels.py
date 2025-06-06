@@ -24,6 +24,9 @@ class VIEW3D_PT_scorg_tools_panel(bpy.types.Panel):
         layout = self.layout
         prefs = context.preferences.addons[__package__].preferences # Access addon preferences
 
+        if bpy.context.preferences.view.show_developer_ui:
+            layout.operator("view3d.reload", text="Reload Addon", icon='FILE_REFRESH')
+        
         # Check if StarFab scene exists
         if 'StarFab' in bpy.data.scenes:
             layout.operator("view3d.make_instance_real", text="Make Instance Real", icon='OUTLINER_OB_GROUP_INSTANCE')
