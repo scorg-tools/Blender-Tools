@@ -1,5 +1,6 @@
 import bpy
 from pathlib import Path
+import re
 
 # Import globals
 from . import globals_and_threading
@@ -10,21 +11,21 @@ class SCOrg_tools_misc():
         empty_name = SCOrg_tools_misc.find_base_name()
         if empty_name:
             print(f"Found Empty object: {empty_name}")
-            
-            records = dcb.search_filename(f'libs/foundry/records/entities/spaceships/*{empty_name}.xml')
+            name = re.sub(r'\.\d+$', '', empty_name)  # Remove any trailing .001, .002, etc.
+            records = dcb.search_filename(f'libs/foundry/records/entities/spaceships/*{name}.xml')
             if records == []:
-                records = dcb.search_filename(f'libs/foundry/records/entities/groundvehicles/*{empty_name}.xml')
+                records = dcb.search_filename(f'libs/foundry/records/entities/groundvehicles/*{name}.xml')
             if records == []:
-                print(f"❌ Error, could not match ship or vehicle for {empty_name}")
+                print(f"❌ Error, could not match ship or vehicle for {name}")
                 return None
             
             # Access global localizer
             if globals_and_threading.localizer:
-                ship_name = globals_and_threading.localizer.gettext("vehicle_name"+empty_name.lower())
+                ship_name = globals_and_threading.localizer.gettext("vehicle_name"+name.lower())
                 globals_and_threading.ship_loaded = ship_name
             else:
                 print("Warning: localizer not loaded, ship name might not be localized.")
-                globals_and_threading.ship_loaded = empty_name # Fallback
+                globals_and_threading.ship_loaded = name # Fallback
             return records[0]
         else:
             print("❌ Error, no Empty object with 'container_name' = 'base' found.")
