@@ -350,3 +350,9 @@ class SCOrg_tools_blender():
                 return False
         else:
             return True  # Non-node materials are considered vanilla
+        
+    def init_tint_group(entity_name):
+        print("Initializing tint group for ship: ", entity_name)
+        from scdatatools import blender
+        node_group = blender.materials.utils.tint_palette_node_group_for_entity(entity_name)
+        return node_group

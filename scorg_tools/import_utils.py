@@ -9,11 +9,13 @@ from . import misc_utils # For SCOrg_tools_misc.error, get_ship_record, select_b
 from . import blender_utils # For SCOrg_tools_blender.fix_modifiers
 
 class SCOrg_tools_import():
+    item_name = None
     def init():
         print("SCOrg_tools_import initialized")
         __class__.prefs = bpy.context.preferences.addons["scorg_tools"].preferences
         __class__.extract_dir = Path(__class__.prefs.extract_dir) # Ensure Path object
         __class__.missing_files = []  # List to track missing files
+        __class__.item_name = None
 
     def get_record(id):
         """
@@ -28,6 +30,8 @@ class SCOrg_tools_import():
         if __class__.is_guid(id): # is a non-zero GUID format
             record = dcb.records_by_guid.get(id)
             if record:
+                if not __class__.item_name:
+                    __class__.item_name = record.name
                 return record
             else:
                 misc_utils.SCOrg_tools_misc.error(f"⚠️ Could not find record for GUID: {guid} - are you using the correct Data.p4k?")
@@ -36,6 +40,8 @@ class SCOrg_tools_import():
             # Otherwise, try to get by name
             for record in dcb.records:
                 if hasattr(record, 'name') and record.name.lower() == id.lower():
+                    if not __class__.item_name:
+                        __class__.item_name = record.name
                     return record
             misc_utils.SCOrg_tools_misc.error(f"⚠️ Could not find record with name: {id}")
             return None
@@ -176,14 +182,13 @@ class SCOrg_tools_import():
 
             if top_level_loadout is None:
                 misc_utils.SCOrg_tools_misc.error("Could not find top-level loadout in ship record. Check the structure of the record.")
-                return
+            else:
+                empties_to_fill = __class__.get_all_empties_blueprint()
+                print(empties_to_fill)
+                print(f"Total hardpoints to import: {len(empties_to_fill)}")
 
-            empties_to_fill = __class__.get_all_empties_blueprint()
-            print(empties_to_fill)
-            print(f"Total hardpoints to import: {len(empties_to_fill)}")
-
-            # Pretend that it's not the top level, so we can import the hierarchy without needing the orig_name custom property on the empties
-            __class__.import_hardpoint_hierarchy(top_level_loadout, empties_to_fill, is_top_level=False, parent_guid=guid)
+                # Pretend that it's not the top level, so we can import the hierarchy without needing the orig_name custom property on the empties
+                __class__.import_hardpoint_hierarchy(top_level_loadout, empties_to_fill, is_top_level=False, parent_guid=guid)
 
             # add modifiers
             blender_utils.SCOrg_tools_blender.fix_modifiers(displacement_strength);
@@ -582,7 +587,7 @@ class SCOrg_tools_import():
             return False
         return bool(re.match(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", str(s)))
     
-    def import_missing_materials(path = None):
+    def import_missing_materials(path = None, ship_name = None):
         hasattr(__class__, 'extract_dir') or __class__.init()
         if not __class__.extract_dir:
             print("ERROR: extract_dir is not set. Please set it in the addon preferences.")
@@ -630,8 +635,11 @@ class SCOrg_tools_import():
         if len(file_cache) > 0:
             # Import the materials using scdatatools
             from scdatatools.blender import materials
+            # Make sure the tint group is initialised, pass the item_name
+            tint_node_group = blender_utils.SCOrg_tools_blender.init_tint_group(__class__.item_name)
             print("Importing materials from files")
-            materials.load_materials(list(file_cache.values()), data_dir='')
+
+            materials.load_materials(list(file_cache.values()), data_dir='', tint_palette_node_group = tint_node_group)
 
     def get_material_filename(material_name):
         before, sep, after = material_name.partition('_mtl')
