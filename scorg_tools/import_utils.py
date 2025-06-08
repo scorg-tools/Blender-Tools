@@ -7,15 +7,20 @@ import re
 from . import globals_and_threading
 from . import misc_utils # For SCOrg_tools_misc.error, get_ship_record, select_base_collection
 from . import blender_utils # For SCOrg_tools_blender.fix_modifiers
+from . import tint_utils # For SCOrg_tools_tint.get_tint_pallets
 
 class SCOrg_tools_import():
     item_name = None
+    item_guid = None
     def init():
         print("SCOrg_tools_import initialized")
         __class__.prefs = bpy.context.preferences.addons["scorg_tools"].preferences
         __class__.extract_dir = Path(__class__.prefs.extract_dir) # Ensure Path object
         __class__.missing_files = []  # List to track missing files
         __class__.item_name = None
+        __class__.item_guid = None
+        __class__.tint_palette_node_group_name = None
+        __class__.default_tint_guid = None
 
     def get_record(id):
         """
@@ -32,6 +37,7 @@ class SCOrg_tools_import():
             if record:
                 if not __class__.item_name:
                     __class__.item_name = record.name
+                    __class__.item_guid = id
                 return record
             else:
                 misc_utils.SCOrg_tools_misc.error(f"⚠️ Could not find record for GUID: {guid} - are you using the correct Data.p4k?")
@@ -42,6 +48,7 @@ class SCOrg_tools_import():
                 if hasattr(record, 'name') and record.name.lower() == id.lower():
                     if not __class__.item_name:
                         __class__.item_name = record.name
+                        __class__.item_guid = id
                     return record
             misc_utils.SCOrg_tools_misc.error(f"⚠️ Could not find record with name: {id}")
             return None
@@ -106,6 +113,10 @@ class SCOrg_tools_import():
         if not record:
             misc_utils.SCOrg_tools_misc.error(f"⚠️ Could not find record for GUID: {guid} - are you using the correct Data.p4k?")
             return False
+        
+        __class__.item_name = record.name
+        __class__.item_guid = guid
+        tint_utils.SCOrg_tools_tint.update_tints(record)  # Update tints for the item
         
         geometry_path = __class__.get_geometry_path_by_guid(guid)
         process_bones_file = False
@@ -192,6 +203,7 @@ class SCOrg_tools_import():
 
             # add modifiers
             blender_utils.SCOrg_tools_blender.fix_modifiers(displacement_strength);
+            globals_and_threading.item_loaded = True
             if len(__class__.missing_files) > 0:
                 print("The following files were missing, please extract them with StarFab, under Data -> Data.p4k:")
                 print(__class__.missing_files)
@@ -587,7 +599,7 @@ class SCOrg_tools_import():
             return False
         return bool(re.match(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", str(s)))
     
-    def import_missing_materials(path = None, ship_name = None):
+    def import_missing_materials(path = None, tint_number = 0):
         hasattr(__class__, 'extract_dir') or __class__.init()
         if not __class__.extract_dir:
             print("ERROR: extract_dir is not set. Please set it in the addon preferences.")
@@ -632,15 +644,34 @@ class SCOrg_tools_import():
                                 missing_checked.append(filename)
         print(f"DEBUG: Material file search completed, found {len(file_cache)} files")
         print(file_cache)
+
+        # Make sure the tint group is initialised, pass the item_name
+        record = misc_utils.SCOrg_tools_misc.get_ship_record()
+        if not record and __class__.item_guid:
+            record = __class__.get_record(__class__.item_guid)
+        if record:
+            item_name = record.name
+        else:
+            item_name = __class__.item_name
+        tint_node_group = blender_utils.SCOrg_tools_blender.init_tint_group(item_name)
+        # import the tint palette
+        
+        if not record and __class__.item_guid:
+            record = __class__.get_record(__class__.item_guid)
+            
+        if record:
+            print(f"DEBUG: Attempting to load tint palette for: {record.name}")
+            tints = tint_utils.SCOrg_tools_tint.get_tint_pallet_list(record)
+            if tints:
+                __class__.load_tint_palette(tints[tint_number], tint_node_group.name)
+
         if len(file_cache) > 0:
             # Import the materials using scdatatools
             from scdatatools.blender import materials
-            # Make sure the tint group is initialised, pass the item_name
-            tint_node_group = blender_utils.SCOrg_tools_blender.init_tint_group(__class__.item_name)
+            __class__.tint_palette_node_group_name = tint_node_group.name
             print("Importing materials from files")
-
             materials.load_materials(list(file_cache.values()), data_dir='', tint_palette_node_group = tint_node_group)
-
+            
     def get_material_filename(material_name):
         before, sep, after = material_name.partition('_mtl')
         if sep:
@@ -648,3 +679,66 @@ class SCOrg_tools_import():
         else:
             result = material_name  # _mtl not found, leave unchanged
         return result
+    
+    def load_tint_palette(palette_guid, tint_palette_node_group_name):
+        print("Loadint tint palette for GUID:", palette_guid)
+        import scdatatools
+        hasattr(__class__, 'extract_dir') or __class__.init()
+        
+        record = globals_and_threading.dcb.records_by_guid[palette_guid]
+        if not record:
+            print("Palette not found: ", palette_guid)
+            return
+        
+        if record.type != "TintPaletteTree": 
+            print(f"ERROR: record {palette_guid} is not a tint pallet")
+            return
+        
+        t = bpy.data.node_groups[tint_palette_node_group_name]
+        name_map = {
+            "entryA": "Primary",
+            "entryB": "Secondary",
+            "entryC": "Tertiary",
+        }
+
+        for entry in ["entryA", "entryB", "entryC"]:
+            e = record.properties['root'].properties[entry].properties['tintColor'].properties
+            t.nodes["Outputs"].inputs[name_map[entry]].default_value = scdatatools.blender.materials.a_to_c(e)
+            e = record.properties['root'].properties[entry].properties['specColor'].properties
+            t.nodes["Outputs"].inputs[f"{name_map[entry]} SpecColor"].default_value = scdatatools.blender.materials.a_to_c(e)
+            glossiness = float(record.properties['root'].properties[entry].properties['glossiness'])
+            t.nodes["Outputs"].inputs[f"{name_map[entry]} Glossiness"].default_value = (glossiness / 255)
+
+        e = record.properties['root'].properties['glassColor'].properties
+        t.nodes["Outputs"].inputs["Glass Color"].default_value = scdatatools.blender.materials.a_to_c(e)
+
+        if "DecalConverter" not in t.nodes:
+            return  # Decals handling not loaded
+
+        decal_texture = record.properties['root'].properties['decalTexture']
+        # apply path to decal_texture
+        decal_texture = __class__.extract_dir / decal_texture.removeprefix("Data/")
+        # try different extensions
+        found_texture = False
+        if decal_texture:
+            for ext in ['.png', '.tif', '.tga']:
+                decal_texture = decal_texture.with_suffix(ext)
+                if decal_texture.is_file():
+                    found_texture = True
+                    break
+            
+        if found_texture:
+            try:
+                # Load the image into Blender if not already loaded
+                img_path = str(decal_texture)
+                image = bpy.data.images.get(decal_texture.name)
+                if image is None:
+                    image = bpy.data.images.load(img_path)
+                t.nodes["Decal"].image = image
+                t.nodes["Decal"].image.colorspace_settings.name = "Non-Color"
+            except Exception as e:
+                print(f"Unable to load decal {decal_texture.name}: {e}")
+
+        for decalColour in ["decalColorR", "decalColorG", "decalColorB"]:
+            d = record.properties['root'].properties[decalColour].properties
+            t.nodes["DecalConverter"].inputs[decalColour].default_value = scdatatools.blender.materials.a_to_c(d)

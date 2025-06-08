@@ -13,6 +13,7 @@ dcb = None
 p4k = None
 button_labels = []
 ship_loaded = None
+item_loaded = None
 sc = None
 localizer = None
 _loading_thread = None # Global to hold the loading thread instance
@@ -106,11 +107,12 @@ def check_load_status():
     return None # If context is not available, stop the timer
 
 def clear_vars():
-    global dcb, p4k, button_labels, ship_loaded, sc, localizer, _loading_thread
+    global dcb, p4k, button_labels, ship_loaded, item_loaded, sc, localizer, _loading_thread
     dcb = None
     p4k = None
     button_labels = []
     ship_loaded = None
+    item_loaded = None
     sc = None
     localizer = None
     _loading_thread = None # Ensure thread reference is cleared

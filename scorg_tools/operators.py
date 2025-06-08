@@ -74,28 +74,7 @@ class VIEW3D_OT_refresh_button(bpy.types.Operator):
             misc_utils.SCOrg_tools_misc.redraw()
             return {'CANCELLED'}
 
-        # Get tints for loaded ship
-        tints = tint_utils.SCOrg_tools_tint.get_tint_pallet_list(record)
-
-        tint_names = []
-        for i, tint_guid in enumerate(tints):
-            tint_record = dcb.records_by_guid.get(tint_guid)
-            if tint_record:
-                #print(dcb.dump_record_json(tint_record))
-                # FIX: Access properties safely, check for existence
-                tint_name = tint_record.properties.root.properties.get('name')
-                if tint_name:
-                    if i == 0:
-                        name = f"Default Paint ({tint_name.replace('_', ' ').title()})"
-                    else:
-                        name = localizer.gettext(tint_utils.SCOrg_tools_tint.convert_paint_name(tint_name).lower())
-                    tint_names.append(name)
-                else:
-                    print(f"WARNING: Tint record {tint_guid} missing 'name' property.")
-            else:
-                print(f"WARNING: Tint record not found for GUID: {tint_guid}")
-        
-        globals_and_threading.button_labels = tint_names
+        tint_utils.update_tints(record)
         misc_utils.SCOrg_tools_misc.redraw()
         return {'FINISHED'}
     

@@ -91,7 +91,8 @@ class VIEW3D_PT_scorg_tools_panel(bpy.types.Panel):
                     if dir_path.is_dir() and extract_dir != "":
                         layout.operator("view3d.import_loadout", text="Import missing loadout", icon='IMPORT')
                     layout.separator()
-                    
+
+                if globals_and_threading.ship_loaded or globals_and_threading.item_loaded:
                     # Paints section
                     layout.label(text="Paints")
                     if globals_and_threading.button_labels:

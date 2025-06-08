@@ -4,6 +4,7 @@ import re
 
 # Import globals
 from . import globals_and_threading
+from . import tint_utils
 
 class SCOrg_tools_misc():
     def get_ship_record():

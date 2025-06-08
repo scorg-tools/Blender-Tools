@@ -11,10 +11,15 @@ class SCOrg_tools_tint():
                     try:
                         # Default tint first
                         guid = str(comp.properties.Geometry.properties.Geometry.properties.Palette.properties.RootRecord)
-                        tints.append(guid)
+                        if guid and guid != '00000000-0000-0000-0000-000000000000':
+                            tints.append(guid)
                         for subgeo in comp.properties.Geometry.properties.SubGeometry:
                             guid = str(subgeo.properties.Geometry.properties.Palette.properties.RootRecord)
-                            tints.append(guid)
+                            if guid:
+                                if guid != '00000000-0000-0000-0000-000000000000':
+                                    tints.append(guid)
+                                else:
+                                    print(f"⚠️ Empty tint GUID found item {record.name}, skipping.")
                     except AttributeError as e:
                         print(f"⚠️ Missing attribute accessing geometry tint pallet in component {i}: {e}")
         return tints
@@ -29,5 +34,33 @@ class SCOrg_tools_tint():
 
     # Function to call when a button is pressed
     def on_button_pressed(index):
+        from . import import_utils
         print(f"Button {index} pressed: {globals_and_threading.button_labels[index]}")
-        # TODO: apply the tint
+        # apply the tint
+        import_utils.SCOrg_tools_import.import_missing_materials(tint_number=index)
+    
+    def update_tints(record):
+        if not record:
+            print("WARNING: No record provided to update tints.")
+            return False
+        print(f"DEBUG: Updating tints for record: {record.name}")
+        # Get tints for loaded item
+        tints = __class__.get_tint_pallet_list(record)
+
+        tint_names = []
+        for i, tint_guid in enumerate(tints):
+            tint_record = globals_and_threading.dcb.records_by_guid.get(tint_guid)
+            if tint_record:
+                tint_name = tint_record.properties.root.properties.get('name')
+                if tint_name:
+                    if i == 0:
+                        name = f"Default Paint ({tint_name.replace('_', ' ').title()})"
+                    else:
+                        name = globals_and_threading.localizer.gettext(__class__.convert_paint_name(tint_name).lower())
+                    tint_names.append(name)
+                else:
+                    print(f"WARNING: Tint record {tint_guid} missing 'name' property.")
+            else:
+                print(f"WARNING: Tint record not found for GUID: {tint_guid}")
+        
+        globals_and_threading.button_labels = tint_names
