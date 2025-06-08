@@ -1,7 +1,7 @@
 bl_info = {
     "name": "SCOrg.tools Blender Tools alpha",
     "author": "Star-Destroyer@scorg.tools",
-    "version": (1, 0, 14),
+    "version": (1, 0, 15),
     "blender": (3, 6, 0),
     "location": "View3D > Sidebar > SCOrg.tools",
     "description": "Tools to supplement StarFab",
@@ -15,8 +15,9 @@ import bpy
 import os
 import sys
 
-# TODO: Set the default tint palette
-# TODO: load tint palettes when clicking the buttons
+# TODO: Set the tint pallet guid on the root object when importing
+# TODO: find already imported non-ship items
+# TODO: list currently loaded paints in the UI
 # TODO: add functionality to add POM material and replace in-place with existing textures
 # TODO: fix extra thrusters on front of retro thrusters on Gladius
 # TODO: Import the paints (tint pallets node group needs to work for this)
