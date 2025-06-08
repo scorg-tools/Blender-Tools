@@ -74,7 +74,7 @@ class VIEW3D_OT_refresh_button(bpy.types.Operator):
             misc_utils.SCOrg_tools_misc.redraw()
             return {'CANCELLED'}
 
-        tint_utils.update_tints(record)
+        tint_utils.SCOrg_tools_tint.update_tints(record)
         misc_utils.SCOrg_tools_misc.redraw()
         return {'FINISHED'}
     

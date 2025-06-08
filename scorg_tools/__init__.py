@@ -18,6 +18,8 @@ import sys
 # TODO: Set the tint pallet guid on the root object when importing
 # TODO: find already imported non-ship items
 # TODO: list currently loaded paints in the UI
+# TODO: add the custom properties to the root object when importing for all sub-objects
+# TODO: add new "scorg_is_root_item" custom property to the root object so that it can be quickly identified
 # TODO: add functionality to add POM material and replace in-place with existing textures
 # TODO: fix extra thrusters on front of retro thrusters on Gladius
 # TODO: Import the paints (tint pallets node group needs to work for this)
