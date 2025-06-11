@@ -1,7 +1,7 @@
 bl_info = {
     "name": "SCOrg.tools Blender Tools alpha",
     "author": "Star-Destroyer@scorg.tools",
-    "version": (1, 0, 15),
+    "version": (1, 0, 16),
     "blender": (3, 6, 0),
     "location": "View3D > Sidebar > SCOrg.tools",
     "description": "Tools to supplement StarFab",
@@ -15,7 +15,7 @@ import bpy
 import os
 import sys
 
-# TODO: Set the tint pallet guid on the root object when importing
+# TODO: Set the tint pallet guid on the root object when importing, and read it back when refreshing the ship
 # TODO: find already imported non-ship items
 # TODO: list currently loaded paints in the UI
 # TODO: add the custom properties to the root object when importing for all sub-objects
