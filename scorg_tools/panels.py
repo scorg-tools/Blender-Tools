@@ -75,11 +75,6 @@ class VIEW3D_PT_scorg_tools_panel(bpy.types.Panel):
 
             # Utilities section (always visible)
             layout.label(text="Utilities")
-            layout.operator("view3d.add_modifiers", text="Add modifiers", icon='MODIFIER')
-            
-            # Import by GUID button - now only visible if p4k is loaded
-            if globals_and_threading.p4k:
-                layout.operator("wm.get_guid_operator", text="Import by GUID", icon='IMPORT')
 
             # --- Sections dependent on P4K being loaded ---
             if globals_and_threading.p4k:
@@ -91,6 +86,9 @@ class VIEW3D_PT_scorg_tools_panel(bpy.types.Panel):
                     if dir_path.is_dir() and extract_dir != "":
                         layout.operator("view3d.import_loadout", text="Import missing loadout", icon='IMPORT')
                     layout.separator()
+                else:
+                    # Don't show import by guid button if a ship is loaded
+                    layout.operator("wm.get_guid_operator", text="Import by GUID", icon='IMPORT')
 
                 if globals_and_threading.ship_loaded or globals_and_threading.item_loaded:
                     # Paints section
