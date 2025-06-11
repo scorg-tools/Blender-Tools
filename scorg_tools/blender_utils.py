@@ -3,6 +3,7 @@ import tqdm
 import re
 from mathutils import Matrix
 from . import import_utils # For import_utils.SCOrg_tools_import.import_missing_materials
+import xml.etree.ElementTree as ET
 
 class SCOrg_tools_blender():
     def add_weld_and_weighted_normal_modifiers():
@@ -356,3 +357,106 @@ class SCOrg_tools_blender():
         from scdatatools import blender
         node_group = blender.materials.utils.tint_palette_node_group_for_entity(entity_name)
         return node_group
+    
+    def parse_unmapped_material_string(input_string):
+        """
+        Parses a string in the format 'something_mtl_material123' and extracts the parts.
+
+        Args:
+            input_string: The string to parse.
+
+        Returns:
+            A tuple containing the 'something_mtl' part, the material name (or 'Tintable'), and the number,
+            or None if the string does not match the expected format.
+        """
+        pattern = r"^(.*_mtl)_(material|Tintable(?:_))(\d+)$"
+        match = re.match(pattern, input_string, re.IGNORECASE)
+
+        if match:
+            prefix = match.group(1)
+            material = match.group(2)
+            number = int(match.group(3))
+            return prefix, material, number
+        else:
+            return None, None, None
+    
+    def parse_mtl_names(file_path):
+        """
+        Parses an .mtl file (XML format) and extracts the 'Name' attributes
+        of the 'Material' elements within 'SubMaterials'.
+
+        Args:
+            file_path (str): The path to the .mtl file.
+
+        Returns:
+            dict: A dictionary where the keys are the line numbers (starting from 1)
+                and the values are the corresponding 'Name' attribute values.
+                Returns an empty dictionary if the file is not found or parsing fails.
+        """
+        material_names = {}
+        try:
+            tree = ET.parse(file_path)
+            root = tree.getroot()
+
+            sub_materials = root.find('SubMaterials')
+            if sub_materials is not None:
+                for index, material in enumerate(sub_materials, start=0):
+                    name = material.get('Name')
+                    if name:
+                        material_names[index] = name
+            else:
+                print(f"Warning: No 'SubMaterials' element found in {file_path}")
+                return {}
+        except FileNotFoundError:
+            print(f"Error: File not found at {file_path}")
+            return {}
+        except ET.ParseError:
+            print(f"Error: Could not parse XML file at {file_path}")
+            return {}
+        return material_names
+    
+    def fix_unmapped_materials(mtl_file_path):
+        """
+        Loops through all materials in the scene, checks if they match a specific pattern.
+        If they match, it attempts to remap them to an existing material with the same name
+        from the .mtl file. If no such material exists, it renames the material.
+
+        Args:
+            mtl_file_path (str): The path to the .mtl file containing the correct material names.
+        """
+
+        mtl_names = __class__.parse_mtl_names(mtl_file_path)
+        if not mtl_names:
+            print("Error: Could not parse .mtl file or file is empty.")
+            return
+
+        for mat in bpy.data.materials:
+            prefix, material_type, number = __class__.parse_unmapped_material_string(mat.name)
+
+            if prefix and material_type and number:
+                # Material name matches the pattern
+                if number in mtl_names:
+                    correct_name = f"{prefix}_{mtl_names[number]}"
+
+                    # Check if a material with the correct name already exists
+                    existing_material = bpy.data.materials.get(correct_name)
+
+                    if existing_material:
+                        # Remap material users to the existing material
+                        print(f"Remapping material '{mat.name}' to existing material '{correct_name}'")
+                        for obj in bpy.data.objects:
+                            if obj.type == 'MESH':
+                                for i, slot in enumerate(obj.material_slots):
+                                    if slot.material == mat:
+                                        slot.material = existing_material
+                                        print(f"Reassigned material on {obj.name} slot {i} from {mat.name} to {correct_name}")
+
+                        # Remove the old material if no users left
+                        if mat.users == 0:
+                            print(f"Removing unused material: {mat.name}")
+                            bpy.data.materials.remove(mat)
+
+                    else:
+                        # No material with the same name exists, rename the material
+                        print(f"Renaming material '{mat.name}' to '{correct_name}'")
+                        mat.name = correct_name

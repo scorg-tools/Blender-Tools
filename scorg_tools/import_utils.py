@@ -277,6 +277,8 @@ class SCOrg_tools_import():
                                             for attachment_list in root.findall("AttachmentList"):
                                                 for attachment in attachment_list.findall("Attachment"):
                                                     binding = attachment.attrib.get("Binding")
+                                                    if not binding:
+                                                        continue
                                                     geo_path = (__class__.extract_dir / Path(binding)).with_suffix('.dae')
                                                     print(f"Found geometry path in CDF XML: {geo_path}")
                                                     file_array.append(geo_path)
@@ -554,7 +556,7 @@ class SCOrg_tools_import():
         
         # Check if record is None before trying to access its properties
         if record is None:
-            misc_utils.SCOrg_tools_misc.error("Could not get ship record. Please ensure a 'base' empty object exists and Data.p4k is loaded correctly.")
+            misc_utils.SCOrg_tools_misc.error("Could not get ship record. Please import a StarFab Blueprint first.")
             return
 
         # Safely access Components and loadout
@@ -637,6 +639,8 @@ class SCOrg_tools_import():
                                 file_found = True
                                 file_cache[filename] = filepath
                                 print(f"DEBUG: Extracted Material file found: {filepath}")
+                                # Check for Material01 or Tintable_01 type materials and remap:
+                                blender_utils.SCOrg_tools_blender.fix_unmapped_materials(str(filepath))
                             else:
                                 print(f"⚠️ ERROR: Extracted material file expected: {filepath} not found, please extract it with StarFab, under Data -> Data.p4k")
                                 if str(filepath) not in __class__.missing_files:
