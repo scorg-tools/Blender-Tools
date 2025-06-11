@@ -13,7 +13,7 @@ class SCOrg_tools_import():
     item_name = None
     item_guid = None
     def init():
-        print("SCOrg_tools_import initialized")
+        if globals_and_threading.debug: print("SCOrg_tools_import initialized")
         __class__.prefs = bpy.context.preferences.addons["scorg_tools"].preferences
         __class__.extract_dir = Path(__class__.prefs.extract_dir) # Ensure Path object
         __class__.missing_files = []  # List to track missing files
@@ -92,12 +92,12 @@ class SCOrg_tools_import():
 
     def import_by_id(id):
         os.system('cls')
-        print(f"Received ID: {id}")
+        if globals_and_threading.debug: print(f"Received ID: {id}")
         if __class__.is_guid(id):
             guid = str(id)
         else:
             guid = __class__.get_guid_by_name(id)
-        print(f"Resolved GUID: {guid}")
+        if globals_and_threading.debug: print(f"Resolved GUID: {guid}")
         if not __class__.is_guid(guid):
             misc_utils.SCOrg_tools_misc.error(f"⚠️ Invalid: {guid}")
             return False
@@ -122,16 +122,16 @@ class SCOrg_tools_import():
         process_bones_file = False
         # if the geometry path is an array, it means we have a CDF XML file that points to the real geometry
         if isinstance(geometry_path, list):
-            print(f"DEBUG: CDF XML file found with references to: {geometry_path}")
+            if globals_and_threading.debug: print(f"DEBUG: CDF XML file found with references to: {geometry_path}")
             process_bones_file = geometry_path
             geometry_path = process_bones_file.pop(0)  # Get the first file in the array, which is the base armature DAE file (or sometimes the base geometry)
 
         # load the main .dae
         if geometry_path:
-            print(f"Loading geo: {geometry_path}")
+            if globals_and_threading.debug: print(f"Loading geo: {geometry_path}")
             if not geometry_path.is_file():
                 misc_utils.SCOrg_tools_misc.error(f"Error: .DAE file not found at: {geometry_path}")
-                print(f"DEBUG: Attempted DAE import path: {geometry_path}, but file was missing")
+                if globals_and_threading.debug: print(f"DEBUG: Attempted DAE import path: {geometry_path}, but file was missing")
                 if str(geometry_path) not in __class__.missing_files:
                     __class__.missing_files.append(str(geometry_path))
                 print(f"⚠️ ERROR: Failed to import DAE for {guid}: {geometry_path} - file missing")
@@ -164,39 +164,39 @@ class SCOrg_tools_import():
                 root_objs[0]['guid'] = guid
                 root_objs[0]['orig_name'] = root_object_name
                 root_objs[0]['geometry_path'] = str(geometry_path)
-            print(f"DEBUG: post-import root object: {root_object_name}")
+            if globals_and_threading.debug: print(f"DEBUG: post-import root object: {root_object_name}")
 
             top_level_loadout = __class__.get_loadout_from_record(record)
             displacement_strength = 0.005
             if process_bones_file:
-                print("Deleting meshes for initial CDF base import")
+                if globals_and_threading.debug: print("Deleting meshes for initial CDF base import")
                 # Usually used for smaller items like weapons, so change the POM/Decal displacement strength to 0.5mm
                 displacement_strength = 0.0005
                 # Delete all meshes to avoid conflicts with CDF imports, the imported .dae objects will be selected
                 __class__.replace_selected_mesh_with_empties()
                 
-                print(f"Converting bones to empties for {guid}: {geometry_path}")
+                if globals_and_threading.debug: print(f"Converting bones to empties for {guid}: {geometry_path}")
                 blender_utils.SCOrg_tools_blender.convert_armatures_to_empties()
                 
                 if not root_object_name:
-                    print(f"WARNING: No root object found for: {geometry_path}")
+                    if globals_and_threading.debug: print(f"WARNING: No root object found for: {geometry_path}")
                 
                 for file in process_bones_file:
                     if not file.is_file():
-                        print(f"⚠️ ERROR: Bones file missing: {file}")
+                        if globals_and_threading.debug: print(f"⚠️ ERROR: Bones file missing: {file}")
                         if str(file) not in __class__.missing_files:
                             __class__.missing_files.append(str(file))
                         continue
-                    print(f"Processing bones file: {file}")
+                    if globals_and_threading.debug: print(f"Processing bones file: {file}")
                     __class__.import_file(file, root_object_name)
-                print("DEBUG: Finished processing bones files")
+                if globals_and_threading.debug: print("DEBUG: Finished processing bones files")
 
             if top_level_loadout is None:
                 misc_utils.SCOrg_tools_misc.error("Could not find top-level loadout in ship record. Check the structure of the record.")
             else:
                 empties_to_fill = __class__.get_all_empties_blueprint()
-                print(empties_to_fill)
-                print(f"Total hardpoints to import: {len(empties_to_fill)}")
+                if globals_and_threading.debug: print(empties_to_fill)
+                if globals_and_threading.debug: print(f"Total hardpoints to import: {len(empties_to_fill)}")
 
                 # Pretend that it's not the top level, so we can import the hierarchy without needing the orig_name custom property on the empties
                 __class__.import_hardpoint_hierarchy(top_level_loadout, empties_to_fill, is_top_level=False, parent_guid=guid)
@@ -268,7 +268,7 @@ class SCOrg_tools_import():
                                         file_array = [__class__.extract_dir / file_path.with_suffix('.dae')] # add the base armature dae file to the array
                                         if file_path.is_file():
                                             # This is likely a weapon or similar, this is an XML file that points to the real base geometry
-                                            print(f"Found CDF XML: {file_path}")
+                                            if globals_and_threading.debug: print(f"Found CDF XML: {file_path}")
                                             # Read the CDF XML file to find the DAE path
                                             from scdatatools.engine import cryxml
                                             tree = cryxml.etree_from_cryxml_file(file_path)
@@ -280,20 +280,20 @@ class SCOrg_tools_import():
                                                     if not binding:
                                                         continue
                                                     geo_path = (__class__.extract_dir / Path(binding)).with_suffix('.dae')
-                                                    print(f"Found geometry path in CDF XML: {geo_path}")
+                                                    if globals_and_threading.debug: print(f"Found geometry path in CDF XML: {geo_path}")
                                                     file_array.append(geo_path)
-                                            print(f"Returning geometry file array: {file_array}")
+                                            if globals_and_threading.debug: print(f"Returning geometry file array: {file_array}")
                                             return file_array
                                         else:
                                             print(f"⚠️ CDF XML file not found: {file_path}. Please extract it with StarFab, under Data -> Data.p4k")
                                             return None
                                     dae_path = file_path.with_suffix('.dae')
-                                    print(f'Found geometry: {dae_path}')
+                                    if globals_and_threading.debug: print(f'Found geometry: {dae_path}')
                                     return (__class__.extract_dir / dae_path)
-                                print(f"⚠️ Missing geometry path in component {i}")
+                                if globals_and_threading.debug: print(f"⚠️ Missing geometry path in component {i}")
                                 return None
                             except AttributeError as e:
-                                print(f"⚠️ Missing attribute accessing geometry path in component {i}: {e}")
+                                if globals_and_threading.debug: print(f"⚠️ Missing attribute accessing geometry path in component {i}: {e}")
                                 return None
         except Exception as e:
             print(f"❌ Error in get_geometry_path_by_guid GUID {guid}: {e}")
@@ -312,7 +312,7 @@ class SCOrg_tools_import():
                     try:
                         ports = comp.properties.Ports
                         if not ports or len(ports) == 0:
-                            print(f"⚠️  No Ports defined in SItemPortContainerComponentParams for GUID: {guid}")
+                            if globals_and_threading.debug: print(f"⚠️  No Ports defined in SItemPortContainerComponentParams for GUID: {guid}")
                         for port in ports:
                             helper_name = port.properties['AttachmentImplementation'].properties['Helper'].properties['Helper'].properties['Name']
                             port_name = port.properties['Name']
@@ -321,7 +321,7 @@ class SCOrg_tools_import():
                             mapping[helper_name].append(port_name)
                         return mapping
                     except AttributeError as e:
-                        print(f"⚠️ Error accessing ports in component {comp.name}: {e}")
+                        if globals_and_threading.debug: print(f"⚠️ Error accessing ports in component {comp.name}: {e}")
             return None
         except Exception as e:
             print(f"❌ Error in get_hardpoint_mapping_from_guid GUID {guid}: {e}")
@@ -342,13 +342,13 @@ class SCOrg_tools_import():
     def import_hardpoint_hierarchy(loadout, empties_to_fill, is_top_level=True, parent_guid=None):        
         entries = loadout.properties.get('entries', [])
 
-        print(f"DEBUG: import_hardpoint_hierarchy called with {len(entries)} entries, empties to fill: {len(empties_to_fill)}, is_top_level={is_top_level}, parent_guid={parent_guid}")
+        if globals_and_threading.debug: print(f"DEBUG: import_hardpoint_hierarchy called with {len(entries)} entries, empties to fill: {len(empties_to_fill)}, is_top_level={is_top_level}, parent_guid={parent_guid}")
 
         # For nested calls, get the mapping for the parent_guid
         hardpoint_mapping = {}
         if not is_top_level and parent_guid:
             hardpoint_mapping = __class__.get_hardpoint_mapping_from_guid(parent_guid) or {}
-            print(f"DEBUG: hardpoint_mapping for parent_guid {parent_guid}: {hardpoint_mapping}")
+            if globals_and_threading.debug: print(f"DEBUG: hardpoint_mapping for parent_guid {parent_guid}: {hardpoint_mapping}")
 
         for i, entry in enumerate(entries):
             props = getattr(entry, 'properties', entry)
@@ -358,15 +358,15 @@ class SCOrg_tools_import():
 
             entity_class_name = getattr(props, 'entityClassName', None)
             # Always print debug for every entry
-            print(f"DEBUG: Entry {i}: item_port_name='{item_port_name}', guid={guid}, entityClassName={entity_class_name}, has_nested_loadout={nested_loadout is not None}")
+            if globals_and_threading.debug: print(f"DEBUG: Entry {i}: item_port_name='{item_port_name}', guid={guid}, entityClassName={entity_class_name}, has_nested_loadout={nested_loadout is not None}")
 
             if not item_port_name or (not guid and not entity_class_name):
-                print("DEBUG: Missing item_port_name or guid and name, skipping")
+                if globals_and_threading.debug: print("DEBUG: Missing item_port_name or guid and name, skipping")
                 continue
 
             # Apply filter ONLY at top level
             if is_top_level and __class__.INCLUDE_HARDPOINTS and item_port_name not in __class__.INCLUDE_HARDPOINTS:
-                print(f"DEBUG: Skipping '{item_port_name}' due to top-level filter")
+                if globals_and_threading.debug: print(f"DEBUG: Skipping '{item_port_name}' due to top-level filter")
                 continue
 
             # Use mapping if available (for nested)
@@ -377,11 +377,11 @@ class SCOrg_tools_import():
 
             mapped_name = item_port_name
             for hardpoint_name, item_port_names in hardpoint_mapping.items():
-                print(f"DEBUG: Checking hardpoint mapping: {hardpoint_name} -> {item_port_names}")
+                if globals_and_threading.debug: print(f"DEBUG: Checking hardpoint mapping: {hardpoint_name} -> {item_port_names}")
                 if item_port_name in item_port_names:
                     mapped_name = hardpoint_name
                     break
-            print(f"DEBUG: Looking for matching empty for item_port_name='{item_port_name}', mapped_name='{mapped_name}'")
+            if globals_and_threading.debug: print(f"DEBUG: Looking for matching empty for item_port_name='{item_port_name}', mapped_name='{mapped_name}'")
             matching_empty = None
             for empty in empties_to_fill:
                 orig_name = empty.get('orig_name', '') if hasattr(empty, 'get') else ''
@@ -389,40 +389,40 @@ class SCOrg_tools_import():
                     matching_empty = empty
                     break
             if not matching_empty:
-                print(f"WARNING: No matching empty found for hardpoint '{mapped_name}' (original item_port_name: '{item_port_name}'), skipping this entry")
+                if globals_and_threading.debug: print(f"WARNING: No matching empty found for hardpoint '{mapped_name}' (original item_port_name: '{item_port_name}'), skipping this entry")
                 continue
             else:
-                print(f"DEBUG: Found matching empty: {matching_empty.name} for hardpoint '{mapped_name}, item port: {item_port_name}'")
+                if globals_and_threading.debug: print(f"DEBUG: Found matching empty: {matching_empty.name} for hardpoint '{mapped_name}, item port: {item_port_name}'")
 
             guid_str = str(guid)
             if not __class__.is_guid(guid_str): # must be 00000000-0000-0000-0000-000000000000 or blank
                 if not entity_class_name:
-                    print("DEBUG: GUID is all zeros, but no entityClassName found, skipping geometry import")
+                    if globals_and_threading.debug: print("DEBUG: GUID is all zeros, but no entityClassName found, skipping geometry import")
                     # Still recurse into nested loadout if present
                     if nested_loadout:
                         entries_count = len(nested_loadout.properties.get('entries', []))
-                        print(f"DEBUG: Nested loadout detected with {entries_count} entries, recursing into GUID {guid_str} (all zeros)...")
+                        if globals_and_threading.debug: print(f"DEBUG: Nested loadout detected with {entries_count} entries, recursing into GUID {guid_str} (all zeros)...")
                         __class__.import_hardpoint_hierarchy(nested_loadout, empties_to_fill, is_top_level=False, parent_guid=guid_str)
                     else:
-                        print("DEBUG: No nested loadout found, recursion ends here")
+                        if globals_and_threading.debug: print("DEBUG: No nested loadout found, recursion ends here")
                     continue
                 else:
                     # Get the GUID from the entity_class_name
                     guid_str = __class__.get_guid_by_name(entity_class_name)
                     if not guid_str or not __class__.is_guid(guid_str):
-                        print(f"DEBUG: Could not resolve GUID for entityClassName '{entity_class_name}', skipping import")
+                        if globals_and_threading.debug: print(f"DEBUG: Could not resolve GUID for entityClassName '{entity_class_name}', skipping import")
                         continue
 
             if not nested_loadout:
                 # If no nested loadout, load the record for the GUID and check for a default loadout
-                print (f"DEBUG: No nested loadout found, loading record for GUID: {guid_str}")
+                if globals_and_threading.debug: print (f"DEBUG: No nested loadout found, loading record for GUID: {guid_str}")
                 child_record = __class__.get_record(guid_str)
                 if child_record:
                     nested_loadout = __class__.get_loadout_from_record(child_record)
                     if not nested_loadout:
-                       print(f"DEBUG: Could not find a nested loadout for GUID {guid_str}: {nested_loadout}")
+                       if globals_and_threading.debug: print(f"DEBUG: Could not find a nested loadout for GUID {guid_str}: {nested_loadout}")
                     else:
-                        print(f"DEBUG: Found nested loadout for GUID {guid_str}: {nested_loadout}")
+                        if globals_and_threading.debug: print(f"DEBUG: Found nested loadout for GUID {guid_str}: {nested_loadout}")
                         from pprint import pprint
                         pprint(child_record)
                         pprint(nested_loadout)
@@ -433,17 +433,17 @@ class SCOrg_tools_import():
                 # If the GUID is already imported, duplicate the hierarchy linked
                 original_root = __class__.imported_guid_objects[guid_str]
                 __class__.duplicate_hierarchy_linked(original_root, matching_empty)
-                print(f"Duplicated hierarchy for '{item_port_name}' from GUID {guid_str}")
+                if globals_and_threading.debug: print(f"Duplicated hierarchy for '{item_port_name}' from GUID {guid_str}")
             else:
                 # The item was not imported yet, so we need to import it
                 geometry_path = __class__.get_geometry_path_by_guid(guid_str)
                 if geometry_path is None:
-                    print(f"ERROR: No geometry for GUID {guid_str}: {geometry_path}")
+                    if globals_and_threading.debug: print(f"ERROR: No geometry for GUID {guid_str}: {geometry_path}")
                     continue
 
                 if not geometry_path.exists():
                     misc_utils.SCOrg_tools_misc.error(f"Error: .DAE file not found at: {geometry_path}")
-                    print(f"DEBUG: Attempted DAE import path: {geometry_path}, but file was missing")
+                    if globals_and_threading.debug: print(f"DEBUG: Attempted DAE import path: {geometry_path}, but file was missing")
                     if str(geometry_path) not in __class__.missing_files:
                         __class__.missing_files.append(str(geometry_path));
                     continue
@@ -451,13 +451,13 @@ class SCOrg_tools_import():
                 bpy.ops.object.select_all(action='DESELECT')
                 result = bpy.ops.wm.collada_import(filepath=str(geometry_path))
                 if 'FINISHED' not in result:
-                    print(f"ERROR: Failed to import DAE for {guid_str}: {geometry_path}")
+                    if globals_and_threading.debug: print(f"ERROR: Failed to import DAE for {guid_str}: {geometry_path}")
                     continue
 
                 imported_objs = [obj for obj in bpy.context.selected_objects]
                 root_objs = [obj for obj in imported_objs if obj.parent is None]
                 if not root_objs:
-                    print(f"WARNING: No root object found for: {geometry_path}")
+                    if globals_and_threading.debug: print(f"WARNING: No root object found for: {geometry_path}")
                     continue
 
                 root_obj = root_objs[0]
@@ -471,8 +471,8 @@ class SCOrg_tools_import():
                 ]
 
                 mapping = __class__.get_hardpoint_mapping_from_guid(guid_str) or {}
-                print(f"DEBUG: Imported empties: {[e.name for e in imported_empties]}")
-                print(f"DEBUG: Mapping for imported GUID {guid_str}: {mapping}")
+                if globals_and_threading.debug: print(f"DEBUG: Imported empties: {[e.name for e in imported_empties]}")
+                if globals_and_threading.debug: print(f"DEBUG: Mapping for imported GUID {guid_str}: {mapping}")
                 for empty in imported_empties:
                     # Set orig_name to the mapping key if the name matches, otherwise to the base name without suffix
                     for key in mapping:
@@ -486,31 +486,28 @@ class SCOrg_tools_import():
                     else:
                         empty['orig_name'] = re.sub(r'\.\d+$', '', empty.name)
 
-                print(f"Imported object for '{item_port_name}' GUID {guid_str} → {geometry_path}")
+                if globals_and_threading.debug: print(f"Imported object for '{item_port_name}' GUID {guid_str} → {geometry_path}")
 
                 # Recurse into nested loadout with is_top_level=False and pass guid_str as parent_guid
                 if nested_loadout:
                     entries_count = len(nested_loadout.properties.get('entries', []))
-                    print(f"DEBUG: Nested loadout detected with {entries_count} entries, recursing into GUID {guid_str}...")
+                    if globals_and_threading.debug: print(f"DEBUG: Nested loadout detected with {entries_count} entries, recursing into GUID {guid_str}...")
                     __class__.import_hardpoint_hierarchy(nested_loadout, imported_empties, is_top_level=False, parent_guid=guid_str)
                 else:
-                    print("DEBUG: No nested loadout found, recursion ends here")
-        if len(__class__.missing_files) > 0:
-            print("The following files were missing, please extract them with StarFab, under Data -> Data.p4k if you want a more complete loadout:")
-            print(__class__.missing_files)
+                    if globals_and_threading.debug: print("DEBUG: No nested loadout found, recursion ends here")
 
     def import_file(geometry_path, parent_empty_name):
         """
         Import a single file without recursion.
         """
-        print(f"DEBUG: import_file called with geometry_path: {geometry_path}, parent_empty_name: {parent_empty_name}")
+        if globals_and_threading.debug: print(f"DEBUG: import_file called with geometry_path: {geometry_path}, parent_empty_name: {parent_empty_name}")
         if geometry_path is None:
-            print(f"❌ ERROR: import_file called with no geometry_path")
+            if globals_and_threading.debug: print(f"❌ ERROR: import_file called with no geometry_path")
             return
 
         if not geometry_path.exists():
             misc_utils.SCOrg_tools_misc.error(f"Error: .DAE file not found at: {geometry_path}")
-            print(f"DEBUG: Attempted DAE import path: {geometry_path}, but file was missing")
+            if globals_and_threading.debug: print(f"DEBUG: Attempted DAE import path: {geometry_path}, but file was missing")
             if str(geometry_path) not in __class__.missing_files:
                 __class__.missing_files.append(str(geometry_path));
             return
@@ -521,7 +518,7 @@ class SCOrg_tools_import():
         bpy.ops.object.select_all(action='DESELECT')
         result = bpy.ops.wm.collada_import(filepath=str(geometry_path))
         if 'FINISHED' not in result:
-            print(f"❌ ERROR: Failed to import DAE for {guid_str}: {geometry_path}")
+            if globals_and_threading.debug: print(f"❌ ERROR: Failed to import DAE for {guid_str}: {geometry_path}")
             return
         
         # Get a set of all objects after import
@@ -534,10 +531,10 @@ class SCOrg_tools_import():
         root_objs = [obj for obj in imported_objs if obj.parent is None]
 
         if not root_objs:
-            print(f"WARNING: No root object found for: {geometry_path}")
+            if globals_and_threading.debug: print(f"WARNING: No root object found for: {geometry_path}")
             return
         if parent_empty_name:
-            print(f"DEBUG: Parenting to: {parent_empty_name}, and setting name to {geometry_path.stem}")
+            if globals_and_threading.debug: print(f"DEBUG: Parenting to: {parent_empty_name}, and setting name to {geometry_path.stem}")
             # Parent the root object to the provided parent_empty
             root_obj = root_objs[0]
             root_obj.name = geometry_path.stem  # Set the name to the file name (without extension)
@@ -569,24 +566,27 @@ class SCOrg_tools_import():
 
         empties_to_fill = __class__.get_all_empties_blueprint()
 
-        print(f"Total hardpoints to import: {len(empties_to_fill)}")
+        if globals_and_threading.debug: print(f"Total hardpoints to import: {len(empties_to_fill)}")
 
         __class__.import_hardpoint_hierarchy(top_level_loadout, empties_to_fill)
+        if len(__class__.missing_files) > 0:
+            print("The following files were missing, please extract them with StarFab, under Data -> Data.p4k:")
+            print(__class__.missing_files)
         blender_utils.SCOrg_tools_blender.fix_modifiers()
 
     def get_loadout_from_record(record):
-        print(f"DEBUG: get_loadout_from_record called with record: {record.name}")
+        if globals_and_threading.debug: print(f"DEBUG: get_loadout_from_record called with record: {record.name}")
         try:
             if hasattr(record, 'properties') and hasattr(record.properties, 'Components'):
-                print("DEBUG: Record has Components, checking for loadout...")
+                if globals_and_threading.debug: print("DEBUG: Record has Components, checking for loadout...")
                 for comp in record.properties.Components:
                     if hasattr(comp, 'name') and comp.name == "SEntityComponentDefaultLoadoutParams":
                         if hasattr(comp.properties, 'loadout'):
-                            print("DEBUG: Found loadout")
+                            if globals_and_threading.debug: print("DEBUG: Found loadout")
                             return comp.properties.loadout
         except Exception as e:
-            print(f"DEBUG: Error accessing Components in record {record.name}: {e}")
-        print("DEBUG: Record has no loadout")
+            if globals_and_threading.debug: print(f"DEBUG: Error accessing Components in record {record.name}: {e}")
+        if globals_and_threading.debug: print("DEBUG: Record has no loadout")
         return None
     
     def matches_blender_name(name, target):
@@ -604,7 +604,7 @@ class SCOrg_tools_import():
     def import_missing_materials(path = None, tint_number = 0):
         hasattr(__class__, 'extract_dir') or __class__.init()
         if not __class__.extract_dir:
-            print("ERROR: extract_dir is not set. Please set it in the addon preferences.")
+            if globals_and_threading.debug: print("ERROR: extract_dir is not set. Please set it in the addon preferences.")
             return None
 
         p4k = globals_and_threading.p4k
@@ -630,24 +630,24 @@ class SCOrg_tools_import():
 
                     if not file_found:
                         # If not found in the provided path, search in the p4k for the file
-                        print("searching p4k for material file:", filename)
+                        if globals_and_threading.debug: print("searching p4k for material file:", filename)
                         matches = p4k.search(file_filters=[filename], ignore_case = True, mode='endswith')
                         if matches:
-                            print("Found material file in p4k:", matches[0].filename.removeprefix("Data/"))
+                            if globals_and_threading.debug: print("Found material file in p4k:", matches[0].filename.removeprefix("Data/"))
                             filepath = __class__.extract_dir / matches[0].filename.removeprefix("Data/")
                             if filepath.exists():
                                 file_found = True
                                 file_cache[filename] = filepath
-                                print(f"DEBUG: Extracted Material file found: {filepath}")
+                                if globals_and_threading.debug: print(f"DEBUG: Extracted Material file found: {filepath}")
                                 # Check for Material01 or Tintable_01 type materials and remap:
                                 blender_utils.SCOrg_tools_blender.fix_unmapped_materials(str(filepath))
                             else:
-                                print(f"⚠️ ERROR: Extracted material file expected: {filepath} not found, please extract it with StarFab, under Data -> Data.p4k")
+                                if globals_and_threading.debug: print(f"⚠️ ERROR: Extracted material file expected: {filepath} not found, please extract it with StarFab, under Data -> Data.p4k")
                                 if str(filepath) not in __class__.missing_files:
                                     __class__.missing_files.append(str(filepath))
                                 missing_checked.append(filename)
-        print(f"DEBUG: Material file search completed, found {len(file_cache)} files")
-        print(file_cache)
+        if globals_and_threading.debug: print(f"DEBUG: Material file search completed, found {len(file_cache)} files")
+        if globals_and_threading.debug: print(file_cache)
 
         # Make sure the tint group is initialised, pass the item_name
         record = misc_utils.SCOrg_tools_misc.get_ship_record()
@@ -664,7 +664,7 @@ class SCOrg_tools_import():
             record = __class__.get_record(__class__.item_guid)
             
         if record:
-            print(f"DEBUG: Attempting to load tint palette for: {record.name}")
+            if globals_and_threading.debug: print(f"DEBUG: Attempting to load tint palette for: {record.name}")
             tints = tint_utils.SCOrg_tools_tint.get_tint_pallet_list(record)
             if tints:
                 __class__.load_tint_palette(tints[tint_number], tint_node_group.name)
@@ -673,7 +673,7 @@ class SCOrg_tools_import():
             # Import the materials using scdatatools
             from scdatatools.blender import materials
             __class__.tint_palette_node_group_name = tint_node_group.name
-            print("Importing materials from files")
+            if globals_and_threading.debug: print("Importing materials from files")
             materials.load_materials(list(file_cache.values()), data_dir='', tint_palette_node_group = tint_node_group)
             
     def get_material_filename(material_name):
@@ -685,17 +685,17 @@ class SCOrg_tools_import():
         return result
     
     def load_tint_palette(palette_guid, tint_palette_node_group_name):
-        print("Loadint tint palette for GUID:", palette_guid)
+        if globals_and_threading.debug: print("Loadint tint palette for GUID:", palette_guid)
         import scdatatools
         hasattr(__class__, 'extract_dir') or __class__.init()
         
         record = globals_and_threading.dcb.records_by_guid[palette_guid]
         if not record:
-            print("Palette not found: ", palette_guid)
+            if globals_and_threading.debug: print("Palette not found: ", palette_guid)
             return
         
         if record.type != "TintPaletteTree": 
-            print(f"ERROR: record {palette_guid} is not a tint pallet")
+            if globals_and_threading.debug: print(f"ERROR: record {palette_guid} is not a tint pallet")
             return
         
         t = bpy.data.node_groups[tint_palette_node_group_name]
@@ -741,7 +741,7 @@ class SCOrg_tools_import():
                 t.nodes["Decal"].image = image
                 t.nodes["Decal"].image.colorspace_settings.name = "Non-Color"
             except Exception as e:
-                print(f"Unable to load decal {decal_texture.name}: {e}")
+                if globals_and_threading.debug: print(f"Unable to load decal {decal_texture.name}: {e}")
 
         for decalColour in ["decalColorR", "decalColorG", "decalColorB"]:
             d = record.properties['root'].properties[decalColour].properties

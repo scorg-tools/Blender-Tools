@@ -17,6 +17,7 @@ item_loaded = None
 sc = None
 localizer = None
 _loading_thread = None # Global to hold the loading thread instance
+debug = False
 
 def p4k_load_monitor(msg, progress, total):
     global _last_ui_update_time, _loading_thread

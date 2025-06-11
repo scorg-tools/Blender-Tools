@@ -4,6 +4,7 @@ import re
 from mathutils import Matrix
 from . import import_utils # For import_utils.SCOrg_tools_import.import_missing_materials
 import xml.etree.ElementTree as ET
+from . import globals_and_threading
 
 class SCOrg_tools_blender():
     def add_weld_and_weighted_normal_modifiers():
@@ -144,7 +145,7 @@ class SCOrg_tools_blender():
             __class__.select_children(child)
 
     def make_instances_real(collection_name):
-        print('Collection:'+collection_name)
+        if globals_and_threading.debug: print('Collection:'+collection_name)
         __class__.select_children(bpy.data.collections[collection_name])
         roots = [ _ for _ in bpy.context.selected_objects if _.instance_collection is not None ]
         instances = set()
@@ -174,7 +175,7 @@ class SCOrg_tools_blender():
         for obj in bpy.context.scene.objects:
             if obj.type == 'EMPTY' and "container_name" in obj and obj["container_name"] == "base":
                 found_base_empty = obj
-                print(f"Found base empty: '{found_base_empty.name}'")
+                if globals_and_threading.debug: print(f"Found base empty: '{found_base_empty.name}'")
                 break
 
         if not found_base_empty:
@@ -250,7 +251,7 @@ class SCOrg_tools_blender():
                 bpy.ops.object.material_slot_remove()
     
     def convert_bones_to_empties(armature_obj):
-        print(f"DEBUG: Converting bones to empties for armature: {armature_obj.name}")
+        if globals_and_threading.debug: print(f"DEBUG: Converting bones to empties for armature: {armature_obj.name}")
         bpy.ops.object.mode_set(mode='OBJECT')
         armature = armature_obj.data
         empties = {}
@@ -258,7 +259,7 @@ class SCOrg_tools_blender():
         if hasattr(armature_obj, 'parent') and armature_obj.parent:
             # If the armature has a parent, use its name as the root name
             root_name = armature_obj.parent.name
-        print(f"DEBUG: Root name set to: {root_name} (parent found)")
+        if globals_and_threading.debug: print(f"DEBUG: Root name set to: {root_name} (parent found)")
 
         # Create empties for each bone
         for i, bone in enumerate(armature.bones):
@@ -330,11 +331,11 @@ class SCOrg_tools_blender():
                     for i, slot in enumerate(obj.material_slots):
                         if slot.material == mat:
                             slot.material = original
-                            print(f"Reassigned material on {obj.name} slot {i} from {mat.name} to {original.name}")
+                            if globals_and_threading.debug: print(f"Reassigned material on {obj.name} slot {i} from {mat.name} to {original.name}")
 
             # Remove the duplicate material if no users left
             if mat.users == 0:
-                print(f"Removing unused material: {mat.name}")
+                if globals_and_threading.debug: print(f"Removing unused material: {mat.name}")
                 bpy.data.materials.remove(mat)
     
     def is_material_vanilla(mat):
@@ -353,7 +354,7 @@ class SCOrg_tools_blender():
             return True  # Non-node materials are considered vanilla
         
     def init_tint_group(entity_name):
-        print("Initializing tint group for ship: ", entity_name)
+        if globals_and_threading.debug: print("Initializing tint group for ship: ", entity_name)
         from scdatatools import blender
         node_group = blender.materials.utils.tint_palette_node_group_for_entity(entity_name)
         return node_group
@@ -405,7 +406,7 @@ class SCOrg_tools_blender():
                     if name:
                         material_names[index] = name
             else:
-                print(f"Warning: No 'SubMaterials' element found in {file_path}")
+                if globals_and_threading.debug: print(f"Warning: No 'SubMaterials' element found in {file_path}")
                 return {}
         except FileNotFoundError:
             print(f"Error: File not found at {file_path}")
@@ -427,7 +428,7 @@ class SCOrg_tools_blender():
 
         mtl_names = __class__.parse_mtl_names(mtl_file_path)
         if not mtl_names:
-            print("Error: Could not parse .mtl file or file is empty.")
+            if globals_and_threading.debug: print("Error: Could not parse .mtl file or file is empty.")
             return
 
         for mat in bpy.data.materials:
@@ -443,20 +444,20 @@ class SCOrg_tools_blender():
 
                     if existing_material:
                         # Remap material users to the existing material
-                        print(f"Remapping material '{mat.name}' to existing material '{correct_name}'")
+                        if globals_and_threading.debug: print(f"Remapping material '{mat.name}' to existing material '{correct_name}'")
                         for obj in bpy.data.objects:
                             if obj.type == 'MESH':
                                 for i, slot in enumerate(obj.material_slots):
                                     if slot.material == mat:
                                         slot.material = existing_material
-                                        print(f"Reassigned material on {obj.name} slot {i} from {mat.name} to {correct_name}")
+                                        if globals_and_threading.debug: print(f"Reassigned material on {obj.name} slot {i} from {mat.name} to {correct_name}")
 
                         # Remove the old material if no users left
                         if mat.users == 0:
-                            print(f"Removing unused material: {mat.name}")
+                            if globals_and_threading.debug: print(f"Removing unused material: {mat.name}")
                             bpy.data.materials.remove(mat)
 
                     else:
                         # No material with the same name exists, rename the material
-                        print(f"Renaming material '{mat.name}' to '{correct_name}'")
+                        if globals_and_threading.debug: print(f"Renaming material '{mat.name}' to '{correct_name}'")
                         mat.name = correct_name
