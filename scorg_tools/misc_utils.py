@@ -143,3 +143,15 @@ class SCOrg_tools_misc():
             # Now re-register the addon
             import scorg_tools
             scorg_tools.register()
+
+    @staticmethod
+    def show_text_popup(text_content="", header_text=""):
+        """Show a popup with multi-line text and copy functionality"""
+        # Convert list to string if needed
+        if isinstance(text_content, list):
+            text_content = '\n'.join(text_content)
+        
+        # Use the persistent operator instead of a temporary one
+        bpy.ops.scorg.text_popup('INVOKE_DEFAULT', 
+                                 text_content=text_content, 
+                                 header_text=header_text)
