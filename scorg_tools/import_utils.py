@@ -167,7 +167,7 @@ class SCOrg_tools_import():
             if globals_and_threading.debug: print(f"DEBUG: post-import root object: {root_object_name}")
 
             top_level_loadout = __class__.get_loadout_from_record(record)
-            displacement_strength = 0.005
+            displacement_strength = 0.001
             if process_bones_file:
                 if globals_and_threading.debug: print("Deleting meshes for initial CDF base import")
                 # Usually used for smaller items like weapons, so change the POM/Decal displacement strength to 0.5mm
