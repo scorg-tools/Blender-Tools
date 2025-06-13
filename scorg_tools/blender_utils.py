@@ -135,6 +135,7 @@ class SCOrg_tools_blender():
         __class__.remap_material_users()
         import_utils.SCOrg_tools_import.import_missing_materials()
         __class__.fix_materials_case_sensitivity()
+        __class__.set_glass_materials_transparent()
 
     def select_children(obj):
         if hasattr(obj, 'objects'):
@@ -496,3 +497,15 @@ class SCOrg_tools_blender():
                         # remap the broken material to the other one
                         remap = __class__.remap_material(mat.name, other_mat.name, delete_old=True)
                         break
+
+    @staticmethod
+    def set_glass_materials_transparent():
+        """
+        Find all materials containing '_glass' (case insensitive) and set their 
+        viewport display alpha to 0.3 for partial transparency in the viewport.
+        """        
+        for material in tqdm(bpy.data.materials, desc="Setting glass to transparent", unit="material"):
+            if '_glass' in material.name.lower():
+                # Set the viewport display alpha to 0.1 (10% opacity)
+                material.diffuse_color = (*material.diffuse_color[:3], 0.1)
+                if globals_and_threading.debug: print(f"Setting viewport transparency for glass material: {material.name}")
