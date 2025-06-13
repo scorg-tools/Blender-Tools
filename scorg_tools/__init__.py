@@ -15,8 +15,6 @@ import bpy
 import os
 import sys
 
-# TODO: Merge two materials with the same name in different cases into the same material
-# TODO: Show progress bar for import steps
 # TODO: allow for reimporting of items that are already loaded, e.g. if the user changes the tint pallet or extracts missing items
 # TODO: Set the tint pallet guid on the root object when importing, and read it back when refreshing the ship
 # TODO: find already imported non-ship items
