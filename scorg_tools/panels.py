@@ -84,7 +84,7 @@ class VIEW3D_PT_scorg_tools_panel(bpy.types.Panel):
                     
                     # Import missing loadout button
                     if dir_path.is_dir() and extract_dir != "":
-                        layout.operator("view3d.import_loadout", text="Import missing loadout", icon='IMPORT')
+                        layout.operator("view3d.import_loadout", text="Import loadout & mats", icon='IMPORT')
                     layout.separator()
                 else:
                     # Don't show import by guid button if a ship is loaded
