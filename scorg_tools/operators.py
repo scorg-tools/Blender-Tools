@@ -93,14 +93,6 @@ class VIEW3D_OT_import_loadout(bpy.types.Operator):
             misc_utils.SCOrg_tools_misc.error("Error: Data Extract Directory not set or does not exist. Please set it in preferences.")
         return {'FINISHED'}
 
-class VIEW3D_OT_add_modifiers(bpy.types.Operator):
-    bl_idname = "view3d.add_modifiers"
-    bl_label = "Add modifiers"
-
-    def execute(self, context):
-        blender_utils.SCOrg_tools_blender.fix_modifiers()
-        return {'FINISHED'}
-
 class VIEW3D_OT_make_instance_real(bpy.types.Operator):
     bl_idname = "view3d.make_instance_real"
     bl_label = "Make Instance Real"
@@ -138,3 +130,71 @@ class GetGUIDOperator(bpy.types.Operator):
         else:
             self.report({'WARNING'}, "No GUID entered.")
             return {'CANCELLED'}
+
+class SCORG_OT_copy_text_to_clipboard(bpy.types.Operator):
+    """Copy text to clipboard"""
+    bl_idname = "scorg.copy_text_to_clipboard"
+    bl_label = "Copy to Clipboard"
+    bl_description = "Copy the text content to clipboard"
+    
+    text_to_copy: bpy.props.StringProperty(
+        name="Text to Copy",
+        description="The text that will be copied to clipboard",
+        default=""
+    )
+    
+    def execute(self, context):
+        context.window_manager.clipboard = self.text_to_copy
+        return {'FINISHED'}
+
+class SCORG_OT_text_popup(bpy.types.Operator):
+    """Display text in a popup dialog"""
+    bl_idname = "scorg.text_popup"
+    bl_label = "SCOrg.tools"
+    bl_options = {'REGISTER'}
+    
+    text_content: bpy.props.StringProperty(
+        name="Text Content",
+        description="The text to display",
+        default=""
+    )
+    
+    header_text: bpy.props.StringProperty(
+        name="Header Text", 
+        description="Header text for the popup",
+        default=""
+    )
+    
+    def execute(self, context):
+        return {'FINISHED'}
+    
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self, width=600)
+    
+    def draw(self, context):
+        layout = self.layout
+        
+        if self.header_text:
+            layout.label(text=self.header_text)
+            layout.separator()
+        
+        box = layout.box()
+        col = box.column(align=True)
+        
+        if self.text_content:
+            lines = self.text_content.split('\n')
+            
+            for line in lines:
+                row = col.row()
+                row.scale_y = 0.8
+                row.label(text=line)
+        
+        layout.separator()
+        
+        # Copy button
+        row = layout.row()
+        row.scale_y = 1.2
+        copy_op = row.operator("scorg.copy_text_to_clipboard", 
+                              text="📋 Copy to Clipboard", 
+                              icon='PASTEDOWN')
+        copy_op.text_to_copy = self.text_content
