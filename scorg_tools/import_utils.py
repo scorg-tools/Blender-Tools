@@ -130,13 +130,15 @@ class SCOrg_tools_import():
         if geometry_path:
             if globals_and_threading.debug: print(f"Loading geo: {geometry_path}")
             if not geometry_path.is_file():
-                misc_utils.SCOrg_tools_misc.error(f"Error: .DAE file not found at: {geometry_path}")
+                print(f"Error: .DAE file not found at: {geometry_path}")
                 if globals_and_threading.debug: print(f"DEBUG: Attempted DAE import path: {geometry_path}, but file was missing")
                 if str(geometry_path) not in __class__.missing_files:
                     __class__.missing_files.append(str(geometry_path))
                 print(f"⚠️ ERROR: Failed to import DAE for {guid}: {geometry_path} - file missing")
-                print("The following files were missing, please extract them with StarFab, under Data -> Data.p4k:")
-                print(__class__.missing_files)
+                misc_utils.SCOrg_tools_misc.show_text_popup(
+                    text_content=__class__.missing_files,
+                    header_text="The following files were missing, please extract them with StarFab, under Data -> Data.p4k:"
+                )
                 return None
             
             # Get a set of all objects before import
@@ -205,8 +207,10 @@ class SCOrg_tools_import():
             blender_utils.SCOrg_tools_blender.fix_modifiers(displacement_strength);
             globals_and_threading.item_loaded = True
             if len(__class__.missing_files) > 0:
-                print("The following files were missing, please extract them with StarFab, under Data -> Data.p4k:")
-                print(__class__.missing_files)
+                misc_utils.SCOrg_tools_misc.show_text_popup(
+                    text_content=__class__.missing_files,
+                    header_text="The following files were missing, please extract them with StarFab, under Data -> Data.p4k:"
+                )
     
     def get_all_empties_blueprint():
         # find all objects that are empties and have no children
@@ -442,7 +446,7 @@ class SCOrg_tools_import():
                     continue
 
                 if not geometry_path.exists():
-                    misc_utils.SCOrg_tools_misc.error(f"Error: .DAE file not found at: {geometry_path}")
+                    print(f"Error: .DAE file not found at: {geometry_path}")
                     if globals_and_threading.debug: print(f"DEBUG: Attempted DAE import path: {geometry_path}, but file was missing")
                     if str(geometry_path) not in __class__.missing_files:
                         __class__.missing_files.append(str(geometry_path));
@@ -506,7 +510,7 @@ class SCOrg_tools_import():
             return
 
         if not geometry_path.exists():
-            misc_utils.SCOrg_tools_misc.error(f"Error: .DAE file not found at: {geometry_path}")
+            print(f"Error: .DAE file not found at: {geometry_path}")
             if globals_and_threading.debug: print(f"DEBUG: Attempted DAE import path: {geometry_path}, but file was missing")
             if str(geometry_path) not in __class__.missing_files:
                 __class__.missing_files.append(str(geometry_path));
@@ -570,8 +574,10 @@ class SCOrg_tools_import():
 
         __class__.import_hardpoint_hierarchy(top_level_loadout, empties_to_fill)
         if len(__class__.missing_files) > 0:
-            print("The following files were missing, please extract them with StarFab, under Data -> Data.p4k:")
-            print(__class__.missing_files)
+            misc_utils.SCOrg_tools_misc.show_text_popup(
+                text_content=__class__.missing_files,
+                header_text="The following files were missing, please extract them with StarFab, under Data -> Data.p4k:"
+            )
         blender_utils.SCOrg_tools_blender.fix_modifiers()
 
     def get_loadout_from_record(record):
