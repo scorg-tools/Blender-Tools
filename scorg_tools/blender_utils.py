@@ -1,5 +1,5 @@
 import bpy
-import tqdm
+from tqdm import tqdm
 import re
 from mathutils import Matrix
 from . import import_utils # For import_utils.SCOrg_tools_import.import_missing_materials
@@ -8,7 +8,7 @@ from . import globals_and_threading
 
 class SCOrg_tools_blender():
     def add_weld_and_weighted_normal_modifiers():
-        for obj in bpy.data.objects:
+        for obj in tqdm(bpy.data.objects, desc="Adding weighted normal modifiers", unit="object"):
             if obj.type != 'MESH':
                 continue
 
@@ -61,7 +61,7 @@ class SCOrg_tools_blender():
         return vg
 
     def add_displace_modifiers_for_pom_and_decal(displacement_strength = 0.005):
-        for obj in bpy.data.objects:
+        for obj in tqdm(bpy.data.objects, desc="Adding Displace modifiers for POM and Decal", unit="object"):
             if obj.type != 'MESH':
                 continue
 
@@ -93,7 +93,7 @@ class SCOrg_tools_blender():
                         #print(f"Added Displace modifier for {obj.name} using group '{vg.name}'")
 
     def remove_duplicate_displace_modifiers():
-        for obj in bpy.data.objects:
+        for obj in tqdm(bpy.data.objects, desc="Removing duplicate Displace modifiers", unit="object"):
             if obj.type != 'MESH':
                 continue
 
@@ -134,6 +134,7 @@ class SCOrg_tools_blender():
         __class__.remove_proxy_material_geometry()
         __class__.remap_material_users()
         import_utils.SCOrg_tools_import.import_missing_materials()
+        __class__.fix_materials_case_sensitivity()
 
     def select_children(obj):
         if hasattr(obj, 'objects'):
@@ -160,7 +161,7 @@ class SCOrg_tools_blender():
                 if obj.instance_type == "COLLECTION":
                     instances.add(obj)
 
-        for inst in tqdm.tqdm( instances, desc="Making instances real", total=len(instances) ):
+        for inst in tqdm( instances, desc="Making instances real", total=len(instances) ):
             for obj in bpy.context.selected_objects:
                obj.select_set(False)
             inst.select_set(True)
@@ -224,7 +225,7 @@ class SCOrg_tools_blender():
                 obj.data.energy /= 1000
 
     def remove_proxy_material_geometry():
-        for obj in bpy.data.objects:
+        for obj in tqdm(bpy.data.objects, desc="Removing proxy material geometry", unit="object"):
             if obj.type != 'MESH':
                 continue
             # Find all slots with a _mtl_proxy material
@@ -316,7 +317,7 @@ class SCOrg_tools_blender():
         # Regex pattern to detect material names like "Material.001"
         suffix_pattern = re.compile(r"(.*)\.(\d{3})$")
 
-        for mat in bpy.data.materials:
+        for mat in tqdm(bpy.data.materials, desc="Remapping .001 materials", unit="material"):
             match = suffix_pattern.match(mat.name)
             if not match:
                 continue
@@ -444,20 +445,54 @@ class SCOrg_tools_blender():
 
                     if existing_material:
                         # Remap material users to the existing material
-                        if globals_and_threading.debug: print(f"Remapping material '{mat.name}' to existing material '{correct_name}'")
-                        for obj in bpy.data.objects:
-                            if obj.type == 'MESH':
-                                for i, slot in enumerate(obj.material_slots):
-                                    if slot.material == mat:
-                                        slot.material = existing_material
-                                        if globals_and_threading.debug: print(f"Reassigned material on {obj.name} slot {i} from {mat.name} to {correct_name}")
-
-                        # Remove the old material if no users left
-                        if mat.users == 0:
-                            if globals_and_threading.debug: print(f"Removing unused material: {mat.name}")
-                            bpy.data.materials.remove(mat)
+                        __class__.remap_material(mat.name, correct_name, delete_old=True)
 
                     else:
                         # No material with the same name exists, rename the material
                         if globals_and_threading.debug: print(f"Renaming material '{mat.name}' to '{correct_name}'")
                         mat.name = correct_name
+    
+    def remap_material(from_mat_name, to_mat_name, delete_old=False):
+        """
+        Remaps all users of a material from one name to another.
+        
+        Args:
+            from_mat_name (str): The name of the material to remap from.
+            to_mat_name (str): The name of the material to remap to.
+        """
+        from_mat = bpy.data.materials.get(from_mat_name)
+        to_mat = bpy.data.materials.get(to_mat_name)
+
+        if not from_mat or not to_mat:
+            print(f"Error: remapping materials, '{from_mat_name}' or '{to_mat_name}' does not exist.")
+            return
+
+        for obj in bpy.data.objects:
+            if obj.type == 'MESH':
+                for i, slot in enumerate(obj.material_slots):
+                    if slot.material == from_mat:
+                        slot.material = to_mat
+                        if globals_and_threading.debug: print(f"Reassigned material on {obj.name} slot {i} from {from_mat.name} to {to_mat.name}")
+        
+        if delete_old:
+            # Remove the old material if it has no users left
+            if from_mat.users == 0:
+                if globals_and_threading.debug: print(f"Removing unused material: {from_mat.name}")
+                bpy.data.materials.remove(from_mat)
+    
+    def fix_materials_case_sensitivity():
+        """
+        Fixes materials that have been imported due to different case in names.
+        """
+        for mat in tqdm(bpy.data.materials, desc="Fixing mat case sensitivity", unit="material"):
+            # Check if the material name contains '_mtl_' and if it is a vanilla material (with only Principled BSDF)
+            if __class__.is_material_vanilla(mat):
+                name = mat.name
+                if globals_and_threading.debug: print(f"found broken shader {name}")
+                # check if there is another material with the same name but difference case
+                for other_mat in bpy.data.materials:
+                    if other_mat.name.lower() == name.lower() and other_mat != mat:
+                        if globals_and_threading.debug: print(f"found duplicate material {other_mat.name} with different case")
+                        # remap the broken material to the other one
+                        remap = __class__.remap_material(mat.name, other_mat.name, delete_old=True)
+                        break

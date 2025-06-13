@@ -2,7 +2,7 @@ import bpy
 from pathlib import Path
 import os
 import re
-
+from tqdm import tqdm
 # Import globals
 from . import globals_and_threading
 from . import misc_utils # For SCOrg_tools_misc.error, get_ship_record, select_base_collection
@@ -615,7 +615,7 @@ class SCOrg_tools_import():
             return None
 
         # Loop through all materials in the scene
-        for mat in bpy.data.materials:
+        for mat in tqdm(bpy.data.materials, desc="Importing missing materials", unit="materials"):
             # Check if the material name contains '_mtl_' and if it is a vanilla material (with only Principled BSDF)
             if "_mtl_" in mat.name and blender_utils.SCOrg_tools_blender.is_material_vanilla(mat):
                 # Get the filename by removing '_mtl' and adding '.mtl'
