@@ -1,7 +1,7 @@
 bl_info = {
     "name": "SCOrg.tools Blender Tools alpha",
     "author": "Star-Destroyer@scorg.tools",
-    "version": (1, 0, 16),
+    "version": (1, 0, 17),
     "blender": (3, 6, 0),
     "location": "View3D > Sidebar > SCOrg.tools",
     "description": "Tools to supplement StarFab",
@@ -15,6 +15,9 @@ import bpy
 import os
 import sys
 
+# TODO: Merge two materials with the same name in different cases into the same material
+# TODO: Show progress bar for import steps
+# TODO: allow for reimporting of items that are already loaded, e.g. if the user changes the tint pallet or extracts missing items
 # TODO: Set the tint pallet guid on the root object when importing, and read it back when refreshing the ship
 # TODO: find already imported non-ship items
 # TODO: list currently loaded paints in the UI
@@ -65,7 +68,6 @@ classes = (
     operators.VIEW3D_OT_load_p4k_button,
     operators.VIEW3D_OT_refresh_button,
     operators.VIEW3D_OT_import_loadout,
-    operators.VIEW3D_OT_add_modifiers,
     operators.VIEW3D_OT_make_instance_real,
     operators.VIEW3D_OT_reload,
     operators.GetGUIDOperator,
