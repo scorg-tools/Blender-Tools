@@ -445,6 +445,13 @@ class SCOrg_tools_import():
                     if globals_and_threading.debug: print(f"ERROR: No geometry for GUID {guid_str}: {geometry_path}")
                     continue
 
+                process_bones_file = False
+                # if the geometry path is an array, it means we have a CDF XML file that points to the real geometry
+                if isinstance(geometry_path, list):
+                    if globals_and_threading.debug: print(f"DEBUG: CDF XML file found with references to: {geometry_path}")
+                    process_bones_file = geometry_path
+                    geometry_path = process_bones_file.pop(0)  # Get the first file in the array, which is the base armature DAE file
+
                 if not geometry_path.exists():
                     print(f"Error: .DAE file not found at: {geometry_path}")
                     if globals_and_threading.debug: print(f"DEBUG: Attempted DAE import path: {geometry_path}, but file was missing")
@@ -468,6 +475,24 @@ class SCOrg_tools_import():
                 root_obj.parent = matching_empty
                 root_obj.matrix_parent_inverse.identity()
                 __class__.imported_guid_objects[guid_str] = root_obj
+
+                if process_bones_file:
+                    if globals_and_threading.debug: print("Deleting meshes for CDF import")
+                    # Delete all meshes to avoid conflicts with CDF imports, the imported .dae objects will be selected
+                    __class__.replace_selected_mesh_with_empties()
+                    
+                    if globals_and_threading.debug: print(f"Converting bones to empties for {guid_str}: {geometry_path}")
+                    blender_utils.SCOrg_tools_blender.convert_armatures_to_empties()
+                    
+                    for file in process_bones_file:
+                        if not file.is_file():
+                            if globals_and_threading.debug: print(f"⚠️ ERROR: Bones file missing: {file}")
+                            if str(file) not in __class__.missing_files:
+                                __class__.missing_files.append(str(file))
+                            continue
+                        if globals_and_threading.debug: print(f"Processing bones file: {file}")
+                        __class__.import_file(file, root_obj.name)
+                    if globals_and_threading.debug: print("DEBUG: Finished processing bones files")
 
                 imported_empties = [
                     obj for obj in imported_objs
