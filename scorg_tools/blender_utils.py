@@ -1,12 +1,54 @@
 import bpy
 from tqdm import tqdm
 import re
+import time  # Add time import
 from mathutils import Matrix
 from . import import_utils # For import_utils.SCOrg_tools_import.import_missing_materials
 import xml.etree.ElementTree as ET
 from . import globals_and_threading
 
 class SCOrg_tools_blender():
+    _last_redraw_time = 0  # Class variable to track last redraw time
+    
+    @staticmethod
+    def update_viewport_with_timer(interval_seconds=2.0, force_reset=False, redraw_now=False):
+        """
+        Periodically force Blender to redraw the viewport based on a timer.
+        
+        Args:
+            interval_seconds (float): Time interval in seconds between redraws
+            force_reset (bool): If True, reset the timer (useful for starting new operations)
+        
+        Returns:
+            bool: True if a redraw was performed, False otherwise
+        """
+        current_time = time.time()
+        
+        # Reset timer if requested (for starting new operations)
+        if force_reset or redraw_now:
+            SCOrg_tools_blender._last_redraw_time = current_time
+            if not redraw_now:
+                return False
+        
+        # Check if enough time has passed
+        if redraw_now or current_time - SCOrg_tools_blender._last_redraw_time >= interval_seconds:
+            if globals_and_threading.debug: 
+                print(f"DEBUG: {interval_seconds} seconds elapsed, forcing screen redraw")
+            
+            # Force Blender to update the viewport
+            bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
+            
+            # Update the last redraw time
+            SCOrg_tools_blender._last_redraw_time = current_time
+            
+            # Process any pending events to allow UI updates
+            bpy.app.handlers.depsgraph_update_post.clear()
+            bpy.context.view_layer.update()
+            
+            return True
+        
+        return False
+
     def add_weld_and_weighted_normal_modifiers():
         for obj in tqdm(bpy.data.objects, desc="Adding weighted normal modifiers", unit="object"):
             if obj.type != 'MESH':
@@ -129,12 +171,19 @@ class SCOrg_tools_blender():
                     
     def fix_modifiers(displacement_strength=0.005):
         __class__.add_weld_and_weighted_normal_modifiers()
+        __class__.update_viewport_with_timer(redraw_now=True)
         __class__.add_displace_modifiers_for_pom_and_decal(displacement_strength)
+        __class__.update_viewport_with_timer(redraw_now=True)
         __class__.remove_duplicate_displace_modifiers()
+        __class__.update_viewport_with_timer(redraw_now=True)
         __class__.remove_proxy_material_geometry()
+        __class__.update_viewport_with_timer(redraw_now=True)
         __class__.remap_material_users()
+        __class__.update_viewport_with_timer(redraw_now=True)
         import_utils.SCOrg_tools_import.import_missing_materials()
+        __class__.update_viewport_with_timer(redraw_now=True)
         __class__.fix_materials_case_sensitivity()
+        __class__.update_viewport_with_timer(redraw_now=True)
         __class__.set_glass_materials_transparent()
 
     def select_children(obj):

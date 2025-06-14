@@ -12,6 +12,7 @@ from . import tint_utils # For SCOrg_tools_tint.get_tint_pallets
 class SCOrg_tools_import():
     item_name = None
     item_guid = None
+    
     def init():
         if globals_and_threading.debug: print("SCOrg_tools_import initialized")
         __class__.prefs = bpy.context.preferences.addons["scorg_tools"].preferences
@@ -346,6 +347,10 @@ class SCOrg_tools_import():
     def import_hardpoint_hierarchy(loadout, empties_to_fill, is_top_level=True, parent_guid=None):        
         entries = loadout.properties.get('entries', [])
 
+        # Initialize timer on first call (top level)
+        if is_top_level:
+            blender_utils.SCOrg_tools_blender.update_viewport_with_timer(force_reset=True)
+
         if globals_and_threading.debug: print(f"DEBUG: import_hardpoint_hierarchy called with {len(entries)} entries, empties to fill: {len(empties_to_fill)}, is_top_level={is_top_level}, parent_guid={parent_guid}")
 
         # For nested calls, get the mapping for the parent_guid
@@ -355,6 +360,9 @@ class SCOrg_tools_import():
             if globals_and_threading.debug: print(f"DEBUG: hardpoint_mapping for parent_guid {parent_guid}: {hardpoint_mapping}")
 
         for i, entry in enumerate(entries):
+            # Check for periodic viewport updates (5 second default)
+            blender_utils.SCOrg_tools_blender.update_viewport_with_timer(interval_seconds=1.0)
+
             props = getattr(entry, 'properties', entry)
             item_port_name = props.get('itemPortName')
             guid = props.get('entityClassReference')
