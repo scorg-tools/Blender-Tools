@@ -11,6 +11,7 @@ from pathlib import Path
 class VIEW3D_OT_dynamic_button(bpy.types.Operator):
     bl_idname = "view3d.dynamic_button"
     bl_label = "Dynamic Button"
+    bl_description = "Apply the selected paint/tint to the current ship"
 
     button_index: bpy.props.IntProperty()
 
@@ -22,6 +23,7 @@ class VIEW3D_OT_dynamic_button(bpy.types.Operator):
 class VIEW3D_OT_load_p4k_button(bpy.types.Operator):
     bl_idname = "view3d.load_p4k_button"
     bl_label = "Load Data.p4k"
+    bl_description = "Load the Star Citizen Data.p4k file to access ship and item data"
 
     def execute(self, context):
         prefs = bpy.context.preferences.addons[__package__].preferences
@@ -54,6 +56,7 @@ class VIEW3D_OT_load_p4k_button(bpy.types.Operator):
 class VIEW3D_OT_refresh_button(bpy.types.Operator):
     bl_idname = "view3d.refresh_button"
     bl_label = "Check Loaded Ship"
+    bl_description = "Check for ship data in the current scene"
 
     def execute(self, context):
         # Access global dcb, localizer, ship_loaded
@@ -81,6 +84,7 @@ class VIEW3D_OT_refresh_button(bpy.types.Operator):
 class VIEW3D_OT_import_loadout(bpy.types.Operator):
     bl_idname = "view3d.import_loadout"
     bl_label = "Import missing loadout"
+    bl_description = "Import missing ship components, and materials for the current ship and apply a number of fixes"
 
     def execute(self, context):
         # Ensure extract_dir is a Path object before checking
@@ -96,6 +100,7 @@ class VIEW3D_OT_import_loadout(bpy.types.Operator):
 class VIEW3D_OT_make_instance_real(bpy.types.Operator):
     bl_idname = "view3d.make_instance_real"
     bl_label = "Make Instance Real"
+    bl_description = "Convert collection instances to real objects and clean up the scene, required for more options"
     
     def execute(self, context):
         blender_utils.SCOrg_tools_blender.run_make_instances_real()
@@ -103,7 +108,8 @@ class VIEW3D_OT_make_instance_real(bpy.types.Operator):
 
 class VIEW3D_OT_reload(bpy.types.Operator):
     bl_idname = "view3d.reload"
-    bl_label = "Reload Addon" 
+    bl_label = "Reload Addon"
+    bl_description = "Reload the SCOrg.tools addon (for development purposes)"
     
     def execute(self, context):
         misc_utils.SCOrg_tools_misc.reload_addon()
@@ -112,6 +118,7 @@ class VIEW3D_OT_reload(bpy.types.Operator):
 class GetGUIDOperator(bpy.types.Operator):
     bl_idname = "wm.get_guid_operator"
     bl_label = "Import by ID"
+    bl_description = "Import a specific item by entering its GUID or name from StarFab Datacore"
 
     guid: bpy.props.StringProperty(
         name="GUID ",
