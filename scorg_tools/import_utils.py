@@ -351,16 +351,17 @@ class SCOrg_tools_import():
         if is_top_level:
             blender_utils.SCOrg_tools_blender.update_viewport_with_timer(force_reset=True)
 
-        if globals_and_threading.debug: print(f"DEBUG: import_hardpoint_hierarchy called with {len(entries)} entries, empties to fill: {len(empties_to_fill)}, is_top_level={is_top_level}, parent_guid={parent_guid}")
-
         # For nested calls, get the mapping for the parent_guid
         hardpoint_mapping = {}
         if not is_top_level and parent_guid:
             hardpoint_mapping = __class__.get_hardpoint_mapping_from_guid(parent_guid) or {}
-            if globals_and_threading.debug: print(f"DEBUG: hardpoint_mapping for parent_guid {parent_guid}: {hardpoint_mapping}")
-
+        
+        # Set initial progress message with arc spinner - force update and short interval
+        misc_utils.SCOrg_tools_misc.update_progress("Importing hardpoints", 0, len(entries), force_update=True, spinner_type="arc", update_interval=0.1)
+        
         for i, entry in enumerate(entries):
-            # Check for periodic viewport updates (5 second default)
+            # Update progress MORE frequently - every entry instead of every 5
+            misc_utils.SCOrg_tools_misc.update_progress(f"Importing hardpoint {i+1}/{len(entries)}", i+1, len(entries), spinner_type="arc", update_interval=0.1)
             blender_utils.SCOrg_tools_blender.update_viewport_with_timer(interval_seconds=1.0)
 
             props = getattr(entry, 'properties', entry)
@@ -532,6 +533,14 @@ class SCOrg_tools_import():
                     __class__.import_hardpoint_hierarchy(nested_loadout, imported_empties, is_top_level=False, parent_guid=guid_str)
                 else:
                     if globals_and_threading.debug: print("DEBUG: No nested loadout found, recursion ends here")
+
+        # Clear progress when done with this level
+        if is_top_level:
+            try:
+                misc_utils.SCOrg_tools_misc.clear_progress()
+                if globals_and_threading.debug: print("DEBUG: Cleared progress on top level completion")
+            except Exception as e:
+                print(f"ERROR: Failed to clear progress: {e}")
 
     def import_file(geometry_path, parent_empty_name):
         """

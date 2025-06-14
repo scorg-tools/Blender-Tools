@@ -16,7 +16,7 @@ class SCOrg_tools_misc():
     spinner_type = "clock"
     
     @staticmethod
-    def update_progress(message="", current=0, total=100, hide_message=False, hide_progress=False, update_interval=1.0, force_update=False, spinner=True, spinner_type=None):
+    def update_progress(message="", current=0, total=100, hide_message=False, hide_progress=False, update_interval=0.1, force_update=False, spinner=True, spinner_type=None):
         """
         Update the progress bar and status message in the UI with timer-based throttling.
         
@@ -58,6 +58,7 @@ class SCOrg_tools_misc():
                         SCOrg_tools_misc._spinner_counter += 1
                 
                 prefs.p4k_load_message = display_message
+                print(f"DEBUG: Set progress message to: '{display_message}'")  # Debug output
             
             # Update progress bar
             if hide_progress:
@@ -67,17 +68,20 @@ class SCOrg_tools_misc():
                     # Calculate percentage as a value between 0 and 100 (not 0 and 1)
                     progress_percentage = min(max((current / total) * 100, 0.0), 100.0)  # Clamp between 0 and 100
                     prefs.p4k_load_progress = progress_percentage
+                    print(f"DEBUG: Set progress to: {progress_percentage}%")  # Debug output
                 else:
                     prefs.p4k_load_progress = 0.0
             
             # Update the last update time
             SCOrg_tools_misc._last_progress_update_time = current_time
             
-            # Force UI redraw to show changes immediately
-            SCOrg_tools_misc.redraw()
+            # Force UI redraw with multiple approaches
+            SCOrg_tools_misc.force_ui_update()
             
         except Exception as e:
             print(f"Error updating progress: {e}")
+            import traceback
+            traceback.print_exc()
 
     @staticmethod
     def clear_progress():
@@ -173,11 +177,34 @@ class SCOrg_tools_misc():
         else:
             print(f"ERROR: Could not find LayerCollection for '{target_data_collection.name}'.")
     
-    def redraw():
-        for window in bpy.context.window_manager.windows:
-            for area in window.screen.areas:
-                if area.type == 'VIEW_3D':
+    @staticmethod
+    def force_ui_update():
+        """Force UI update using more aggressive methods to ensure visibility"""
+        try:
+            # Method 1: Tag ALL areas for redraw (not just specific ones)
+            for window in bpy.context.window_manager.windows:
+                for area in window.screen.areas:
                     area.tag_redraw()
+            
+            # Method 2: Force immediate UI redraw specifically for UI regions
+            for window in bpy.context.window_manager.windows:
+                for area in window.screen.areas:
+                    for region in area.regions:
+                        region.tag_redraw()
+            
+            # Method 3: Force redraw timer - this is what actually makes it visible
+            bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
+            
+            # Method 4: Update depsgraph
+            if hasattr(bpy.context, 'view_layer'):
+                bpy.context.view_layer.update()
+            
+        except Exception as e:
+            print(f"Error in force_ui_update: {e}")
+
+    def redraw():
+        """Legacy redraw method - now calls force_ui_update"""
+        SCOrg_tools_misc.force_ui_update()
 
     def error(message="An error occurred"):
         bpy.context.window_manager.popup_menu(

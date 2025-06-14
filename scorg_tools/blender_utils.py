@@ -4,6 +4,7 @@ import re
 import time  # Add time import
 from mathutils import Matrix
 from . import import_utils # For import_utils.SCOrg_tools_import.import_missing_materials
+from . import misc_utils # Add this import for progress updates
 import xml.etree.ElementTree as ET
 from . import globals_and_threading
 
@@ -14,13 +15,7 @@ class SCOrg_tools_blender():
     def update_viewport_with_timer(interval_seconds=2.0, force_reset=False, redraw_now=False):
         """
         Periodically force Blender to redraw the viewport based on a timer.
-        
-        Args:
-            interval_seconds (float): Time interval in seconds between redraws
-            force_reset (bool): If True, reset the timer (useful for starting new operations)
-        
-        Returns:
-            bool: True if a redraw was performed, False otherwise
+        Restored functionality while keeping it efficient.
         """
         current_time = time.time()
         
@@ -35,8 +30,19 @@ class SCOrg_tools_blender():
             if globals_and_threading.debug: 
                 print(f"DEBUG: {interval_seconds} seconds elapsed, forcing screen redraw")
             
-            # Force Blender to update the viewport
-            bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
+            try:
+                # Force Blender to update the viewport - restore the original functionality
+                bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
+                
+                # Also tag areas for redraw
+                for window in bpy.context.window_manager.windows:
+                    for area in window.screen.areas:
+                        if area.type == 'VIEW_3D':
+                            area.tag_redraw()
+                
+            except Exception as e:
+                if globals_and_threading.debug:
+                    print(f"Error in viewport redraw: {e}")
             
             # Update the last redraw time
             SCOrg_tools_blender._last_redraw_time = current_time
@@ -167,24 +173,34 @@ class SCOrg_tools_blender():
             for mod_name in reversed(modifier_names_to_remove):
                 if mod_name in obj.modifiers: # Check if it still exists (e.g., not manually removed)
                     obj.modifiers.remove(obj.modifiers[mod_name])
-                    #print(f"Removed duplicate Displace modifier '{mod_name}' from '{obj.name}'.")
+                    #print(f"Removed duplicate Displace modifier '{mod_name}' from '{obj.name'.")
                     
     def fix_modifiers(displacement_strength=0.005):
         __class__.add_weld_and_weighted_normal_modifiers()
+        misc_utils.SCOrg_tools_misc.update_progress("Adding weld modifiers", 1, 8, force_update=True, spinner_type="arc")
         __class__.update_viewport_with_timer(redraw_now=True)
         __class__.add_displace_modifiers_for_pom_and_decal(displacement_strength)
+        misc_utils.SCOrg_tools_misc.update_progress("Adding displace modifiers", 2, 8, spinner_type="arc")
         __class__.update_viewport_with_timer(redraw_now=True)
         __class__.remove_duplicate_displace_modifiers()
+        misc_utils.SCOrg_tools_misc.update_progress("Removing duplicates", 3, 8, spinner_type="arc")
         __class__.update_viewport_with_timer(redraw_now=True)
         __class__.remove_proxy_material_geometry()
+        misc_utils.SCOrg_tools_misc.update_progress("Removing proxy geometry", 4, 8, spinner_type="arc")
         __class__.update_viewport_with_timer(redraw_now=True)
         __class__.remap_material_users()
+        misc_utils.SCOrg_tools_misc.update_progress("Remapping materials", 5, 8, spinner_type="arc")
         __class__.update_viewport_with_timer(redraw_now=True)
         import_utils.SCOrg_tools_import.import_missing_materials()
+        misc_utils.SCOrg_tools_misc.update_progress("Importing materials", 6, 8, spinner_type="arc")
         __class__.update_viewport_with_timer(redraw_now=True)
         __class__.fix_materials_case_sensitivity()
+        misc_utils.SCOrg_tools_misc.update_progress("Fixing material cases", 7, 8, spinner_type="arc")
         __class__.update_viewport_with_timer(redraw_now=True)
         __class__.set_glass_materials_transparent()
+        misc_utils.SCOrg_tools_misc.update_progress("Setting glass transparency", 8, 8, spinner_type="arc")
+        # Clear progress when done
+        misc_utils.SCOrg_tools_misc.clear_progress()
 
     def select_children(obj):
         if hasattr(obj, 'objects'):
