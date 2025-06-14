@@ -1,12 +1,89 @@
 import bpy
 from pathlib import Path
 import re
+import time  # Add time import for timer functionality
 
 # Import globals
 from . import globals_and_threading
 from . import tint_utils
+from .spinners import SPINNER_LIBRARY  # Import the spinner library
 
 class SCOrg_tools_misc():
+    _last_progress_update_time = 0  # Class variable to track last progress update
+    _spinner_counter = 0  # Class variable to track spinner animation
+    
+    # Default spinner type - change this to use different spinners
+    spinner_type = "clock"
+    
+    @staticmethod
+    def update_progress(message="", current=0, total=100, hide_message=False, hide_progress=False, update_interval=1.0, force_update=False, spinner=True, spinner_type=None):
+        """
+        Update the progress bar and status message in the UI with timer-based throttling.
+        
+        Args:
+            message (str): Status message to display
+            current (int/float): Current progress value
+            total (int/float): Total/maximum progress value
+            hide_message (bool): If True, clear the message
+            hide_progress (bool): If True, set progress to 0
+            update_interval (float): Minimum time interval in seconds between UI updates
+            force_update (bool): If True, ignore the timer and update immediately
+            spinner (bool): If True, add animated spinner character to the message
+            spinner_type (str): Override the default spinner type for this call
+        """
+        try:
+            current_time = time.time()
+            
+            # Check if enough time has passed since last update (or if forced)
+            if not force_update and (current_time - SCOrg_tools_misc._last_progress_update_time) < update_interval:
+                return  # Skip this update to avoid UI spam
+            
+            prefs = bpy.context.preferences.addons["scorg_tools"].preferences
+            
+            # Update message with animated spinner if enabled
+            if hide_message:
+                prefs.p4k_load_message = ""
+                SCOrg_tools_misc._spinner_counter = 0  # Reset spinner counter
+            else:
+                display_message = message
+                if spinner and message:
+                    # Use provided spinner_type or fall back to class default
+                    active_spinner_type = spinner_type or SCOrg_tools_misc.spinner_type
+                    spinner_chars = SPINNER_LIBRARY.get(active_spinner_type, SPINNER_LIBRARY["clock"])
+                    
+                    if spinner_chars:
+                        # Add animated spinner (cycling through all characters in the list)
+                        spinner_char = spinner_chars[SCOrg_tools_misc._spinner_counter % len(spinner_chars)]
+                        display_message = f"{message} {spinner_char}"
+                        SCOrg_tools_misc._spinner_counter += 1
+                
+                prefs.p4k_load_message = display_message
+            
+            # Update progress bar
+            if hide_progress:
+                prefs.p4k_load_progress = 0.0
+            else:
+                if total > 0:
+                    # Calculate percentage as a value between 0 and 100 (not 0 and 1)
+                    progress_percentage = min(max((current / total) * 100, 0.0), 100.0)  # Clamp between 0 and 100
+                    prefs.p4k_load_progress = progress_percentage
+                else:
+                    prefs.p4k_load_progress = 0.0
+            
+            # Update the last update time
+            SCOrg_tools_misc._last_progress_update_time = current_time
+            
+            # Force UI redraw to show changes immediately
+            SCOrg_tools_misc.redraw()
+            
+        except Exception as e:
+            print(f"Error updating progress: {e}")
+
+    @staticmethod
+    def clear_progress():
+        """Clear both the progress bar and status message."""
+        SCOrg_tools_misc.update_progress(hide_message=True, hide_progress=True, force_update=True)
+
     def get_ship_record():
         dcb = globals_and_threading.dcb
         empty_name = SCOrg_tools_misc.find_base_name()
