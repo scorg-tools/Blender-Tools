@@ -617,12 +617,12 @@ class SCOrg_tools_import():
         if globals_and_threading.debug: print(f"Total hardpoints to import: {len(empties_to_fill)}")
 
         __class__.import_hardpoint_hierarchy(top_level_loadout, empties_to_fill)
-        blender_utils.SCOrg_tools_blender.fix_modifiers()
         if len(__class__.missing_files) > 0:
             misc_utils.SCOrg_tools_misc.show_text_popup(
                 text_content=__class__.missing_files,
                 header_text="The following files were missing, please extract them with StarFab, under Data -> Data.p4k:"
             )
+        blender_utils.SCOrg_tools_blender.fix_modifiers()
 
     def get_loadout_from_record(record):
         if globals_and_threading.debug: print(f"DEBUG: get_loadout_from_record called with record: {record.name}")
