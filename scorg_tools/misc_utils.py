@@ -16,7 +16,7 @@ class SCOrg_tools_misc():
     spinner_type = "clock"
     
     @staticmethod
-    def update_progress(message="", current=0, total=100, hide_message=False, hide_progress=False, update_interval=0.1, force_update=False, spinner=True, spinner_type=None):
+    def update_progress(message="", current=0, total=100, hide_message=False, hide_progress=False, update_interval=1.0, force_update=False, spinner=True, spinner_type=None):
         """
         Update the progress bar and status message in the UI with timer-based throttling.
         
@@ -58,7 +58,6 @@ class SCOrg_tools_misc():
                         SCOrg_tools_misc._spinner_counter += 1
                 
                 prefs.p4k_load_message = display_message
-                print(f"DEBUG: Set progress message to: '{display_message}'")  # Debug output
             
             # Update progress bar
             if hide_progress:
@@ -68,7 +67,6 @@ class SCOrg_tools_misc():
                     # Calculate percentage as a value between 0 and 100 (not 0 and 1)
                     progress_percentage = min(max((current / total) * 100, 0.0), 100.0)  # Clamp between 0 and 100
                     prefs.p4k_load_progress = progress_percentage
-                    print(f"DEBUG: Set progress to: {progress_percentage}%")  # Debug output
                 else:
                     prefs.p4k_load_progress = 0.0
             
@@ -88,7 +86,7 @@ class SCOrg_tools_misc():
         """Clear both the progress bar and status message."""
         SCOrg_tools_misc.update_progress(hide_message=True, hide_progress=True, force_update=True)
 
-    def get_ship_record():
+    def get_ship_record(skip_error = False):
         dcb = globals_and_threading.dcb
         empty_name = SCOrg_tools_misc.find_base_name()
         if empty_name:
@@ -110,7 +108,7 @@ class SCOrg_tools_misc():
                 globals_and_threading.ship_loaded = name # Fallback
             return records[0]
         else:
-            print("❌ Error, no Empty object with 'container_name' = 'base' found.")
+            if not skip_error: print("❌ Error, no Empty object with 'container_name' = 'base' found.")
             return None
         
     def find_base_name():

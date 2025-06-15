@@ -2,7 +2,6 @@ import bpy
 from pathlib import Path
 import os
 import re
-from tqdm import tqdm
 # Import globals
 from . import globals_and_threading
 from . import misc_utils # For SCOrg_tools_misc.error, get_ship_record, select_base_collection
@@ -358,12 +357,12 @@ class SCOrg_tools_import():
         
         # Only show progress at the top level
         if is_top_level:
-            misc_utils.SCOrg_tools_misc.update_progress("Importing hardpoints", 0, len(entries), force_update=True, spinner_type="arc", update_interval=0.1)
+            misc_utils.SCOrg_tools_misc.update_progress("Importing hardpoints", 0, len(entries), force_update=True, spinner_type="arc")
         
         for i, entry in enumerate(entries):
             # Only update progress at the top level
             if is_top_level:
-                misc_utils.SCOrg_tools_misc.update_progress(f"Importing hardpoint {i+1}/{len(entries)}", i+1, len(entries), spinner_type="arc", update_interval=0.1)
+                misc_utils.SCOrg_tools_misc.update_progress(f"Importing hardpoint {i+1}/{len(entries)}", i+1, len(entries), spinner_type="arc", update_interval=1)
             
             blender_utils.SCOrg_tools_blender.update_viewport_with_timer(interval_seconds=1.0)
 
@@ -666,7 +665,9 @@ class SCOrg_tools_import():
             return None
 
         # Loop through all materials in the scene
-        for mat in tqdm(bpy.data.materials, desc="Importing missing materials", unit="materials"):
+        materials_list = list(bpy.data.materials)
+        for i, mat in enumerate(materials_list):
+            misc_utils.SCOrg_tools_misc.update_progress("Importing missing materials", i, len(materials_list), spinner_type="arc")
             # Check if the material name contains '_mtl_' and if it is a vanilla material (with only Principled BSDF)
             if "_mtl_" in mat.name and blender_utils.SCOrg_tools_blender.is_material_vanilla(mat):
                 # Get the filename by removing '_mtl' and adding '.mtl'

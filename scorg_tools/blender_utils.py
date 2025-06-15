@@ -1,5 +1,4 @@
 import bpy
-from tqdm import tqdm
 import re
 import time  # Add time import
 from mathutils import Matrix
@@ -56,7 +55,8 @@ class SCOrg_tools_blender():
         return False
 
     def add_weld_and_weighted_normal_modifiers():
-        for obj in tqdm(bpy.data.objects, desc="Adding weighted normal modifiers", unit="object"):
+        for i, obj in enumerate(bpy.data.objects):
+            misc_utils.SCOrg_tools_misc.update_progress("Adding weld modifiers", i, len(bpy.data.objects), spinner_type="arc")
             if obj.type != 'MESH':
                 continue
 
@@ -109,7 +109,9 @@ class SCOrg_tools_blender():
         return vg
 
     def add_displace_modifiers_for_pom_and_decal(displacement_strength = 0.005):
-        for obj in tqdm(bpy.data.objects, desc="Adding Displace modifiers for POM and Decal", unit="object"):
+        objects_list = list(bpy.data.objects)
+        for i, obj in enumerate(objects_list):
+            misc_utils.SCOrg_tools_misc.update_progress("Adding Displace modifiers for POM and Decal", i, len(objects_list), spinner_type="arc")
             if obj.type != 'MESH':
                 continue
 
@@ -141,7 +143,9 @@ class SCOrg_tools_blender():
                         #print(f"Added Displace modifier for {obj.name} using group '{vg.name}'")
 
     def remove_duplicate_displace_modifiers():
-        for obj in tqdm(bpy.data.objects, desc="Removing duplicate Displace modifiers", unit="object"):
+        objects_list = list(bpy.data.objects)
+        for i, obj in enumerate(objects_list):
+            misc_utils.SCOrg_tools_misc.update_progress("Removing duplicate Displace modifiers", i, len(objects_list), spinner_type="arc")
             if obj.type != 'MESH':
                 continue
 
@@ -177,28 +181,21 @@ class SCOrg_tools_blender():
                     
     def fix_modifiers(displacement_strength=0.005):
         __class__.add_weld_and_weighted_normal_modifiers()
-        misc_utils.SCOrg_tools_misc.update_progress("Adding weld modifiers", 1, 8, force_update=True, spinner_type="arc")
+        
         __class__.update_viewport_with_timer(redraw_now=True)
         __class__.add_displace_modifiers_for_pom_and_decal(displacement_strength)
-        misc_utils.SCOrg_tools_misc.update_progress("Adding displace modifiers", 2, 8, spinner_type="arc")
         __class__.update_viewport_with_timer(redraw_now=True)
         __class__.remove_duplicate_displace_modifiers()
-        misc_utils.SCOrg_tools_misc.update_progress("Removing duplicates", 3, 8, spinner_type="arc")
         __class__.update_viewport_with_timer(redraw_now=True)
         __class__.remove_proxy_material_geometry()
-        misc_utils.SCOrg_tools_misc.update_progress("Removing proxy geometry", 4, 8, spinner_type="arc")
         __class__.update_viewport_with_timer(redraw_now=True)
         __class__.remap_material_users()
-        misc_utils.SCOrg_tools_misc.update_progress("Remapping materials", 5, 8, spinner_type="arc")
         __class__.update_viewport_with_timer(redraw_now=True)
         import_utils.SCOrg_tools_import.import_missing_materials()
-        misc_utils.SCOrg_tools_misc.update_progress("Importing materials", 6, 8, spinner_type="arc")
         __class__.update_viewport_with_timer(redraw_now=True)
         __class__.fix_materials_case_sensitivity()
-        misc_utils.SCOrg_tools_misc.update_progress("Fixing material cases", 7, 8, spinner_type="arc")
         __class__.update_viewport_with_timer(redraw_now=True)
         __class__.set_glass_materials_transparent()
-        misc_utils.SCOrg_tools_misc.update_progress("Setting glass transparency", 8, 8, spinner_type="arc")
         # Clear progress when done
         misc_utils.SCOrg_tools_misc.clear_progress()
 
@@ -227,13 +224,17 @@ class SCOrg_tools_blender():
                 if obj.instance_type == "COLLECTION":
                     instances.add(obj)
 
-        for inst in tqdm( instances, desc="Making instances real", total=len(instances) ):
+        instances_list = list(instances)
+        for i, inst in enumerate(instances_list):
+            misc_utils.SCOrg_tools_misc.update_progress("Making instances real", i, len(instances_list), spinner_type="arc")
             for obj in bpy.context.selected_objects:
                obj.select_set(False)
             inst.select_set(True)
             bpy.ops.object.duplicates_make_real(
                 use_base_parent=True, use_hierarchy=True
             )
+        # Clear progress when done
+        misc_utils.SCOrg_tools_misc.clear_progress()
         return {"FINISHED"}
         
     def get_main_collection():
@@ -291,7 +292,9 @@ class SCOrg_tools_blender():
                 obj.data.energy /= 1000
 
     def remove_proxy_material_geometry():
-        for obj in tqdm(bpy.data.objects, desc="Removing proxy material geometry", unit="object"):
+        objects_list = list(bpy.data.objects)
+        for i, obj in enumerate(objects_list):
+            misc_utils.SCOrg_tools_misc.update_progress("Removing proxy material geometry", i, len(objects_list), spinner_type="arc")
             if obj.type != 'MESH':
                 continue
             # Find all slots with a _mtl_proxy material
@@ -383,7 +386,9 @@ class SCOrg_tools_blender():
         # Regex pattern to detect material names like "Material.001"
         suffix_pattern = re.compile(r"(.*)\.(\d{3})$")
 
-        for mat in tqdm(bpy.data.materials, desc="Remapping .001 materials", unit="material"):
+        materials_list = list(bpy.data.materials)
+        for i, mat in enumerate(materials_list):
+            misc_utils.SCOrg_tools_misc.update_progress("Remapping .001 materials", i, len(materials_list), spinner_type="arc")
             match = suffix_pattern.match(mat.name)
             if not match:
                 continue
@@ -550,7 +555,9 @@ class SCOrg_tools_blender():
         """
         Fixes materials that have been imported due to different case in names.
         """
-        for mat in tqdm(bpy.data.materials, desc="Fixing mat case sensitivity", unit="material"):
+        materials_list = list(bpy.data.materials)
+        for i, mat in enumerate(materials_list):
+            misc_utils.SCOrg_tools_misc.update_progress("Fixing mat case sensitivity", i, len(materials_list), spinner_type="arc")
             # Check if the material name contains '_mtl_' and if it is a vanilla material (with only Principled BSDF)
             if __class__.is_material_vanilla(mat):
                 name = mat.name
@@ -569,7 +576,9 @@ class SCOrg_tools_blender():
         Find all materials containing '_glass' (case insensitive) and set their 
         viewport display alpha to 0.3 for partial transparency in the viewport.
         """        
-        for material in tqdm(bpy.data.materials, desc="Setting glass to transparent", unit="material"):
+        materials_list = list(bpy.data.materials)
+        for i, material in enumerate(materials_list):
+            misc_utils.SCOrg_tools_misc.update_progress("Setting glass to transparent", i, len(materials_list), spinner_type="arc")
             if '_glass' in material.name.lower():
                 # Set the viewport display alpha to 0.1 (10% opacity)
                 material.diffuse_color = (*material.diffuse_color[:3], 0.1)
