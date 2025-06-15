@@ -41,7 +41,7 @@ class VIEW3D_OT_load_p4k_button(bpy.types.Operator):
         if globals_and_threading.sc:
             globals_and_threading.clear_vars()
             # Ensure UI reflects cleared state immediately
-            misc_utils.SCOrg_tools_misc.redraw() 
+            misc_utils.SCOrg_tools_misc.force_ui_update() 
 
         # Start the loading in a separate thread
         globals_and_threading._loading_thread = globals_and_threading.LoadP4KThread(prefs.p4k_path, prefs)
@@ -50,7 +50,7 @@ class VIEW3D_OT_load_p4k_button(bpy.types.Operator):
         # Register a timer to periodically check the thread's status and update UI
         bpy.app.timers.register(globals_and_threading.check_load_status, first_interval=globals_and_threading._ui_update_interval, persistent=True)
         
-        self.report({'INFO'}, "Started loading Data.p4k in background...")
+        #self.report({'INFO'}, "Started loading Data.p4k in background...")
         return {'FINISHED'}
 
 class VIEW3D_OT_refresh_button(bpy.types.Operator):
@@ -74,11 +74,11 @@ class VIEW3D_OT_refresh_button(bpy.types.Operator):
             misc_utils.SCOrg_tools_misc.error("Could not find ship record. Ensure a 'base' empty object exists.")
             globals_and_threading.ship_loaded = None # Reset ship_loaded if no record found
             globals_and_threading.button_labels = [] # Clear button labels
-            misc_utils.SCOrg_tools_misc.redraw()
+            misc_utils.SCOrg_tools_misc.force_ui_update()
             return {'CANCELLED'}
 
         tint_utils.SCOrg_tools_tint.update_tints(record)
-        misc_utils.SCOrg_tools_misc.redraw()
+        misc_utils.SCOrg_tools_misc.force_ui_update()
         return {'FINISHED'}
     
 class VIEW3D_OT_import_loadout(bpy.types.Operator):

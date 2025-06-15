@@ -19,7 +19,7 @@ class SCOrg_tools_AddonPreferences(bpy.types.AddonPreferences):
         """
         print("SCOrg.tools: Data.p4k path preference changed. Clearing loaded P4K data.")
         globals_and_threading.clear_vars()
-        misc_utils.SCOrg_tools_misc.redraw()
+        misc_utils.SCOrg_tools_misc.force_ui_update()
 
     p4k_path: StringProperty(
         name="Star Citizen Data.p4k Path",

@@ -208,10 +208,6 @@ class SCOrg_tools_misc():
         except Exception as e:
             print(f"Error in force_ui_update: {e}")
 
-    def redraw():
-        """Legacy redraw method - now calls force_ui_update"""
-        SCOrg_tools_misc.force_ui_update()
-
     def error(message="An error occurred"):
         bpy.context.window_manager.popup_menu(
             lambda self, context: self.layout.label(text=message),
