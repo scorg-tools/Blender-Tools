@@ -356,12 +356,15 @@ class SCOrg_tools_import():
         if not is_top_level and parent_guid:
             hardpoint_mapping = __class__.get_hardpoint_mapping_from_guid(parent_guid) or {}
         
-        # Set initial progress message with arc spinner - force update and short interval
-        misc_utils.SCOrg_tools_misc.update_progress("Importing hardpoints", 0, len(entries), force_update=True, spinner_type="arc", update_interval=0.1)
+        # Only show progress at the top level
+        if is_top_level:
+            misc_utils.SCOrg_tools_misc.update_progress("Importing hardpoints", 0, len(entries), force_update=True, spinner_type="arc", update_interval=0.1)
         
         for i, entry in enumerate(entries):
-            # Update progress MORE frequently - every entry instead of every 5
-            misc_utils.SCOrg_tools_misc.update_progress(f"Importing hardpoint {i+1}/{len(entries)}", i+1, len(entries), spinner_type="arc", update_interval=0.1)
+            # Only update progress at the top level
+            if is_top_level:
+                misc_utils.SCOrg_tools_misc.update_progress(f"Importing hardpoint {i+1}/{len(entries)}", i+1, len(entries), spinner_type="arc", update_interval=0.1)
+            
             blender_utils.SCOrg_tools_blender.update_viewport_with_timer(interval_seconds=1.0)
 
             props = getattr(entry, 'properties', entry)
