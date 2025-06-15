@@ -40,7 +40,7 @@ class SCOrg_tools_import():
                     __class__.item_guid = id
                 return record
             else:
-                misc_utils.SCOrg_tools_misc.error(f"⚠️ Could not find record for GUID: {guid} - are you using the correct Data.p4k?")
+                misc_utils.SCOrg_tools_misc.error(f"⚠️ Could not find record for GUID: {id} - are you using the correct Data.p4k?")
                 return None
         else:
             # Otherwise, try to get by name
@@ -566,7 +566,7 @@ class SCOrg_tools_import():
         bpy.ops.object.select_all(action='DESELECT')
         result = bpy.ops.wm.collada_import(filepath=str(geometry_path))
         if 'FINISHED' not in result:
-            if globals_and_threading.debug: print(f"❌ ERROR: Failed to import DAE for {guid_str}: {geometry_path}")
+            if globals_and_threading.debug: print(f"❌ ERROR: Failed to import DAE for: {geometry_path}")
             return
         
         # Get a set of all objects after import
@@ -664,43 +664,52 @@ class SCOrg_tools_import():
             misc_utils.SCOrg_tools_misc.error("Please load Data.p4k first")
             return None
 
-        # Loop through all materials in the scene
-        materials_list = list(bpy.data.materials)
-        for i, mat in enumerate(materials_list):
-            misc_utils.SCOrg_tools_misc.update_progress("Importing missing materials", i, len(materials_list), spinner_type="arc")
+        # Create a snapshot of materials and their names to avoid reference errors
+        materials_snapshot = [(mat.name, mat) for mat in bpy.data.materials if mat is not None]
+        
+        for i, (mat_name, mat) in enumerate(materials_snapshot):
+            misc_utils.SCOrg_tools_misc.update_progress("Importing missing materials", i, len(materials_snapshot), spinner_type="arc")
+            
+            # Check if material still exists before accessing it
+            if mat.name not in bpy.data.materials:
+                continue
+            
             # Check if the material name contains '_mtl_' and if it is a vanilla material (with only Principled BSDF)
-            if "_mtl_" in mat.name and blender_utils.SCOrg_tools_blender.is_material_vanilla(mat):
-                # Get the filename by removing '_mtl' and adding '.mtl'
-                file_found = False
-                filename = __class__.get_material_filename(mat.name)
-                if not filename in file_cache and filename not in missing_checked:
-                    # if a path is provided, check it fist
-                    if path:
-                        filepath = Path(path) / filename
-                        if filepath.exists():
-                            file_found = True
-
-                    if not file_found:
-                        # If not found in the provided path, search in the p4k for the file
-                        if globals_and_threading.debug: print("searching p4k for material file:", filename)
-                        matches = p4k.search(file_filters=[filename], ignore_case = True, mode='endswith')
-                        if matches:
-                            if globals_and_threading.debug: print("Found material file in p4k:", matches[0].filename.removeprefix("Data/"))
-                            filepath = __class__.extract_dir / matches[0].filename.removeprefix("Data/")
+            try:
+                if "_mtl_" in mat.name and blender_utils.SCOrg_tools_blender.is_material_vanilla(mat):
+                    # Get the filename by removing '_mtl' and adding '.mtl'
+                    file_found = False
+                    filename = __class__.get_material_filename(mat.name)
+                    if not filename in file_cache and filename not in missing_checked:
+                        # if a path is provided, check it first
+                        if path:
+                            filepath = Path(path) / filename
                             if filepath.exists():
                                 file_found = True
-                                file_cache[filename] = filepath
-                                if globals_and_threading.debug: print(f"DEBUG: Extracted Material file found: {filepath}")
-                                # Check for Material01 or Tintable_01 type materials and remap:
-                                blender_utils.SCOrg_tools_blender.fix_unmapped_materials(str(filepath))
-                            else:
-                                if globals_and_threading.debug: print(f"⚠️ ERROR: Extracted material file expected: {filepath} not found, please extract it with StarFab, under Data -> Data.p4k")
-                                if str(filepath) not in __class__.missing_files:
-                                    __class__.missing_files.append(str(filepath))
-                                missing_checked.append(filename)
-        if globals_and_threading.debug: print(f"DEBUG: Material file search completed, found {len(file_cache)} files")
-        if globals_and_threading.debug: print(file_cache)
 
+                        if not file_found:
+                            # If not found in the provided path, search in the p4k for the file
+                            if globals_and_threading.debug: print("searching p4k for material file:", filename)
+                            matches = p4k.search(file_filters=[filename], ignore_case = True, mode='endswith')
+                            if matches:
+                                if globals_and_threading.debug: print("Found material file in p4k:", matches[0].filename.removeprefix("Data/"))
+                                filepath = __class__.extract_dir / matches[0].filename.removeprefix("Data/")
+                                if filepath.exists():
+                                    file_found = True
+                                    file_cache[filename] = filepath
+                                    if globals_and_threading.debug: print(f"DEBUG: Extracted Material file found: {filepath}")
+                                    # Check for Material01 or Tintable_01 type materials and remap:
+                                    blender_utils.SCOrg_tools_blender.fix_unmapped_materials(str(filepath))
+                                else:
+                                    if globals_and_threading.debug: print(f"⚠️ ERROR: Extracted material file expected: {filepath} not found, please extract it with StarFab, under Data -> Data.p4k")
+                                    if str(filepath) not in __class__.missing_files:
+                                        __class__.missing_files.append(str(filepath))
+                                    missing_checked.append(filename)
+            except ReferenceError:
+                # Material was removed during iteration, skip it
+                if globals_and_threading.debug: print(f"DEBUG: Material {mat_name} was removed during processing, skipping")
+                continue
+            
         # Make sure the tint group is initialised, pass the item_name
         record = misc_utils.SCOrg_tools_misc.get_ship_record(skip_error=True)
         if not record and __class__.item_guid:
