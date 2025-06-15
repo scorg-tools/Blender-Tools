@@ -702,7 +702,7 @@ class SCOrg_tools_import():
         if globals_and_threading.debug: print(file_cache)
 
         # Make sure the tint group is initialised, pass the item_name
-        record = misc_utils.SCOrg_tools_misc.get_ship_record()
+        record = misc_utils.SCOrg_tools_misc.get_ship_record(skip_error=True)
         if not record and __class__.item_guid:
             record = __class__.get_record(__class__.item_guid)
         if record:

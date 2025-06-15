@@ -106,7 +106,7 @@ def check_load_status():
                 bpy.app.timers.unregister(check_load_status)
             _loading_thread = None # Clear the reference to the finished thread
             # force an update of the ship record as it's likely the next action
-            misc_utils.SCOrg_tools_misc.get_ship_record()
+            misc_utils.SCOrg_tools_misc.get_ship_record(skip_error=True)
             return None # Return None to unregister the timer
     return None # If context is not available, stop the timer
 
