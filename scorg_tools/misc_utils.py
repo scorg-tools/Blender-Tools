@@ -179,23 +179,31 @@ class SCOrg_tools_misc():
     def force_ui_update():
         """Force UI update using more aggressive methods to ensure visibility"""
         try:
-            # Method 1: Tag ALL areas for redraw (not just specific ones)
-            for window in bpy.context.window_manager.windows:
-                for area in window.screen.areas:
-                    area.tag_redraw()
+            # Suppress console output during redraw operations to avoid warnings
+            import sys
+            import os
+            from contextlib import redirect_stdout, redirect_stderr
             
-            # Method 2: Force immediate UI redraw specifically for UI regions
-            for window in bpy.context.window_manager.windows:
-                for area in window.screen.areas:
-                    for region in area.regions:
-                        region.tag_redraw()
-            
-            # Method 3: Force redraw timer - this is what actually makes it visible
-            bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
-            
-            # Method 4: Update depsgraph
-            if hasattr(bpy.context, 'view_layer'):
-                bpy.context.view_layer.update()
+            # Temporarily redirect both stdout and stderr to suppress warnings
+            with open(os.devnull, 'w') as devnull:
+                with redirect_stdout(devnull), redirect_stderr(devnull):
+                    # Method 1: Tag ALL areas for redraw (not just specific ones)
+                    for window in bpy.context.window_manager.windows:
+                        for area in window.screen.areas:
+                            area.tag_redraw()
+                    
+                    # Method 2: Force immediate UI redraw specifically for UI regions
+                    for window in bpy.context.window_manager.windows:
+                        for area in window.screen.areas:
+                            for region in area.regions:
+                                region.tag_redraw()
+                    
+                    # Method 3: Force redraw timer - this is what actually makes it visible
+                    bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
+                    
+                    # Method 4: Update depsgraph
+                    if hasattr(bpy.context, 'view_layer'):
+                        bpy.context.view_layer.update()
             
         except Exception as e:
             print(f"Error in force_ui_update: {e}")

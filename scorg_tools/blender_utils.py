@@ -30,14 +30,22 @@ class SCOrg_tools_blender():
                 print(f"DEBUG: {interval_seconds} seconds elapsed, forcing screen redraw")
             
             try:
-                # Force Blender to update the viewport - restore the original functionality
-                bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
+                # Suppress console output during redraw operations to avoid warnings
+                import sys
+                import os
+                from contextlib import redirect_stdout, redirect_stderr
                 
-                # Also tag areas for redraw
-                for window in bpy.context.window_manager.windows:
-                    for area in window.screen.areas:
-                        if area.type == 'VIEW_3D':
-                            area.tag_redraw()
+                # Temporarily redirect both stdout and stderr to suppress warnings
+                with open(os.devnull, 'w') as devnull:
+                    with redirect_stdout(devnull), redirect_stderr(devnull):
+                        # Force Blender to update the viewport
+                        bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
+                        
+                        # Also tag areas for redraw
+                        for window in bpy.context.window_manager.windows:
+                            for area in window.screen.areas:
+                                if area.type == 'VIEW_3D':
+                                    area.tag_redraw()
                 
             except Exception as e:
                 if globals_and_threading.debug:
