@@ -309,7 +309,8 @@ class SCOrg_tools_blender():
             slots_to_remove = []
             for i, slot in enumerate(obj.material_slots):
                 mat = slot.material
-                if mat and (mat.name.endswith('_mtl_proxy') or mat.name.endswith('_NoDraw')):
+                mat_name = mat.name.lower() if mat else ""
+                if mat and (mat_name=='_mtl_proxy' or mat_name=='_nodraw' or mat_name=='_physics_proxy'):
                     # Enter edit mode to delete geometry assigned to this material
                     bpy.context.view_layer.objects.active = obj
                     bpy.ops.object.mode_set(mode='EDIT')
@@ -394,9 +395,17 @@ class SCOrg_tools_blender():
         # Regex pattern to detect material names like "Material.001"
         suffix_pattern = re.compile(r"(.*)\.(\d{3})$")
 
-        materials_list = list(bpy.data.materials)
-        for i, mat in enumerate(materials_list):
-            misc_utils.SCOrg_tools_misc.update_progress("Remapping .001 materials", i, len(materials_list), spinner_type="arc")
+        # Get a list of material names instead of material objects
+        material_names = list(bpy.data.materials.keys())
+        
+        for i, mat_name in enumerate(material_names):
+            misc_utils.SCOrg_tools_misc.update_progress("Remapping .001 materials", i, len(material_names), spinner_type="arc")
+            
+            # Get fresh reference to the material
+            mat = bpy.data.materials.get(mat_name)
+            if mat is None:
+                continue
+                
             match = suffix_pattern.match(mat.name)
             if not match:
                 continue
@@ -511,7 +520,16 @@ class SCOrg_tools_blender():
             if globals_and_threading.debug: print("Error: Could not parse .mtl file or file is empty.")
             return
 
-        for mat in bpy.data.materials:
+        # Get a list of material names instead of material objects
+        material_names = list(bpy.data.materials.keys())
+        
+        for i, mat_name in enumerate(material_names):
+            #misc_utils.SCOrg_tools_misc.update_progress("Fixing unmapped materials", i, len(material_names), spinner_type="arc")
+            # Get fresh reference to the material
+            mat = bpy.data.materials.get(mat_name)
+            if mat is None:
+                continue
+                
             prefix, material_type, number = __class__.parse_unmapped_material_string(mat.name)
 
             if prefix and material_type and number:
@@ -530,7 +548,7 @@ class SCOrg_tools_blender():
                         # No material with the same name exists, rename the material
                         if globals_and_threading.debug: print(f"Renaming material '{mat.name}' to '{correct_name}'")
                         mat.name = correct_name
-    
+
     def remap_material(from_mat_name, to_mat_name, delete_old=False):
         """
         Remaps all users of a material from one name to another.
@@ -563,9 +581,17 @@ class SCOrg_tools_blender():
         """
         Fixes materials that have been imported due to different case in names.
         """
-        materials_list = list(bpy.data.materials)
-        for i, mat in enumerate(materials_list):
-            misc_utils.SCOrg_tools_misc.update_progress("Fixing mat case sensitivity", i, len(materials_list), spinner_type="arc")
+        # Get a list of material names instead of material objects
+        material_names = list(bpy.data.materials.keys())
+        
+        for i, mat_name in enumerate(material_names):
+            misc_utils.SCOrg_tools_misc.update_progress("Fixing mat case sensitivity", i, len(material_names), spinner_type="arc")
+            
+            # Get fresh reference to the material
+            mat = bpy.data.materials.get(mat_name)
+            if mat is None:
+                continue
+                
             # Check if the material name contains '_mtl_' and if it is a vanilla material (with only Principled BSDF)
             if __class__.is_material_vanilla(mat):
                 name = mat.name
@@ -584,9 +610,17 @@ class SCOrg_tools_blender():
         Find all materials containing '_glass' (case insensitive) and set their 
         viewport display alpha to 0.3 for partial transparency in the viewport.
         """        
-        materials_list = list(bpy.data.materials)
-        for i, material in enumerate(materials_list):
-            misc_utils.SCOrg_tools_misc.update_progress("Setting glass to transparent", i, len(materials_list), spinner_type="arc")
+        # Get a list of material names instead of material objects
+        material_names = list(bpy.data.materials.keys())
+        
+        for i, mat_name in enumerate(material_names):
+            misc_utils.SCOrg_tools_misc.update_progress("Setting glass to transparent", i, len(material_names), spinner_type="arc")
+            
+            # Get fresh reference to the material
+            material = bpy.data.materials.get(mat_name)
+            if material is None:
+                continue
+                
             if '_glass' in material.name.lower():
                 # Set the viewport display alpha to 0.1 (10% opacity)
                 material.diffuse_color = (*material.diffuse_color[:3], 0.1)

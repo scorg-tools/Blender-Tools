@@ -664,14 +664,15 @@ class SCOrg_tools_import():
             misc_utils.SCOrg_tools_misc.error("Please load Data.p4k first")
             return None
 
-        # Create a snapshot of materials and their names to avoid reference errors
-        materials_snapshot = [(mat.name, mat) for mat in bpy.data.materials if mat is not None]
+        # Get a list of material names instead of material objects
+        material_names = list(bpy.data.materials.keys())
         
-        for i, (mat_name, mat) in enumerate(materials_snapshot):
-            misc_utils.SCOrg_tools_misc.update_progress("Importing missing materials", i, len(materials_snapshot), spinner_type="arc")
+        for i, mat_name in enumerate(material_names):
+            misc_utils.SCOrg_tools_misc.update_progress("Importing missing materials", i, len(material_names), spinner_type="arc")
             
-            # Check if material still exists before accessing it
-            if mat.name not in bpy.data.materials:
+            # Get fresh reference to the material
+            mat = bpy.data.materials.get(mat_name)
+            if mat is None:
                 continue
             
             # Check if the material name contains '_mtl_' and if it is a vanilla material (with only Principled BSDF)
