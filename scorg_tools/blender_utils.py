@@ -305,30 +305,55 @@ class SCOrg_tools_blender():
             misc_utils.SCOrg_tools_misc.update_progress("Removing proxy material geometry", i, len(objects_list), spinner_type="arc")
             if obj.type != 'MESH':
                 continue
-            # Find all slots with a _mtl_proxy material
+            
+            # Find all slots with proxy materials
             slots_to_remove = []
-            for i, slot in enumerate(obj.material_slots):
+            for slot_idx, slot in enumerate(obj.material_slots):
                 mat = slot.material
-                mat_name = mat.name.lower() if mat else ""
-                if mat and (mat_name=='_mtl_proxy' or mat_name=='_nodraw' or mat_name=='_physics_proxy'):
-                    # Enter edit mode to delete geometry assigned to this material
-                    bpy.context.view_layer.objects.active = obj
-                    bpy.ops.object.mode_set(mode='EDIT')
-                    bpy.ops.mesh.select_all(action='DESELECT')
-                    bpy.ops.object.mode_set(mode='OBJECT')
-                    # Select faces with this material index
-                    for poly in obj.data.polygons:
-                        if poly.material_index == i:
-                            poly.select = True
-                    bpy.ops.object.mode_set(mode='EDIT')
-                    bpy.ops.mesh.delete(type='FACE')
-                    bpy.ops.object.mode_set(mode='OBJECT')
-                    slots_to_remove.append(i)
-            # Remove material slots (do in reverse order to avoid index shift)
-            for i in sorted(slots_to_remove, reverse=True):
-                obj.active_material_index = i
-                bpy.ops.object.material_slot_remove()
-    
+                if mat:
+                    mat_name_lower = mat.name.lower()
+                    if (mat_name_lower.endswith('_mtl_proxy') or 
+                        mat_name_lower.endswith('_nodraw') or 
+                        mat_name_lower.endswith('_physics_proxy')):
+                        
+                        # Set this object as active and enter edit mode
+                        bpy.context.view_layer.objects.active = obj
+                        bpy.ops.object.mode_set(mode='OBJECT')
+                        
+                        # Deselect all faces first
+                        for poly in obj.data.polygons:
+                            poly.select = False
+                        
+                        # Select faces that use this material
+                        faces_selected = 0
+                        for poly in obj.data.polygons:
+                            if poly.material_index == slot_idx:
+                                poly.select = True
+                                faces_selected += 1
+                        
+                        if faces_selected > 0:
+                            if globals_and_threading.debug: 
+                                print(f"DEBUG: Removing {faces_selected} faces with material '{mat.name}' from object '{obj.name}'")
+                            
+                            # Enter edit mode and delete selected faces
+                            bpy.ops.object.mode_set(mode='EDIT')
+                            bpy.ops.mesh.delete(type='FACE')
+                            bpy.ops.object.mode_set(mode='OBJECT')
+                            
+                            # Mark this slot for removal
+                            slots_to_remove.append(slot_idx)
+                        else:
+                            if globals_and_threading.debug:
+                                print(f"DEBUG: No faces found for material '{mat.name}' in object '{obj.name}'")
+            
+            # Remove material slots (in reverse order to avoid index shifting)
+            for slot_idx in sorted(slots_to_remove, reverse=True):
+                if slot_idx < len(obj.material_slots):  # Safety check
+                    obj.active_material_index = slot_idx
+                    bpy.ops.object.material_slot_remove()
+                    if globals_and_threading.debug:
+                        print(f"DEBUG: Removed material slot {slot_idx} from object '{obj.name}'")
+
     def convert_bones_to_empties(armature_obj):
         if globals_and_threading.debug: print(f"DEBUG: Converting bones to empties for armature: {armature_obj.name}")
         bpy.ops.object.mode_set(mode='OBJECT')
