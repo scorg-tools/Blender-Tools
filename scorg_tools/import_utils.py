@@ -213,32 +213,114 @@ class SCOrg_tools_import():
                 )
     
     def get_all_empties_blueprint():
-        # find all objects that are empties and have no children
-        empty_hardpoints = [
+        # First find the base container empty
+        base_empty = None
+        for obj in bpy.data.objects:
+            if obj.type == 'EMPTY' and 'container_name' in obj and obj['container_name'] == 'base':
+                base_empty = obj
+                break
+        
+        if not base_empty:
+            if globals_and_threading.debug: print("WARNING: No base container empty found, using all empties")
+            # Fallback to original behavior if no base found
+            return [
+                obj for obj in bpy.data.objects
+                if obj.type == 'EMPTY' and len(obj.children) == 0
+            ]
+        
+        if globals_and_threading.debug: print(f"DEBUG: Found base container: {base_empty.name}")
+        
+        def is_descendant_of(obj, ancestor):
+            """Check if obj is a descendant (child, grandchild, etc.) of ancestor"""
+            current = obj.parent
+            while current:
+                if current == ancestor:
+                    return True
+                current = current.parent
+            return False
+        
+        def normalize_hardpoint_name(name):
+            """Strip GUID prefixes and .001 suffixes to get base name"""
+            if not name:
+                return ""
+            
+            # Remove GUID prefix (6-char hex + underscore)
+            guid_pattern = r"^[a-f0-9]{6}_(.+)$"
+            match = re.match(guid_pattern, name, re.IGNORECASE)
+            if match:
+                name = match.group(1)
+            
+            # Remove .001 suffixes
+            name = re.sub(r'\.\d+$', '', name)
+            return name.lower()  # Convert to lowercase for consistent comparison
+        
+        def has_mesh_children(obj):
+            """Check if object has any mesh children (recursively)"""
+            for child in obj.children:
+                if child.type == 'MESH':
+                    return True
+                if has_mesh_children(child): # Check recursively
+                    return True
+            return False
+        
+        # Get all empties that are descendants of the base container
+        base_descendants = [
             obj for obj in bpy.data.objects
-            if obj.type == 'EMPTY'
-            and len(obj.children)==0
+            if obj.type == 'EMPTY' and (obj == base_empty or is_descendant_of(obj, base_empty))
         ]
-        # find all objects that are empties and have children
-        filled_hardpoints = [
-            obj for obj in bpy.data.objects
-            if obj.type == 'EMPTY'
-            and len(obj.children)>0
-        ]
-        # find all objects that are empties and have an orig_name key
-        original_hardpoints = [
-            obj for obj in bpy.data.objects
-            if obj.type == 'EMPTY'
-            and 'orig_name' in obj.keys()
-            and len(obj.children)==0
-        ]
-        empty_names = [obj.name for obj in empty_hardpoints]
-        filled_names = [obj.name for obj in filled_hardpoints]
-        for obj in original_hardpoints:
-            # add objects to empty_hardpoints unles the orig_name matches the name of an existing hardpoint
-            # or the orig_name matches the name of an existing filled hardpoint
-            if obj['orig_name'] not in empty_names and obj['orig_name'] not in filled_names:
-                empty_hardpoints.append(obj)
+        
+        if globals_and_threading.debug: print(f"DEBUG: Found {len(base_descendants)} total empties under base container")
+        
+        # Build a map of normalized names to empties with geometry
+        filled_hardpoint_names = {}
+        for obj in base_descendants:
+            if has_mesh_children(obj):
+                # This empty has geometry - check both name and orig_name
+                names_to_check = [obj.name]
+                if 'orig_name' in obj:
+                    names_to_check.append(obj['orig_name'])
+                
+                for name_to_check in names_to_check:
+                    normalized_name = normalize_hardpoint_name(name_to_check)
+                    if normalized_name:
+                        if normalized_name not in filled_hardpoint_names:
+                            filled_hardpoint_names[normalized_name] = []
+                        filled_hardpoint_names[normalized_name].append(obj)
+        
+        if globals_and_threading.debug: 
+            print(f"DEBUG: Found {len(filled_hardpoint_names)} hardpoint types already filled:")
+            for name, objs in filled_hardpoint_names.items():
+                print(f"  '{name}': {len(objs)} objects - {[obj.name for obj in objs[:3]]}{'...' if len(objs) > 3 else ''}")
+        
+        # Find empty hardpoints, excluding those that have variants with geometry
+        empty_hardpoints = []
+        skipped_count = 0
+        
+        for obj in base_descendants:
+            if len(obj.children) == 0:  # Empty hardpoint
+                # Check both name and orig_name
+                names_to_check = [obj.name]
+                if 'orig_name' in obj:
+                    names_to_check.append(obj['orig_name'])
+                
+                is_already_filled = False
+                for name in names_to_check:
+                    normalized = normalize_hardpoint_name(name)
+                    if normalized and normalized in filled_hardpoint_names:
+                        is_already_filled = True
+                        if globals_and_threading.debug:
+                            filled_examples = [filled_obj.name for filled_obj in filled_hardpoint_names[normalized][:2]]
+                            print(f"DEBUG: Skipping empty '{obj.name}' (orig_name: '{obj.get('orig_name', 'None')}') - normalized name '{normalized}' already filled by: {filled_examples}")
+                        break
+                
+                if not is_already_filled:
+                    empty_hardpoints.append(obj)
+                else:
+                    skipped_count += 1
+        
+        if globals_and_threading.debug: 
+            print(f"DEBUG: Filtered to {len(empty_hardpoints)} empty hardpoints (skipped {skipped_count} already filled)")
+        
         return empty_hardpoints
     
     def get_geometry_path_by_guid(guid):

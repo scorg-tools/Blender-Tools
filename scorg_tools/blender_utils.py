@@ -189,7 +189,6 @@ class SCOrg_tools_blender():
                     
     def fix_modifiers(displacement_strength=0.005):
         __class__.add_weld_and_weighted_normal_modifiers()
-        
         __class__.update_viewport_with_timer(redraw_now=True)
         __class__.add_displace_modifiers_for_pom_and_decal(displacement_strength)
         __class__.update_viewport_with_timer(redraw_now=True)
