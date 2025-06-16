@@ -1,7 +1,7 @@
 bl_info = {
     "name": "SCOrg.tools Blender Tools alpha",
     "author": "Star-Destroyer@scorg.tools",
-    "version": (1, 0, 22),
+    "version": (1, 0, 23),
     "blender": (3, 6, 0),
     "location": "View3D > Sidebar > SCOrg.tools",
     "description": "Tools to supplement StarFab",
@@ -153,6 +153,16 @@ def register():
             bpy.utils.register_class(cls)
         except Exception as e:
             print(f"Error registering class {cls.__name__}: {e}")
+
+    # Initialize debug mode from preferences
+    try:
+        prefs = bpy.context.preferences.addons[__package__].preferences
+        globals_and_threading.debug = prefs.debug_mode
+        status = "enabled" if prefs.debug_mode else "disabled"
+        print(f"SCOrg.tools: Debug mode initialized - {status}")
+    except Exception as e:
+        print(f"SCOrg.tools: Could not initialize debug mode from preferences: {e}")
+        globals_and_threading.debug = False
 
     print("Attempting to register SCOrg_tools panel with deferred parenting...")
     # Register the timer for the delayed panel registration.

@@ -1,6 +1,6 @@
 # preferences.py
 import bpy
-from bpy.props import StringProperty, FloatProperty
+from bpy.props import StringProperty, FloatProperty, BoolProperty
 from bpy_extras.io_utils import ExportHelper # Needed for file browser
 from pathlib import Path # Needed for path validation
 
@@ -20,6 +20,16 @@ class SCOrg_tools_AddonPreferences(bpy.types.AddonPreferences):
         print("SCOrg.tools: Data.p4k path preference changed. Clearing loaded P4K data.")
         globals_and_threading.clear_vars()
         misc_utils.SCOrg_tools_misc.force_ui_update()
+
+    # --- Update Callback for debug_mode ---
+    def update_debug_mode_callback(self, context):
+        """
+        Callback function executed when the debug_mode preference is changed.
+        Updates the global debug setting.
+        """
+        globals_and_threading.debug = self.debug_mode
+        status = "enabled" if self.debug_mode else "disabled"
+        print(f"SCOrg.tools: Debug mode {status}")
 
     p4k_path: StringProperty(
         name="Star Citizen Data.p4k Path",
@@ -48,9 +58,21 @@ class SCOrg_tools_AddonPreferences(bpy.types.AddonPreferences):
         default=""
     )
 
+    debug_mode: BoolProperty(
+        name="Enable Debug Mode",
+        description="Enable debug output to console for troubleshooting",
+        default=False,
+        update=update_debug_mode_callback
+    )
+
     def draw(self, context):
         layout = self.layout
         layout.label(text="SCOrg.tools Settings")
+        
+        # Debug mode checkbox
+        layout.prop(self, "debug_mode")
+        layout.separator()
+        
         layout.label(text=f"Current P4K: {self.p4k_path}")
         layout.operator("scorg_tools.select_p4k", text="Select .p4k File")
 
