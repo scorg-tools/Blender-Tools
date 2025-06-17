@@ -1,6 +1,7 @@
 import bpy
 import threading
 import time
+from pathlib import Path
 from scdatatools.sc import StarCitizen
 from scdatatools.sc.localization import SCLocalization
 from . import misc_utils
@@ -37,7 +38,6 @@ def p4k_load_monitor(msg, progress, total):
     if current_time - _last_ui_update_time > _ui_update_interval or percentage == 0.0 or percentage >= 99.9:
         _last_ui_update_time = current_time
 
-
 class LoadP4KThread(threading.Thread):
     def __init__(self, p4k_path, addon_prefs):
         threading.Thread.__init__(self)
@@ -45,14 +45,20 @@ class LoadP4KThread(threading.Thread):
         self.addon_prefs = addon_prefs
         self.success = False
         self.error_message = ""
-        self.current_message = "" # New attribute to store message from monitor
-        self.current_progress = 0.0 # New attribute to store progress from monitor
+        self.current_message = "" # message from progress monitor
+        self.current_progress = 0.0 # progress from monitor
 
     def run(self):
         global dcb, p4k, localizer, sc
         try:
-            # The actual blocking call to load StarCitizen
-            sc = StarCitizen(self.p4k_path, p4k_load_monitor=p4k_load_monitor)
+            # Set the p4k cache directory to cache in the parent of the extract directory
+            cache_dir = Path(self.addon_prefs.extract_dir).parent / "p4k_cache"
+            # if the cache_dir is not none and it doesn't exist, create it
+            if cache_dir and not cache_dir.exists():
+                cache_dir.mkdir(parents=True, exist_ok=True)
+
+            # Initialize StarCitizen class with the provided path and cache directory
+            sc = StarCitizen(self.p4k_path, p4k_load_monitor=p4k_load_monitor, cache_dir=str(cache_dir))
             dcb = sc.datacore
             p4k = sc.p4k
             localizer = sc.localization
