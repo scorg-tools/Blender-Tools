@@ -42,7 +42,7 @@ class SCOrg_tools_AddonPreferences(bpy.types.AddonPreferences):
     extract_dir: StringProperty(
         name="Extracted Data Directory",
         subtype='DIR_PATH',
-        description="Directory where StarFab extracts game data (e.g., C:\\StarFab\\extracted_data)"
+        description="Directory where StarFab extracts game data (e.g., C:\\StarFab\\extracted_data\\Data)"
     )
 
     # Properties for displaying P4K load progress and messages
