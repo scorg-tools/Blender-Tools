@@ -749,8 +749,15 @@ class SCOrg_tools_import():
         # Get a list of material names instead of material objects
         material_names = list(bpy.data.materials.keys())
         
+        # Phase 1: Collect all material filenames that need to be searched
+        misc_utils.SCOrg_tools_misc.update_progress("Analyzing materials", 0, len(material_names), spinner_type="arc")
+        
+        filenames_to_search = set()
+        materials_needing_files = []
+        
         for i, mat_name in enumerate(material_names):
-            misc_utils.SCOrg_tools_misc.update_progress("Importing missing materials", i, len(material_names), spinner_type="arc")
+            if i % 10 == 0:  # Update progress every 10 materials
+                misc_utils.SCOrg_tools_misc.update_progress("Analyzing materials", i, len(material_names), spinner_type="arc")
             
             # Get fresh reference to the material
             mat = bpy.data.materials.get(mat_name)
@@ -760,34 +767,78 @@ class SCOrg_tools_import():
             # Check if the material name contains '_mtl_' and if it is a vanilla material (with only Principled BSDF)
             try:
                 if "_mtl_" in mat.name and blender_utils.SCOrg_tools_blender.is_material_vanilla(mat):
-                    # Get the filename by removing '_mtl' and adding '.mtl'
-                    file_found = False
                     filename = __class__.get_material_filename(mat.name)
-                    if not filename in file_cache and filename not in missing_checked:
-                        # if a path is provided, check it first
+                    
+                    # Check if we already have this file or have checked it
+                    if filename not in file_cache and filename not in missing_checked:
+                        # Check local path first if provided
+                        file_found_locally = False
                         if path:
                             filepath = Path(path) / filename
                             if filepath.exists():
-                                file_found = True
-
-                        if not file_found:
-                            # If not found in the provided path, search in the p4k for the file
-                            if globals_and_threading.debug: print("searching p4k for material file:", filename)
-                            matches = p4k.search(file_filters=[filename], ignore_case = True, mode='endswith')
-                            if matches:
-                                if globals_and_threading.debug: print("Found material file in p4k:", matches[0].filename.removeprefix("Data/"))
-                                filepath = __class__.extract_dir / matches[0].filename.removeprefix("Data/")
-                                if filepath.exists():
-                                    file_found = True
-                                    file_cache[filename] = filepath
-                                    if globals_and_threading.debug: print(f"DEBUG: Extracted Material file found: {filepath}")
-                                    # Check for Material01 or Tintable_01 type materials and remap:
-                                    blender_utils.SCOrg_tools_blender.fix_unmapped_materials(str(filepath))
-                                else:
-                                    if globals_and_threading.debug: print(f"⚠️ ERROR: Extracted material file expected: {filepath} not found, please extract it with StarFab, under Data -> Data.p4k")
-                                    if str(filepath) not in __class__.missing_files:
-                                        __class__.missing_files.append(str(filepath))
-                                    missing_checked.append(filename)
+                                file_cache[filename] = filepath
+                                file_found_locally = True
+                        
+                        # If not found locally, add to search list
+                        if not file_found_locally:
+                            filenames_to_search.add(filename)
+                            materials_needing_files.append((mat_name, filename))
+                            
+            except ReferenceError:
+                # Material was removed during iteration, skip it
+                if globals_and_threading.debug: print(f"DEBUG: Material {mat_name} was removed during processing, skipping")
+                continue
+        
+        # Phase 2: Bulk search for all material files at once
+        if filenames_to_search:
+            misc_utils.SCOrg_tools_misc.update_progress("Searching p4k files", 0, 1, spinner_type="arc")
+            
+            if globals_and_threading.debug: print(f"Bulk searching p4k for {len(filenames_to_search)} material files")
+            
+            # Perform single bulk search for all filenames
+            matches = p4k.search(file_filters=list(filenames_to_search), ignore_case=True, mode='endswith')
+            
+            # Build lookup dictionary for fast access
+            p4k_file_lookup = {}
+            for match in matches:
+                filename = Path(match.filename).name
+                p4k_file_lookup[filename] = match
+            
+            if globals_and_threading.debug: print(f"Found {len(matches)} material files in p4k")
+        else:
+            p4k_file_lookup = {}
+        
+        # Phase 3: Process the materials with found files
+        misc_utils.SCOrg_tools_misc.update_progress("Processing materials", 0, len(materials_needing_files), spinner_type="arc")
+        
+        for i, (mat_name, filename) in enumerate(materials_needing_files):
+            misc_utils.SCOrg_tools_misc.update_progress("Processing materials", i, len(materials_needing_files), spinner_type="arc")
+            
+            # Get fresh reference to the material (in case it was deleted)
+            mat = bpy.data.materials.get(mat_name)
+            if mat is None:
+                continue
+                
+            try:
+                if filename in p4k_file_lookup:
+                    match = p4k_file_lookup[filename]
+                    if globals_and_threading.debug: print("Found material file in p4k:", match.filename.removeprefix("Data/"))
+                    filepath = __class__.extract_dir / match.filename.removeprefix("Data/")
+                    if filepath.exists():
+                        file_cache[filename] = filepath
+                        if globals_and_threading.debug: print(f"DEBUG: Extracted Material file found: {filepath}")
+                        # Check for Material01 or Tintable_01 type materials and remap:
+                        blender_utils.SCOrg_tools_blender.fix_unmapped_materials(str(filepath))
+                    else:
+                        if globals_and_threading.debug: print(f"⚠️ ERROR: Extracted material file expected: {filepath} not found, please extract it with StarFab, under Data -> Data.p4k")
+                        if str(filepath) not in __class__.missing_files:
+                            __class__.missing_files.append(str(filepath))
+                        missing_checked.append(filename)
+                else:
+                    # File not found in p4k
+                    missing_checked.append(filename)
+                    if globals_and_threading.debug: print(f"Material file not found in p4k: {filename}")
+                    
             except ReferenceError:
                 # Material was removed during iteration, skip it
                 if globals_and_threading.debug: print(f"DEBUG: Material {mat_name} was removed during processing, skipping")
