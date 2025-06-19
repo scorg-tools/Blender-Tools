@@ -15,6 +15,7 @@ import bpy
 import os
 import sys
 
+# TODO: Import multiple materials where the filename is the same but with two different paths
 # TODO: Set the tint palette guid on the root object when importing, and read it back when refreshing the ship
 # TODO: find already imported non-ship items
 # TODO: add the custom properties to the root object when importing for all sub-objects
