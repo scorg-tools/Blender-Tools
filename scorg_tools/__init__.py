@@ -1,7 +1,7 @@
 bl_info = {
     "name": "SCOrg.tools Blender Tools alpha",
     "author": "Star-Destroyer@scorg.tools",
-    "version": (1, 0, 23),
+    "version": (1, 0, 24),
     "blender": (3, 6, 0),
     "location": "View3D > Sidebar > SCOrg.tools",
     "description": "Tools to supplement StarFab",
@@ -15,6 +15,10 @@ import bpy
 import os
 import sys
 
+# TODO: fix tints:
+#       + don't add tint group every time, only if it doesn't exist
+#       + dont add UID to the tint group name if it already has it
+#       - Make Decals, POM and Stencils not cast shadows
 # TODO: Import multiple materials where the filename is the same but with two different paths
 # TODO: Set the tint palette guid on the root object when importing, and read it back when refreshing the ship
 # TODO: find already imported non-ship items
