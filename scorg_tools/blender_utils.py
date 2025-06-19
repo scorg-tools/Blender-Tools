@@ -416,41 +416,70 @@ class SCOrg_tools_blender():
         return None
 
     def remap_material_users():
-        # Regex pattern to detect material names like "Material.001"
-        suffix_pattern = re.compile(r"(.*)\.(\d{3})$")
-
-        # Get a list of material names instead of material objects
-        material_names = list(bpy.data.materials.keys())
+        # Regex pattern to detect material names with numeric suffixes
+        suffix_pattern = re.compile(r"^(.+)\.(\d{3})$")
         
-        for i, mat_name in enumerate(material_names):
-            misc_utils.SCOrg_tools_misc.update_progress("Remapping .001 materials", i, len(material_names), spinner_type="arc")
-            
-            # Get fresh reference to the material
-            mat = bpy.data.materials.get(mat_name)
-            if mat is None:
-                continue
-                
+        # Pre-build mapping of duplicate materials to their base versions
+        material_mapping = {}
+        materials_to_remove = []
+        
+        for mat in bpy.data.materials:
             match = suffix_pattern.match(mat.name)
-            if not match:
+            if match:
+                base_name = match.group(1)
+                base_material = bpy.data.materials.get(base_name)
+                if base_material:
+                    material_mapping[mat] = base_material
+                    materials_to_remove.append(mat)
+        
+        # Early exit if no duplicates found
+        if not material_mapping:
+            return
+        
+        # Pre-filter to only mesh objects with materials and create material usage map
+        object_material_map = {}
+        for obj in bpy.data.objects:
+            if obj.type == 'MESH' and obj.material_slots:
+                materials_used = set()
+                for slot in obj.material_slots:
+                    if slot.material and slot.material in material_mapping:
+                        materials_used.add(slot.material)
+                if materials_used:  # Only include objects that actually use duplicate materials
+                    object_material_map[obj] = materials_used
+        
+        # Early exit if no objects use duplicate materials
+        if not object_material_map:
+            # Clean up unused duplicate materials
+            for mat in materials_to_remove:
+                if mat.users == 0:
+                    bpy.data.materials.remove(mat)
+            return
+        
+        # Batch process material reassignments
+        mapping_items = list(material_mapping.items())
+        for i, (duplicate_mat, original_mat) in enumerate(mapping_items):
+            misc_utils.SCOrg_tools_misc.update_progress("Remapping .001 materials", i, len(mapping_items), spinner_type="arc")
+            
+            # Only process if the duplicate material still exists
+            if duplicate_mat.name not in bpy.data.materials:
                 continue
-
-            original = __class__.get_original_material(mat.name)
-            if original is None:
-                continue
-
-            # Reassign users
-            for obj in bpy.data.objects:
-                if obj.type == 'MESH':
-                    for i, slot in enumerate(obj.material_slots):
-                        if slot.material == mat:
-                            slot.material = original
-                            if globals_and_threading.debug: print(f"Reassigned material on {obj.name} slot {i} from {mat.name} to {original.name}")
-
-            # Remove the duplicate material if no users left
-            if mat.users == 0:
-                if globals_and_threading.debug: print(f"Removing unused material: {mat.name}")
+            
+            # Only process objects that use this specific duplicate material
+            for obj, used_materials in object_material_map.items():
+                if duplicate_mat in used_materials:
+                    for slot in obj.material_slots:
+                        if slot.material == duplicate_mat:
+                            slot.material = original_mat
+                            if globals_and_threading.debug: 
+                                print(f"Reassigned material on {obj.name} from {duplicate_mat.name} to {original_mat.name}")
+        
+        # Batch remove all duplicate materials
+        for mat in materials_to_remove:
+            if mat.name in bpy.data.materials and mat.users == 0:
+                if globals_and_threading.debug: 
+                    print(f"Removing unused material: {mat.name}")
                 bpy.data.materials.remove(mat)
-    
+
     def is_material_vanilla(mat):
         """
         Check if the material is a vanilla material.
