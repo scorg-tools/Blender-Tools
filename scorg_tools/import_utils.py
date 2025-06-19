@@ -841,7 +841,9 @@ class SCOrg_tools_import():
             __class__.tint_palette_node_group_name = tint_node_group.name
             if globals_and_threading.debug: print("Importing materials from files")
             values = list(file_cache.values())
-            pprint(values)
+            if globals_and_threading.debug:
+                print(f"DEBUG: Importing {len(values)} materials from files:")
+                pprint(values)
             materials.load_materials(values, data_dir='', tint_palette_node_group = tint_node_group)
             
     def get_material_filename(material_name):
