@@ -203,6 +203,8 @@ class SCOrg_tools_blender():
         __class__.fix_materials_case_sensitivity()
         __class__.update_viewport_with_timer(redraw_now=True)
         __class__.set_glass_materials_transparent()
+        __class__.update_viewport_with_timer(redraw_now=True)
+        __class__.fix_stencil_materials()
         # Clear progress when done
         misc_utils.SCOrg_tools_misc.clear_progress()
 
@@ -497,6 +499,18 @@ class SCOrg_tools_blender():
         
     def init_tint_group(entity_name):
         if globals_and_threading.debug: print("Initializing tint group for ship: ", entity_name)
+        
+        # Check if tint group already exists to prevent duplicates
+        from scdatatools.blender.utils import hashed_path_key
+        expected_group_name = hashed_path_key(f"{entity_name}_Tint")
+        existing_group = bpy.data.node_groups.get(expected_group_name)
+        
+        if existing_group:
+            if globals_and_threading.debug: print(f"Tint group '{expected_group_name}' already exists, reusing")
+            return existing_group
+        else :
+            if globals_and_threading.debug: print(f"Could not find tint group '{expected_group_name}'")
+        
         from scdatatools import blender
         node_group = blender.materials.utils.tint_palette_node_group_for_entity(entity_name)
         return node_group
@@ -678,3 +692,59 @@ class SCOrg_tools_blender():
                 # Set the viewport display alpha to 0.1 (10% opacity)
                 material.diffuse_color = (*material.diffuse_color[:3], 0.1)
                 if globals_and_threading.debug: print(f"Setting viewport transparency for glass material: {material.name}")
+    
+    def fix_stencil_materials():
+        """
+        Find all materials containing '_stencil' (case insensitive) and set their 
+        the UseAlpha to 1.0
+        """        
+        # Get a list of material names that contain '_stencil'
+        material_names = [mat.name for mat in bpy.data.materials if '_stencil' in mat.name.lower()]
+        
+        for i, mat_name in enumerate(material_names):
+            misc_utils.SCOrg_tools_misc.update_progress("Setting stencil to use alpha", i, len(material_names), spinner_type="arc")
+            
+            # Get fresh reference to the material
+            material = bpy.data.materials.get(mat_name)
+            if material is None:
+                continue
+
+            # Ensure the material has a node called group
+            if "Group" not in material.node_tree.nodes:
+                print(f"Warning: Material '{material.name}' does not have a 'Group' node. Skipping.")
+                continue
+            # Check if UseAlpha input exists
+            if 'UseAlpha' not in material.node_tree.nodes["Group"].inputs:
+                print(f"Warning: Material '{material.name}' does not have 'UseAlpha' input in 'Group' node. Skipping.")
+                continue
+            material.node_tree.nodes["Group"].inputs['UseAlpha'].default_value=1.0
+    
+    import bpy
+
+    def create_transparent_image(name="transparent", width=1, height=1):
+        """
+        Creates a new 1x1 image with 0% alpha (fully transparent).
+
+        Args:
+            name (str): The name for the new image.
+            width (int): The width of the image (default 1).
+            height (int): The height of the image (default 1).
+        """
+        # Check if an image with this name already exists
+        if name in bpy.data.images:
+            existing_image = bpy.data.images[name]
+            return existing_image
+
+        image = bpy.data.images.new(name=name, width=width, height=height, alpha=True)
+
+        # Create a transparent pixel (R, G, B, A)
+        # Alpha value is 0.0 for fully transparent
+        transparent_pixel = [0.0, 0.0, 0.0, 0.0]
+
+        # Set all pixels to transparent
+        # For a 1x1 image, this sets the single pixel
+        # For larger images, you'd multiply the pixel list to fill all pixels
+        image.pixels = transparent_pixel * (width * height)
+
+        print(f"Created transparent image: '{image.name}' ({image.size[0]}x{image.size[1]})")
+        return image

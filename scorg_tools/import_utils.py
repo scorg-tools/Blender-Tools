@@ -855,7 +855,7 @@ class SCOrg_tools_import():
         return result
     
     def load_tint_palette(palette_guid, tint_palette_node_group_name):
-        if globals_and_threading.debug: print("Loadint tint palette for GUID:", palette_guid)
+        if globals_and_threading.debug: print("Loading tint palette for GUID:", palette_guid)
         import scdatatools
         hasattr(__class__, 'extract_dir') or __class__.init()
         
@@ -912,6 +912,9 @@ class SCOrg_tools_import():
                 t.nodes["Decal"].image.colorspace_settings.name = "Non-Color"
             except Exception as e:
                 if globals_and_threading.debug: print(f"Unable to load decal {decal_texture.name}: {e}")
+        else:
+            # No decal texture found, set to transparent
+            t.nodes["Decal"].image = blender_utils.SCOrg_tools_blender.create_transparent_image()
 
         for decalColour in ["decalColorR", "decalColorG", "decalColorB"]:
             d = record.properties['root'].properties[decalColour].properties
