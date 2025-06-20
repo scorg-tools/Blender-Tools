@@ -156,11 +156,10 @@ class VIEW3D_PT_scorg_tools_panel(bpy.types.Panel):
                         break
                 
                 if region_width:
-                    margin_deduction = 90
-                    effective_width = max(80, region_width - margin_deduction)
-                    char_width = 7.9
+                    effective_width = region_width - 90  # Deduct margin for UI elements
+                    char_width = 7.9 # Average character width in pixels
                     estimated_chars = int(effective_width / char_width)
-                    width = max(12, estimated_chars)
+                    width = max(10, estimated_chars) # Ensure at least 10 characters wide
                 else:
                     width = 20  # Conservative fallback
             except:
