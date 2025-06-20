@@ -718,8 +718,6 @@ class SCOrg_tools_blender():
                 print(f"Warning: Material '{material.name}' does not have 'UseAlpha' input in 'Group' node. Skipping.")
                 continue
             material.node_tree.nodes["Group"].inputs['UseAlpha'].default_value=1.0
-    
-    import bpy
 
     def create_transparent_image(name="transparent", width=1, height=1):
         """
