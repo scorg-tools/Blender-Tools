@@ -758,74 +758,92 @@ class SCOrg_tools_blender():
         """
         Separates materials that match the pattern for decals, POM, or stencils
         into their own mesh object, parented to the original mesh.
+        Only processes original objects (not linked duplicates) and creates corresponding
+        decal objects for all linked duplicates.
         """
         # Pre-filter objects to only process those with decal materials
         objects_to_process = []
-        # get a list of all mesh objects in the scene that don't have "_scorg_decals" in their name (don't repeat the process on objects that have already been processed)
+        # Group objects by their mesh data to identify originals vs linked duplicates
+        mesh_to_objects = {}
+        
+        # get a list of all mesh objects in the scene that don't have "_scorg_decals" in their name
         objects_list = [obj for obj in bpy.data.objects if obj.type == 'MESH' and "_scorg_decals" not in obj.name]
         
         for obj in objects_list:
             if not obj.data.materials:
                 continue
                 
+            # Group objects by their mesh data
+            if obj.data not in mesh_to_objects:
+                mesh_to_objects[obj.data] = []
+            mesh_to_objects[obj.data].append(obj)
+        
+        # Only process the first object for each unique mesh data (the "original")
+        for mesh_data, objects_with_mesh in mesh_to_objects.items():
+            # Take the first object as the "original" to process
+            original_obj = objects_with_mesh[0]
+            
             # Quick check: does this object have any decal materials?
             has_decal_materials = any(
                 mat and __class__.material_matches_decals(mat.name) 
-                for mat in obj.data.materials
+                for mat in original_obj.data.materials
             )
             
             if has_decal_materials:
                 # Check if any faces actually use these materials
                 decal_material_indices = [
-                    i for i, mat in enumerate(obj.data.materials)
+                    i for i, mat in enumerate(original_obj.data.materials)
                     if mat and __class__.material_matches_decals(mat.name)
                 ]
                 
                 has_decal_faces = any(
                     poly.material_index in decal_material_indices 
-                    for poly in obj.data.polygons
+                    for poly in original_obj.data.polygons
                 )
                 
                 if has_decal_faces:
-                    objects_to_process.append((obj, decal_material_indices))
+                    # Store the original object and all its linked duplicates
+                    objects_to_process.append((original_obj, objects_with_mesh, decal_material_indices))
+        
         objects_list = None  # Clear the list to free memory
         
-        # Process only objects that actually need processing
-        for i, (obj, decal_material_indices) in enumerate(objects_to_process):
+        # Process only original objects
+        for i, (original_obj, all_objects_with_mesh, decal_material_indices) in enumerate(objects_to_process):
             misc_utils.SCOrg_tools_misc.update_progress("Separating decal materials", i, len(objects_to_process), spinner_type="arc")
             
             if globals_and_threading.debug:
-                face_count = sum(1 for poly in obj.data.polygons if poly.material_index in decal_material_indices)
-                print(f"Processing {obj.name} with {face_count} decal faces")
+                face_count = sum(1 for poly in original_obj.data.polygons if poly.material_index in decal_material_indices)
+                linked_count = len(all_objects_with_mesh) - 1
+                print(f"Processing {original_obj.name} with {face_count} decal faces ({linked_count} linked duplicates)")
 
-            # Apply displacement modifiers before separating
-            bpy.context.view_layer.objects.active = obj
+            # Apply displacement modifiers before separating (only on the original)
+            bpy.context.view_layer.objects.active = original_obj
             bpy.ops.object.mode_set(mode='OBJECT')
             
             # Apply only displacement modifiers
-            modifiers_to_apply = [mod for mod in obj.modifiers if mod.type == 'DISPLACE']
+            modifiers_to_apply = [mod for mod in original_obj.modifiers if mod.type == 'DISPLACE']
             for mod in modifiers_to_apply:
                 try:
                     bpy.ops.object.modifier_apply(modifier=mod.name)
                     if globals_and_threading.debug:
-                        print(f"Applied displacement modifier to {obj.name}")
+                        print(f"Applied displacement modifier to {original_obj.name}")
                 except Exception as e:
                     if globals_and_threading.debug:
-                        print(f"Failed to apply modifier to {obj.name}: {e}")
+                        print(f"Failed to apply modifier to {original_obj.name}: {e}")
 
             # Deselect all objects first
             bpy.ops.object.select_all(action='DESELECT')
             
-            # Select and make the object active
-            obj.select_set(True)
-            bpy.context.view_layer.objects.active = obj
+            # Select and make the original object active
+            original_obj.select_set(True)
+            bpy.context.view_layer.objects.active = original_obj
 
             # Switch to object mode and set face select mode
             bpy.ops.object.mode_set(mode='OBJECT')
             bpy.context.tool_settings.mesh_select_mode = (False, False, True)
 
             # Batch select all faces with decal materials in object mode
-            for poly in obj.data.polygons:
+            for poly in original_obj.data.polygons:
                 poly.select = poly.material_index in decal_material_indices
 
             # Enter edit mode and separate all selected faces at once
@@ -834,10 +852,10 @@ class SCOrg_tools_blender():
             try:
                 bpy.ops.mesh.separate(type='SELECTED')
                 if globals_and_threading.debug:
-                    print(f"Successfully separated decal faces from {obj.name}")
+                    print(f"Successfully separated decal faces from {original_obj.name}")
             except Exception as e:
                 if globals_and_threading.debug:
-                    print(f"Failed to separate faces from {obj.name}: {e}")
+                    print(f"Failed to separate faces from {original_obj.name}: {e}")
                 bpy.ops.object.mode_set(mode='OBJECT')
                 continue
 
@@ -845,46 +863,67 @@ class SCOrg_tools_blender():
             bpy.ops.object.mode_set(mode='OBJECT')
 
             # Find the newly created object (it should be selected)
-            new_objects = [o for o in bpy.context.selected_objects if o != obj]
+            new_objects = [o for o in bpy.context.selected_objects if o != original_obj]
             
             if new_objects:
-                decal_obj = new_objects[0]  # Take the first new object
+                original_decal_obj = new_objects[0]  # Take the first new object
                 
-                # Rename the decal object
-                decal_obj.name = f"{obj.name}_scorg_decals"
+                # Rename the original decal object
+                original_decal_obj.name = f"{original_obj.name}_scorg_decals"
                 
                 # Set decal object to not cast shadows
-                decal_obj.visible_shadow = False
+                original_decal_obj.visible_shadow = False
                 
                 # Store the current world matrix before any parenting changes
-                world_matrix = decal_obj.matrix_world.copy()
+                world_matrix = original_decal_obj.matrix_world.copy()
                 
                 # Parent the decal object to the original mesh
-                decal_obj.parent = obj
-                decal_obj.parent_type = 'OBJECT'
+                original_decal_obj.parent = original_obj
+                original_decal_obj.parent_type = 'OBJECT'
                 
                 # Restore the world matrix to maintain position
-                decal_obj.matrix_world = world_matrix
+                original_decal_obj.matrix_world = world_matrix
                 
                 if globals_and_threading.debug:
-                    print(f"Created decal object: {decal_obj.name}, parented to: {obj.name}")
+                    print(f"Created decal object: {original_decal_obj.name}, parented to: {original_obj.name}")
+
+                # Create linked duplicate decal objects for all linked duplicates
+                for linked_obj in all_objects_with_mesh[1:]:  # Skip the first (original) object
+                    # Create linked duplicate of the decal object
+                    linked_decal_obj = original_decal_obj.copy()
+                    linked_decal_obj.data = original_decal_obj.data  # Share mesh data (linked duplicate)
+                    bpy.context.collection.objects.link(linked_decal_obj)
+                    
+                    # Rename and parent to the corresponding linked object
+                    linked_decal_obj.name = f"{linked_obj.name}_scorg_decals"
+                    
+                    # Parent to the linked object first
+                    linked_decal_obj.parent = linked_obj
+                    linked_decal_obj.parent_type = 'OBJECT'
+                    
+                    # Set the same local transform relative to parent as the original decal
+                    # This ensures it follows the linked object's transform
+                    linked_decal_obj.matrix_parent_inverse = original_decal_obj.matrix_parent_inverse.copy()
+                    
+                    if globals_and_threading.debug:
+                        print(f"Created linked decal object: {linked_decal_obj.name}, parented to: {linked_obj.name}")
 
             # Batch remove empty material slots from the original object
             # Check which slots are now empty after separation
             slots_to_remove = []
             for slot_idx in decal_material_indices:
-                has_faces = any(poly.material_index == slot_idx for poly in obj.data.polygons)
+                has_faces = any(poly.material_index == slot_idx for poly in original_obj.data.polygons)
                 if not has_faces:
                     slots_to_remove.append(slot_idx)
 
             # Remove empty material slots (in reverse order to avoid index shifting)
             if slots_to_remove:
                 for slot_idx in sorted(slots_to_remove, reverse=True):
-                    if slot_idx < len(obj.material_slots):
-                        obj.active_material_index = slot_idx
+                    if slot_idx < len(original_obj.material_slots):
+                        original_obj.active_material_index = slot_idx
                         bpy.ops.object.material_slot_remove()
                         if globals_and_threading.debug:
-                            print(f"Removed empty material slot {slot_idx} from {obj.name}")
+                            print(f"Removed empty material slot {slot_idx} from {original_obj.name}")
 
         # Clear progress when done
         misc_utils.SCOrg_tools_misc.clear_progress()
