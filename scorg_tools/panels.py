@@ -3,6 +3,7 @@ import bpy
 from pathlib import Path # ADDED: Ensure Path is imported
 # Import globals
 from . import globals_and_threading
+from . import misc_utils
 
 # Define the parent panel ID here, as it's used by the panel's poll method
 PARENT_PANEL_BL_IDNAME = 'VIEW3D_PT_BlenderLink_Panel'
@@ -15,6 +16,9 @@ class VIEW3D_PT_scorg_tools_panel(bpy.types.Panel):
     bl_region_type = 'UI'
     bl_category = "SCOrg.tools"
     bl_parent_id = PARENT_PANEL_BL_IDNAME # Use the defined parent ID
+    
+    # Class variable to track last known width for responsive updates
+    _last_known_width = None
 
     @classmethod
     def poll(cls, context):
@@ -22,8 +26,25 @@ class VIEW3D_PT_scorg_tools_panel(bpy.types.Panel):
     
     def draw(self, context):
         layout = self.layout
-        prefs = context.preferences.addons[__package__].preferences # Access addon preferences
+        
+        # Check if panel width has changed and force redraw if needed
+        current_width = self.get_current_region_width()
+        if current_width != self.__class__._last_known_width:
+            self.__class__._last_known_width = current_width
+            # Force a redraw by tagging the region
+            try:
+                for area in context.screen.areas:
+                    if area.type == 'VIEW_3D':
+                        for region in area.regions:
+                            if region.type == 'UI':
+                                region.tag_redraw()
+                                break
+                        break
+            except:
+                pass
 
+        prefs = context.preferences.addons[__package__].preferences # Access addon preferences
+        layout.label(text="v" + misc_utils.SCOrg_tools_misc.get_addon_version(), icon='INFO')
         if bpy.context.preferences.view.show_developer_ui:
             layout.operator("view3d.reload", text="Reload Addon", icon='FILE_REFRESH')
         
@@ -64,7 +85,8 @@ class VIEW3D_PT_scorg_tools_panel(bpy.types.Panel):
             extract_dir = prefs.extract_dir
             dir_path = Path(extract_dir)
             if not dir_path.is_dir() or extract_dir == "":
-                layout.label(text="To import loadout, set Data Extract Directory in Preferences", icon='ERROR')
+                __class__.draw_wrapped_text(layout, message="Please set the Data Extract Directory in the addon preferences.", icon='ERROR')
+                return
 
             # Utilities section (always visible)
             layout.label(text="Utilities")
@@ -92,3 +114,90 @@ class VIEW3D_PT_scorg_tools_panel(bpy.types.Panel):
                             op.button_index = idx
                     else:
                         layout.label(text="No paints found for this ship.", icon='INFO')
+
+    def get_current_region_width(self):
+        """Get the current UI region width"""
+        try:
+            for area in bpy.context.screen.areas:
+                if area.type == 'VIEW_3D':
+                    for region in area.regions:
+                        if region.type == 'UI':
+                            return region.width
+        except:
+            pass
+        return None
+
+    @staticmethod
+    def draw_wrapped_text(layout, message, icon='NONE', width=None):
+        """
+        Draw a message across multiple labels with word wrapping.
+        Only the first label gets the icon.
+        
+        Args:
+            layout: The layout object to draw to
+            message (str): The message to display
+            icon (str): The icon to show on the first line only
+            width (int): Approximate character width per line. If None, auto-detect from context.
+        """
+        if not message:
+            return
+        
+        # Auto-detect width if not provided - recalculate each time for responsive resizing
+        if width is None:
+            try:
+                # Get the current region width
+                region_width = None
+                for area in bpy.context.screen.areas:
+                    if area.type == 'VIEW_3D':
+                        for region in area.regions:
+                            if region.type == 'UI':
+                                region_width = region.width
+                                break
+                        break
+                
+                if region_width:
+                    margin_deduction = 75                    
+                    effective_width = max(80, region_width - margin_deduction)
+                    char_width = 8.5
+                    estimated_chars = int(effective_width / char_width)
+                    width = max(12, min(80, estimated_chars))
+                else:
+                    width = 20  # Conservative fallback
+            except:
+                width = 20
+        
+        # Account for icon taking up space on first line
+        first_line_width = width - 5 if icon != 'NONE' else width
+        
+        words = message.split()
+        lines = []
+        current_line = ""
+        is_first_line = True
+        
+        for word in words:
+            # Use different width for first line if it has an icon
+            current_width = first_line_width if is_first_line else width
+            
+            # Check if adding this word would exceed the width
+            test_line = current_line + (" " if current_line else "") + word
+            if len(test_line) <= current_width:
+                current_line = test_line
+            else:
+                # Current line is full, start a new one
+                if current_line:
+                    lines.append(current_line)
+                    is_first_line = False
+                current_line = word
+        
+        # Add the last line if it has content
+        if current_line:
+            lines.append(current_line)
+        
+        # Draw the lines
+        for i, line in enumerate(lines):
+            if i == 0 and icon != 'NONE':
+                # First line with icon
+                layout.label(text=line, icon=icon)
+            else:
+                # Subsequent lines without icon
+                layout.label(text=line)
