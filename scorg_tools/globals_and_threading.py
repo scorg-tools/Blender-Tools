@@ -49,30 +49,39 @@ class LoadP4KThread(threading.Thread):
         self.current_progress = 0.0 # progress from monitor
 
     def run(self):
-        global dcb, p4k, localizer, sc
+        global dcb, p4k, localizer, sc, debug
         try:
-            # Set the p4k cache directory to cache in the parent of the extract directory
-            cache_dir = Path(self.addon_prefs.extract_dir).parent / "p4k_cache"
-            # if the cache_dir is not none and it doesn't exist, create it
-            if cache_dir and not cache_dir.exists():
-                cache_dir.mkdir(parents=True, exist_ok=True)
+            # Set the p4k cache directory to cache in the parent of the extract directory and check if it exists
+            if self.addon_prefs.extract_dir and Path(self.addon_prefs.extract_dir).exists():
+                if debug: print(f"DEBUG: Using cache with p4k load")
+                cache_dir = Path(self.addon_prefs.extract_dir).parent / "p4k_cache"
+                # if the cache_dir is not none and it doesn't exist, create it
+                if cache_dir and not cache_dir.exists():
+                    cache_dir.mkdir(parents=True, exist_ok=True)
 
-            # Initialize StarCitizen class with the provided path and cache directory
-            sc = StarCitizen(self.p4k_path, p4k_load_monitor=p4k_load_monitor, cache_dir=str(cache_dir))
+                # Initialize StarCitizen class with the provided path and cache directory
+                sc = StarCitizen(self.p4k_path, p4k_load_monitor=p4k_load_monitor, cache_dir=str(cache_dir))
+            else:
+                if debug: print(f"DEBUG: Loading p4k without cache")
+                # If no extract directory is set, don't use cache
+                sc = StarCitizen(self.p4k_path, p4k_load_monitor=p4k_load_monitor)
             dcb = sc.datacore
             p4k = sc.p4k
             localizer = sc.localization
             self.success = True
         except Exception as e:
             self.error_message = str(e)
+            if debug: print(f"DEBUG: Error loading p4k: {self.error_message}")
             self.success = False
         finally:
             # Final update of internal state on thread completion
             if self.success:
                 self.current_message = "Data.p4k Loaded!"
+                if debug: print(self.current_message)
                 self.current_progress = 100.0
             else:
                 self.current_message = f"Failed to load: {self.error_message}"
+                if debug: print(self.current_message)
                 self.current_progress = 0.0
             # The check_load_status timer will pick up these final values
 

@@ -44,13 +44,13 @@ class VIEW3D_OT_load_p4k_button(bpy.types.Operator):
             misc_utils.SCOrg_tools_misc.force_ui_update() 
 
         # Start the loading in a separate thread
+        if globals_and_threading.debug: print("DEBUG: Starting LoadP4KThread")
         globals_and_threading._loading_thread = globals_and_threading.LoadP4KThread(prefs.p4k_path, prefs)
         globals_and_threading._loading_thread.start()
 
         # Register a timer to periodically check the thread's status and update UI
         bpy.app.timers.register(globals_and_threading.check_load_status, first_interval=globals_and_threading._ui_update_interval, persistent=True)
-        
-        #self.report({'INFO'}, "Started loading Data.p4k in background...")
+
         return {'FINISHED'}
 
 class VIEW3D_OT_refresh_button(bpy.types.Operator):
