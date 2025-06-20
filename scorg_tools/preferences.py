@@ -65,12 +65,38 @@ class SCOrg_tools_AddonPreferences(bpy.types.AddonPreferences):
         update=update_debug_mode_callback
     )
 
+    decal_displacement_ship: FloatProperty(
+        name="Decal Displacement (Ship)",
+        description="Displacement strength (m) for decal materials on ships",
+        default=0.001,
+        min=0.0,
+        max=0.05,
+        step=0.0001,
+        precision=4
+    )
+
+    decal_displacement_non_ship: FloatProperty(
+        name="Decal Displacement (Non-Ship)",
+        description="Displacement strength (m) for decal materials on non-ship items (weapons, equipment, etc.)",
+        default=0.0005,
+        min=0.0,
+        max=0.05,
+        step=0.0001,
+        precision=4
+    )
+
     def draw(self, context):
         layout = self.layout
         layout.label(text="SCOrg.tools Settings")
         
         # Debug mode checkbox
         layout.prop(self, "debug_mode")
+        layout.separator()
+        
+        # Displacement settings
+        layout.label(text="Displacement Settings:")
+        layout.prop(self, "decal_displacement_ship")
+        layout.prop(self, "decal_displacement_non_ship")
         layout.separator()
         
         layout.label(text=f"Current P4K: {self.p4k_path}")
