@@ -761,10 +761,11 @@ class SCOrg_tools_blender():
         """
         # Pre-filter objects to only process those with decal materials
         objects_to_process = []
-        objects_list = list(bpy.data.objects)
+        # get a list of all mesh objects in the scene that don't have "_scorg_decals" in their name (don't repeat the process on objects that have already been processed)
+        objects_list = [obj for obj in bpy.data.objects if obj.type == 'MESH' and "_scorg_decals" not in obj.name]
         
         for obj in objects_list:
-            if obj.type != 'MESH' or not obj.data.materials:
+            if not obj.data.materials:
                 continue
                 
             # Quick check: does this object have any decal materials?
@@ -787,6 +788,7 @@ class SCOrg_tools_blender():
                 
                 if has_decal_faces:
                     objects_to_process.append((obj, decal_material_indices))
+        objects_list = None  # Clear the list to free memory
         
         # Process only objects that actually need processing
         for i, (obj, decal_material_indices) in enumerate(objects_to_process):
