@@ -137,7 +137,7 @@ class VIEW3D_PT_scorg_tools_panel(bpy.types.Panel):
             layout: The layout object to draw to
             message (str): The message to display
             icon (str): The icon to show on the first line only
-            width (int): Approximate character width per line. If None, auto-detect from context.
+            width (int): Character width per line. If None, auto-detect from context.
         """
         if not message:
             return
@@ -156,11 +156,11 @@ class VIEW3D_PT_scorg_tools_panel(bpy.types.Panel):
                         break
                 
                 if region_width:
-                    margin_deduction = 75                    
+                    margin_deduction = 90
                     effective_width = max(80, region_width - margin_deduction)
-                    char_width = 8.5
+                    char_width = 7.9
                     estimated_chars = int(effective_width / char_width)
-                    width = max(12, min(80, estimated_chars))
+                    width = max(12, estimated_chars)
                 else:
                     width = 20  # Conservative fallback
             except:
