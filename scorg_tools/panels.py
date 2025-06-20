@@ -146,16 +146,8 @@ class VIEW3D_PT_scorg_tools_panel(bpy.types.Panel):
         if width is None:
             try:
                 # Get the current region width
-                region_width = None
-                for area in bpy.context.screen.areas:
-                    if area.type == 'VIEW_3D':
-                        for region in area.regions:
-                            if region.type == 'UI':
-                                region_width = region.width
-                                break
-                        break
-                
-                if region_width:
+                if bpy.context.region:
+                    region_width = bpy.context.region.width
                     effective_width = region_width - 90  # Deduct margin for UI elements
                     char_width = 7.9 # Average character width in pixels
                     estimated_chars = int(effective_width / char_width)
@@ -176,7 +168,6 @@ class VIEW3D_PT_scorg_tools_panel(bpy.types.Panel):
         for word in words:
             # Use different width for first line if it has an icon
             current_width = first_line_width if is_first_line else width
-            
             # Check if adding this word would exceed the width
             test_line = current_line + (" " if current_line else "") + word
             if len(test_line) <= current_width:
@@ -186,15 +177,13 @@ class VIEW3D_PT_scorg_tools_panel(bpy.types.Panel):
                 if current_line:
                     lines.append(current_line)
                     is_first_line = False
-                current_line = word
-        
+                current_line = word        
         # Add the last line if it has content
         if current_line:
             lines.append(current_line)
-        
         # Draw the lines
         for i, line in enumerate(lines):
-            if i == 0 and icon != 'NONE':
+            if i == 0:
                 # First line with icon
                 layout.label(text=line, icon=icon)
             else:
