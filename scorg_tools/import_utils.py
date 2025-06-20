@@ -173,7 +173,7 @@ class SCOrg_tools_import():
             if process_bones_file:
                 if globals_and_threading.debug: print("Deleting meshes for initial CDF base import")
                 # Usually used for smaller items like weapons, so change the POM/Decal displacement strength to 0.5mm
-                displacement_strength = 0.0005
+                displacement_strength = bpy.context.preferences.addons["scorg_tools"].preferences.decal_displacement_non_ship
                 # Delete all meshes to avoid conflicts with CDF imports, the imported .dae objects will be selected
                 __class__.replace_selected_mesh_with_empties()
                 
@@ -192,6 +192,10 @@ class SCOrg_tools_import():
                     if globals_and_threading.debug: print(f"Processing bones file: {file}")
                     __class__.import_file(file, root_object_name)
                 if globals_and_threading.debug: print("DEBUG: Finished processing bones files")
+
+            else:
+                # This is likely a ship, use ship displacement strength
+                displacement_strength = bpy.context.preferences.addons["scorg_tools"].preferences.decal_displacement_ship
 
             if top_level_loadout is None:
                 misc_utils.SCOrg_tools_misc.error("Could not find top-level loadout in ship record. Check the structure of the record.")
@@ -690,7 +694,9 @@ class SCOrg_tools_import():
         top_level_loadout = __class__.get_loadout_from_record(record)
 
         if top_level_loadout is None:
-            blender_utils.SCOrg_tools_blender.fix_modifiers()
+            # Use ship displacement preference for fix_modifiers
+            displacement_strength = bpy.context.preferences.addons["scorg_tools"].preferences.decal_displacement_ship
+            blender_utils.SCOrg_tools_blender.fix_modifiers(displacement_strength)
             misc_utils.SCOrg_tools_misc.error("Could not find top-level loadout in ship record. Check the structure of the record.")
             return
 
@@ -699,7 +705,11 @@ class SCOrg_tools_import():
         if globals_and_threading.debug: print(f"Total hardpoints to import: {len(empties_to_fill)}")
 
         __class__.import_hardpoint_hierarchy(top_level_loadout, empties_to_fill)
-        blender_utils.SCOrg_tools_blender.fix_modifiers()
+        
+        # Use ship displacement preference for fix_modifiers
+        displacement_strength = bpy.context.preferences.addons["scorg_tools"].preferences.decal_displacement_ship
+        blender_utils.SCOrg_tools_blender.fix_modifiers(displacement_strength)
+        
         if len(__class__.missing_files) > 0:
             misc_utils.SCOrg_tools_misc.show_text_popup(
                 text_content=__class__.missing_files,
