@@ -205,3 +205,12 @@ class SCORG_OT_text_popup(bpy.types.Operator):
                               text="📋 Copy to Clipboard", 
                               icon='PASTEDOWN')
         copy_op.text_to_copy = self.text_content
+
+class VIEW3D_OT_separate_decals(bpy.types.Operator):
+    bl_idname = "view3d.separate_decals"
+    bl_label = "Separate Decals"
+    bl_description = "Separate decal, POM, and stencil materials into their own objects"
+    
+    def execute(self, context):
+        blender_utils.SCOrg_tools_blender.separate_decal_materials()
+        return {'FINISHED'}

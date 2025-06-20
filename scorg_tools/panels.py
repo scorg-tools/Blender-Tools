@@ -90,6 +90,7 @@ class VIEW3D_PT_scorg_tools_panel(bpy.types.Panel):
 
             # Utilities section (always visible)
             layout.label(text="Utilities")
+            layout.operator("view3d.separate_decals", text="Separate Decals", icon='MOD_DISPLACE')
 
             # --- Sections dependent on P4K being loaded ---
             if globals_and_threading.p4k:

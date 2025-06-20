@@ -71,6 +71,7 @@ classes = (
     operators.VIEW3D_OT_make_instance_real,
     operators.VIEW3D_OT_reload,
     operators.GetGUIDOperator,
+    operators.VIEW3D_OT_separate_decals,
     operators.SCORG_OT_copy_text_to_clipboard,
     operators.SCORG_OT_text_popup,
     preferences.SCOrg_tools_AddonPreferences,
