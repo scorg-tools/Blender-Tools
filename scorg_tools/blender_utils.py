@@ -86,9 +86,16 @@ class SCOrg_tools_blender():
                 #print(f"Added Weighted Normal modifier to {obj.name}")
 
 
-    def material_matches(name):
+    def material_matches_decals(name):
+        """
+        Check if the material name matches the pattern for decals, POM, or stencils.
+        Args:
+            name (str): The material name to check.
+        Returns:
+            bool: True if the material name matches the pattern, False otherwise.
+        """
         name = name.lower()
-        return "_pom" in name or "_decal" in name
+        return "_pom" in name or "_decal" in name or "_stencil" in name
 
     def ensure_vertex_group(obj, mat_index, group_name):
         # Check if vertex group already exists (case-insensitive)
@@ -116,7 +123,7 @@ class SCOrg_tools_blender():
 
         return vg
 
-    def add_displace_modifiers_for_pom_and_decal(displacement_strength = 0.005):
+    def add_displace_modifiers_for_decal(displacement_strength = 0.005):
         objects_list = list(bpy.data.objects)
         for i, obj in enumerate(objects_list):
             misc_utils.SCOrg_tools_misc.update_progress("Adding Displace modifiers for POM and Decal", i, len(objects_list), spinner_type="arc")
@@ -130,7 +137,7 @@ class SCOrg_tools_blender():
                 continue
 
             for mat_index, mat in enumerate(mesh.materials):
-                if mat and __class__.material_matches(mat.name):
+                if mat and __class__.material_matches_decals(mat.name):
                     group_name = mat.name
                     vg = __class__.ensure_vertex_group(obj, mat_index, group_name)
 
@@ -190,7 +197,7 @@ class SCOrg_tools_blender():
     def fix_modifiers(displacement_strength=0.005):
         __class__.add_weld_and_weighted_normal_modifiers()
         __class__.update_viewport_with_timer(redraw_now=True)
-        __class__.add_displace_modifiers_for_pom_and_decal(displacement_strength)
+        __class__.add_displace_modifiers_for_decal(displacement_strength)
         __class__.update_viewport_with_timer(redraw_now=True)
         __class__.remove_duplicate_displace_modifiers()
         __class__.update_viewport_with_timer(redraw_now=True)
@@ -746,3 +753,136 @@ class SCOrg_tools_blender():
 
         print(f"Created transparent image: '{image.name}' ({image.size[0]}x{image.size[1]})")
         return image
+    
+    def separate_decal_materials():
+        """
+        Separates materials that match the pattern for decals, POM, or stencils
+        into their own mesh object, parented to the original mesh.
+        """
+        # Pre-filter objects to only process those with decal materials
+        objects_to_process = []
+        objects_list = list(bpy.data.objects)
+        
+        for obj in objects_list:
+            if obj.type != 'MESH' or not obj.data.materials:
+                continue
+                
+            # Quick check: does this object have any decal materials?
+            has_decal_materials = any(
+                mat and __class__.material_matches_decals(mat.name) 
+                for mat in obj.data.materials
+            )
+            
+            if has_decal_materials:
+                # Check if any faces actually use these materials
+                decal_material_indices = [
+                    i for i, mat in enumerate(obj.data.materials)
+                    if mat and __class__.material_matches_decals(mat.name)
+                ]
+                
+                has_decal_faces = any(
+                    poly.material_index in decal_material_indices 
+                    for poly in obj.data.polygons
+                )
+                
+                if has_decal_faces:
+                    objects_to_process.append((obj, decal_material_indices))
+        
+        # Process only objects that actually need processing
+        for i, (obj, decal_material_indices) in enumerate(objects_to_process):
+            misc_utils.SCOrg_tools_misc.update_progress("Separating decal materials", i, len(objects_to_process), spinner_type="arc")
+            
+            if globals_and_threading.debug:
+                face_count = sum(1 for poly in obj.data.polygons if poly.material_index in decal_material_indices)
+                print(f"Processing {obj.name} with {face_count} decal faces")
+
+            # Apply displacement modifiers before separating
+            bpy.context.view_layer.objects.active = obj
+            bpy.ops.object.mode_set(mode='OBJECT')
+            
+            # Apply only displacement modifiers
+            modifiers_to_apply = [mod for mod in obj.modifiers if mod.type == 'DISPLACE']
+            for mod in modifiers_to_apply:
+                try:
+                    bpy.ops.object.modifier_apply(modifier=mod.name)
+                    if globals_and_threading.debug:
+                        print(f"Applied displacement modifier to {obj.name}")
+                except Exception as e:
+                    if globals_and_threading.debug:
+                        print(f"Failed to apply modifier to {obj.name}: {e}")
+
+            # Deselect all objects first
+            bpy.ops.object.select_all(action='DESELECT')
+            
+            # Select and make the object active
+            obj.select_set(True)
+            bpy.context.view_layer.objects.active = obj
+
+            # Switch to object mode and set face select mode
+            bpy.ops.object.mode_set(mode='OBJECT')
+            bpy.context.tool_settings.mesh_select_mode = (False, False, True)
+
+            # Batch select all faces with decal materials in object mode
+            for poly in obj.data.polygons:
+                poly.select = poly.material_index in decal_material_indices
+
+            # Enter edit mode and separate all selected faces at once
+            bpy.ops.object.mode_set(mode='EDIT')
+            
+            try:
+                bpy.ops.mesh.separate(type='SELECTED')
+                if globals_and_threading.debug:
+                    print(f"Successfully separated decal faces from {obj.name}")
+            except Exception as e:
+                if globals_and_threading.debug:
+                    print(f"Failed to separate faces from {obj.name}: {e}")
+                bpy.ops.object.mode_set(mode='OBJECT')
+                continue
+
+            # Return to object mode
+            bpy.ops.object.mode_set(mode='OBJECT')
+
+            # Find the newly created object (it should be selected)
+            new_objects = [o for o in bpy.context.selected_objects if o != obj]
+            
+            if new_objects:
+                decal_obj = new_objects[0]  # Take the first new object
+                
+                # Rename the decal object
+                decal_obj.name = f"{obj.name}_scorg_decals"
+                
+                # Set decal object to not cast shadows
+                decal_obj.visible_shadow = False
+                
+                # Store the current world matrix before any parenting changes
+                world_matrix = decal_obj.matrix_world.copy()
+                
+                # Parent the decal object to the original mesh
+                decal_obj.parent = obj
+                decal_obj.parent_type = 'OBJECT'
+                
+                # Restore the world matrix to maintain position
+                decal_obj.matrix_world = world_matrix
+                
+                if globals_and_threading.debug:
+                    print(f"Created decal object: {decal_obj.name}, parented to: {obj.name}")
+
+            # Batch remove empty material slots from the original object
+            # Check which slots are now empty after separation
+            slots_to_remove = []
+            for slot_idx in decal_material_indices:
+                has_faces = any(poly.material_index == slot_idx for poly in obj.data.polygons)
+                if not has_faces:
+                    slots_to_remove.append(slot_idx)
+
+            # Remove empty material slots (in reverse order to avoid index shifting)
+            if slots_to_remove:
+                for slot_idx in sorted(slots_to_remove, reverse=True):
+                    if slot_idx < len(obj.material_slots):
+                        obj.active_material_index = slot_idx
+                        bpy.ops.object.material_slot_remove()
+                        if globals_and_threading.debug:
+                            print(f"Removed empty material slot {slot_idx} from {obj.name}")
+
+        # Clear progress when done
+        misc_utils.SCOrg_tools_misc.clear_progress()
