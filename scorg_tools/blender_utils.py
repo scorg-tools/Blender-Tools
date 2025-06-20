@@ -807,7 +807,25 @@ class SCOrg_tools_blender():
         
         objects_list = None  # Clear the list to free memory
         
-        # Process only original objects
+        # Batch apply displacement modifiers first (much faster than doing it per object)
+        if objects_to_process:
+            if globals_and_threading.debug:
+                print(f"Applying displacement modifiers to {len(objects_to_process)} objects...")
+            
+            for original_obj, all_objects_with_mesh, decal_material_indices in objects_to_process:
+                modifiers_to_apply = [mod for mod in original_obj.modifiers if mod.type == 'DISPLACE']
+                if modifiers_to_apply:
+                    bpy.context.view_layer.objects.active = original_obj
+                    bpy.ops.object.mode_set(mode='OBJECT')
+                    
+                    for mod in modifiers_to_apply:
+                        try:
+                            bpy.ops.object.modifier_apply(modifier=mod.name)
+                        except Exception as e:
+                            if globals_and_threading.debug:
+                                print(f"Failed to apply modifier to {original_obj.name}: {e}")
+        
+        # Process separations
         for i, (original_obj, all_objects_with_mesh, decal_material_indices) in enumerate(objects_to_process):
             misc_utils.SCOrg_tools_misc.update_progress("Separating decal materials", i, len(objects_to_process), spinner_type="arc")
             
@@ -816,43 +834,47 @@ class SCOrg_tools_blender():
                 linked_count = len(all_objects_with_mesh) - 1
                 print(f"Processing {original_obj.name} with {face_count} decal faces ({linked_count} linked duplicates)")
 
-            # Apply displacement modifiers before separating (only on the original)
+            # Ensure we're in object mode
             bpy.context.view_layer.objects.active = original_obj
-            bpy.ops.object.mode_set(mode='OBJECT')
-            
-            # Apply only displacement modifiers
-            modifiers_to_apply = [mod for mod in original_obj.modifiers if mod.type == 'DISPLACE']
-            for mod in modifiers_to_apply:
-                try:
-                    bpy.ops.object.modifier_apply(modifier=mod.name)
-                    if globals_and_threading.debug:
-                        print(f"Applied displacement modifier to {original_obj.name}")
-                except Exception as e:
-                    if globals_and_threading.debug:
-                        print(f"Failed to apply modifier to {original_obj.name}: {e}")
+            if bpy.context.mode != 'OBJECT':
+                bpy.ops.object.mode_set(mode='OBJECT')
 
-            # Deselect all objects first
+            # Deselect all and select only our target object
             bpy.ops.object.select_all(action='DESELECT')
-            
-            # Select and make the original object active
             original_obj.select_set(True)
-            bpy.context.view_layer.objects.active = original_obj
 
-            # Switch to object mode and set face select mode
-            bpy.ops.object.mode_set(mode='OBJECT')
-            bpy.context.tool_settings.mesh_select_mode = (False, False, True)
+            # Pre-select faces using bmesh for better performance
+            import bmesh
+            bm = bmesh.new()
+            bm.from_mesh(original_obj.data)
+            
+            # Clear existing selection
+            for face in bm.faces:
+                face.select = False
+            
+            # Select faces with decal materials
+            decal_face_count = 0
+            for face in bm.faces:
+                if face.material_index in decal_material_indices:
+                    face.select = True
+                    decal_face_count += 1
+            
+            if decal_face_count == 0:
+                bm.free()
+                continue
+            
+            # Update mesh with selection
+            bm.to_mesh(original_obj.data)
+            bm.free()
+            original_obj.data.update()
 
-            # Batch select all faces with decal materials in object mode
-            for poly in original_obj.data.polygons:
-                poly.select = poly.material_index in decal_material_indices
-
-            # Enter edit mode and separate all selected faces at once
+            # Enter edit mode and separate
             bpy.ops.object.mode_set(mode='EDIT')
             
             try:
                 bpy.ops.mesh.separate(type='SELECTED')
                 if globals_and_threading.debug:
-                    print(f"Successfully separated decal faces from {original_obj.name}")
+                    print(f"Successfully separated {decal_face_count} decal faces from {original_obj.name}")
             except Exception as e:
                 if globals_and_threading.debug:
                     print(f"Failed to separate faces from {original_obj.name}: {e}")
