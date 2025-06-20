@@ -261,3 +261,13 @@ class SCOrg_tools_misc():
         bpy.ops.scorg.text_popup('INVOKE_DEFAULT', 
                                  text_content=text_content, 
                                  header_text=header_text)
+    
+    @staticmethod
+    def get_addon_version():
+        """
+        Get the addon version from bl_info.
+        Returns the version as a tuple (major, minor, patch)
+        """
+        # Method 2: Direct import from parent module
+        from . import bl_info
+        return ".".join(map(str, bl_info.get('version', None))) if bl_info else None
