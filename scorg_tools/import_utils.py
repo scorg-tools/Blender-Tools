@@ -690,12 +690,13 @@ class SCOrg_tools_import():
             misc_utils.SCOrg_tools_misc.error("Could not get ship record. Please import a StarFab Blueprint first.")
             return
 
+        # Use ship displacement preference for fix_modifiers later
+        displacement_strength = bpy.context.preferences.addons["scorg_tools"].preferences.decal_displacement_ship
+
         # Safely access Components and loadout
         top_level_loadout = __class__.get_loadout_from_record(record)
 
         if top_level_loadout is None:
-            # Use ship displacement preference for fix_modifiers
-            displacement_strength = bpy.context.preferences.addons["scorg_tools"].preferences.decal_displacement_ship
             blender_utils.SCOrg_tools_blender.fix_modifiers(displacement_strength)
             misc_utils.SCOrg_tools_misc.error("Could not find top-level loadout in ship record. Check the structure of the record.")
             return
@@ -706,8 +707,6 @@ class SCOrg_tools_import():
 
         __class__.import_hardpoint_hierarchy(top_level_loadout, empties_to_fill)
         
-        # Use ship displacement preference for fix_modifiers
-        displacement_strength = bpy.context.preferences.addons["scorg_tools"].preferences.decal_displacement_ship
         blender_utils.SCOrg_tools_blender.fix_modifiers(displacement_strength)
         
         if len(__class__.missing_files) > 0:
