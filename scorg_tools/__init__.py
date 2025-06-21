@@ -1,7 +1,7 @@
 bl_info = {
     "name": "SCOrg.tools Blender Tools alpha",
     "author": "Star-Destroyer@scorg.tools",
-    "version": (1, 0, 24),
+    "version": (1, 0, 25),
     "blender": (3, 6, 0),
     "location": "View3D > Sidebar > SCOrg.tools",
     "description": "Tools to supplement StarFab",
@@ -15,21 +15,15 @@ import bpy
 import os
 import sys
 
-# TODO: fix tints:
-#       + don't add tint group every time, only if it doesn't exist
-#       + dont add UID to the tint group name if it already has it
-#       - Make Decals, POM and Stencils not cast shadows
-# TODO: Import multiple materials where the filename is the same but with two different paths
-# TODO: Set the tint palette guid on the root object when importing, and read it back when refreshing the ship
-# TODO: find already imported non-ship items
-# TODO: add the custom properties to the root object when importing for all sub-objects
-# TODO: add functionality to add POM material and replace in-place with existing textures
-# TODO: fix extra thrusters on front of retro thrusters on Gladius
-# TODO: Import the paints (tint pallets node group needs to work for this)
-# TODO: make a friendly error when installing to detect if the starfab addon is not installed
 # TODO: Fix paint name lookups for ships with multiple words, e.g. guardian_mx
 #       or do it the proper way and use the databacore to lookup the paint to 
 #       get the key for the localisation
+# TODO: add functionality to add POM material and replace in-place with existing textures
+# TODO: Import multiple materials where the filename is the same but with two different paths
+# TODO: Set the tint palette guid on the root object when importing, and read it back when refreshing the ship
+# TODO: find already imported non-ship items
+# TODO: fix extra thrusters on front of retro thrusters on Gladius
+# TODO: make a friendly error when installing to detect if the starfab addon is not installed
 
 # Add addon directory to sys.path to allow relative imports
 if __package__ in sys.modules:
