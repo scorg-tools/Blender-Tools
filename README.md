@@ -29,7 +29,7 @@ This addon extends the functionality of the StarFab Blender addon by providing a
 2. Click **Make Instance Real**.
 3. ⏳ *Wait some more time (the more complex the ship the longer this takes).*
 4. Click **Refresh Ship Info - Don't see it? Then click Load Data.p4k**.
-5. Click **Import Missing Loadout**.
+5. Click **Import loadout & mats**.
 
 <table>
   <tr>
@@ -86,3 +86,10 @@ If you see messages in the Blender Console about missing `.dae` files, `.mtl` fi
 A: Because I have it in rendered preview (top right of the viewport) and use Cycles for raytracing.  
 Also, I use one of the built-in HDRIs for lighting in the World shader (find the files in your Blender install dir: `3.6\datafiles\studiolights\world\` or download ones online, e.g. [Poly Haven](https://polyhaven.com/hdris)).
 <br /><img src="docs/images/image8.png" alt="World node HDRI" width="900"/><br />
+
+**Q: Why are some materials stil black?**  
+A: You're still missing some materials, when you finish the "Import loadout & Mats" it will give you a list of missing files. Make sure to extract them in StarFab from Content -> Data.p4k.
+
+When you export them make sure you use the same location you chose to extract the blueprint.
+
+Ideally DO NOT USE "create folder for sub-entity" on the blueprints, because all ships share some sort of materials or textures, weapons, or other compoenents, so it saves space to put all the files together so you don't duplicate these. If you have already, then you'll need to change the extract dir in the addon's preferences every time you want to work on a different ship
