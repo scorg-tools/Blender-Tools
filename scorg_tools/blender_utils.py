@@ -1,6 +1,7 @@
 import bpy
 import re
 import time  # Add time import
+import os
 from mathutils import Matrix
 from . import import_utils # For import_utils.SCOrg_tools_import.import_missing_materials
 from . import misc_utils # Add this import for progress updates
@@ -949,3 +950,144 @@ class SCOrg_tools_blender():
 
         # Clear progress when done
         misc_utils.SCOrg_tools_misc.clear_progress()
+    
+    def append_pom_material():
+        """
+        Append the 'scorg_pom' material from pom.blend to the current Blender file.
+        If the material already exists, delete it first.
+        """
+        material_name = "scorg_pom"
+        pom_blend_file = "pom.blend"
+        
+        # Check if material already exists and delete it
+        if material_name in bpy.data.materials:
+            if globals_and_threading.debug: print(f"Material '{material_name}' already exists. Deleting it...")
+            bpy.data.materials.remove(bpy.data.materials[material_name])
+            if globals_and_threading.debug: print(f"Material '{material_name}' deleted.")
+        
+        # Get the directory of this addon file
+        addon_dir = os.path.dirname(os.path.abspath(__file__))
+        pom_blend_path = os.path.join(addon_dir, pom_blend_file)
+        
+        # Check if pom.blend exists
+        if not os.path.exists(pom_blend_path):
+            if globals_and_threading.debug: print(f"Error: {pom_blend_file} not found in {addon_dir}")
+            return None
+        
+        # Append the material from pom.blend
+        try:
+            with bpy.data.libraries.load(pom_blend_path) as (data_from, data_to):
+                if material_name in data_from.materials:
+                    data_to.materials = [material_name]
+                    if globals_and_threading.debug: print(f"Appending material '{material_name}' from {pom_blend_file}...")
+                else:
+                    if globals_and_threading.debug: print(f"Error: Material '{material_name}' not found in {pom_blend_file}")
+                    return None
+            
+            if globals_and_threading.debug: print(f"Successfully appended material '{material_name}' from {pom_blend_file}")
+            return bpy.data.materials.get("scorg_pom")
+            
+        except Exception as e:
+            if globals_and_threading.debug: print(f"Error appending material: {str(e)}")
+            return None
+    
+    def replace_pom_materials():
+        """
+        Replace all _pom_decal materials in the scene with the 'scorg_pom' material.
+        """
+        pom_material = bpy.data.materials.get("scorg_pom")
+        if not pom_material:
+            pom_material = __class__.append_pom_material()
+        
+        if not pom_material:
+            if globals_and_threading.debug: print("Error: 'scorg_pom' material not found. Please append it first.")
+            return False
+        
+        suffix_list = ['_diff', '_ddna.glossmap', '_ddna', '_spec', '_displ']
+        if not pom_material:
+            if globals_and_threading.debug: print("Error: 'scorg_pom' material not found. Please append it first.")
+            return False
+        
+        # Iterate through all materials in the scene
+        for mat in bpy.data.materials:
+            if '_pom_decal' in mat.name.lower():
+                # Check if material uses nodes
+                if not mat.use_nodes or not mat.node_tree:
+                    if globals_and_threading.debug: print(f"Material {mat.name} doesn't use nodes, skipping")
+                    continue
+                
+                # Extract images used by the material with specific suffixes
+                images = {}
+                for node in mat.node_tree.nodes:
+                    if node.type == 'TEX_IMAGE' and node.image:
+                        if globals_and_threading.debug: print(f"Checking image node '{node.name}' with image '{node.image.name}' in material {mat.name}")
+                        
+                        # Check if the image name contains any of our suffixes
+                        for suffix in suffix_list:
+                            if suffix in node.image.name.lower():
+                                images[suffix] = node.image.filepath if node.image.filepath else node.image.name
+                                if globals_and_threading.debug: print(f"Found {suffix} image: {images[suffix]}")
+                                break
+                
+                if globals_and_threading.debug: print(f"Images used by {mat.name}: {images}")
+                
+                # If we found any images, replace the material nodes with scorg_pom nodes
+                if images:
+                    if globals_and_threading.debug: print(f"Replacing material {mat.name} with scorg_pom material")
+                    
+                    # Store the old material name for reference
+                    old_mat_name = mat.name
+                    
+                    # Duplicate the scorg_pom material
+                    new_material = pom_material.copy()
+                    new_material.name = f"{old_mat_name}_temp"
+                    
+                    # Remap all users of the old material to the new material
+                    for obj in bpy.data.objects:
+                        if obj.type == 'MESH':
+                            for slot in obj.material_slots:
+                                if slot.material == mat:
+                                    slot.material = new_material
+                    
+                    # Delete the old material
+                    bpy.data.materials.remove(mat)
+                    
+                    # Rename the new material to the old name
+                    new_material.name = old_mat_name
+                    
+                    # Now assign the detected images to the appropriate texture nodes
+                    for suffix, image_path in images.items():
+                        # Find texture nodes that might correspond to this suffix
+                        for node in new_material.node_tree.nodes:
+                            if node.type == 'TEX_IMAGE':
+                                node_label_lower = node.label.lower()
+                                # Match texture nodes by their labels containing the suffix
+                                # Map suffixes to expected labels
+                                suffix_to_label = {
+                                    '_diff': 'pom_diff',
+                                    '_ddna.glossmap': 'pom_glossmap',
+                                    '_ddna': 'pom_ddna', 
+                                    '_spec': 'pom_spec',
+                                    '_displ': 'pom_displ'
+                                }
+                                
+                                expected_label = suffix_to_label.get(suffix, '')
+                                if expected_label and expected_label in node_label_lower:
+                                    # Load the image if it's a filepath, otherwise find existing image
+                                    if image_path.startswith('//') or '/' in image_path or '\\' in image_path:
+                                        # It's a filepath, try to load it
+                                        try:
+                                            image = bpy.data.images.load(image_path)
+                                            node.image = image
+                                            if globals_and_threading.debug: print(f"Assigned image {image_path} to node {node.label}")
+                                        except:
+                                            if globals_and_threading.debug: print(f"Failed to load image {image_path}")
+                                    else:
+                                        # It's an image name, find existing image
+                                        existing_image = bpy.data.images.get(image_path)
+                                        if existing_image:
+                                            node.image = existing_image
+                                            if globals_and_threading.debug: print(f"Assigned existing image {image_path} to node {node.label}")
+                                    break
+                    
+                    if globals_and_threading.debug: print(f"Successfully replaced material {old_mat_name} with scorg_pom material")
