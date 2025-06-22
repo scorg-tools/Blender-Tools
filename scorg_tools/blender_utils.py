@@ -1036,8 +1036,11 @@ class SCOrg_tools_blender():
     def find_and_set_displacement_image(material, image_path):
         """
         Find the POM_disp node group in the material and set its displacement image.
+        Also sets the bias value on POM_vector based on the top-left pixel brightness.
         Only needs to be done once since all instances in the material share the same node group.
         """
+        image_obj = None
+        
         # Search through all node groups in the material to find POM_disp
         for node_group_data in bpy.data.node_groups:
             if 'pom_disp' in node_group_data.name.lower():
@@ -1062,7 +1065,6 @@ class SCOrg_tools_blender():
                     for node in node_group_data.nodes:
                         if node.type == 'TEX_IMAGE' and 'pom_displ' in node.label.lower():
                             # Found the displacement texture node
-                            image_obj = None
                             if image_path.startswith('//') or '/' in image_path or '\\' in image_path:
                                 try:
                                     image_obj = bpy.data.images.load(image_path)
@@ -1085,9 +1087,53 @@ class SCOrg_tools_blender():
                                 image_obj.colorspace_settings.name = 'Non-Color'
                                 if globals_and_threading.debug: 
                                     print(f"Set colorspace to Non-Color for displacement image")
-                                return True
                             break
                     break
+        
+        # If we successfully loaded/found the displacement image, sample the top-left pixel
+        if image_obj:
+            try:
+                # Ensure the image has pixels loaded
+                if not image_obj.pixels:
+                    image_obj.pixels.foreach_get([])  # Force pixel data loading
+                
+                # Get the top-left pixel (0,0) - note that Blender stores pixels as RGBA
+                # For a displacement map, we typically use the red channel or average RGB
+                width = image_obj.size[0]
+                height = image_obj.size[1]
+                
+                if width > 0 and height > 0:
+                    # Blender stores pixels in a flat array: [R,G,B,A, R,G,B,A, ...]
+                    # Top-left pixel is at index 0
+                    pixel_data = image_obj.pixels[0:4]  # Get first 4 values (RGBA)
+                    
+                    # Calculate brightness (luminance) from RGB values
+                    # Using standard luminance formula: 0.299*R + 0.587*G + 0.114*B
+                    brightness = 0.299 * pixel_data[0] + 0.587 * pixel_data[1] + 0.114 * pixel_data[2]
+                    
+                    if globals_and_threading.debug:
+                        print(f"Top-left pixel RGB: ({pixel_data[0]:.3f}, {pixel_data[1]:.3f}, {pixel_data[2]:.3f})")
+                        print(f"Calculated brightness: {brightness:.3f}")
+                    
+                    # Now find POM_vector node groups and set the Bias value
+                    # Only look for POM_vector that's used in this specific material
+                    for node in material.node_tree.nodes:
+                        if node.type == 'GROUP' and node.node_tree and 'pom_vector' in node.node_tree.name.lower():
+                            # This is the POM_vector node group used in this material
+                            if 'Bias' in node.inputs:
+                                node.inputs['Bias'].default_value = brightness
+                                if globals_and_threading.debug:
+                                    print(f"Set Bias to {brightness:.3f} on POM_vector node {node.name} for material {material.name}")
+                                break
+                    
+                    return True
+                else:
+                    if globals_and_threading.debug:
+                        print(f"Warning: Displacement image has invalid dimensions: {width}x{height}")
+                        
+            except Exception as e:
+                if globals_and_threading.debug:
+                    print(f"Error sampling displacement image pixel: {e}")
         
         if globals_and_threading.debug: 
             print(f"Could not find POM_disp node group for material {material.name}")
