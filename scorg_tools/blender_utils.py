@@ -1062,13 +1062,13 @@ class SCOrg_tools_blender():
                     for node in node_group_data.nodes:
                         if node.type == 'TEX_IMAGE' and 'pom_displ' in node.label.lower():
                             # Found the displacement texture node
+                            image_obj = None
                             if image_path.startswith('//') or '/' in image_path or '\\' in image_path:
                                 try:
-                                    image = bpy.data.images.load(image_path)
-                                    node.image = image
+                                    image_obj = bpy.data.images.load(image_path)
+                                    node.image = image_obj
                                     if globals_and_threading.debug: 
                                         print(f"Assigned displacement image {image_path} to POM_disp node group {node_group_data.name}")
-                                    return True
                                 except:
                                     if globals_and_threading.debug: 
                                         print(f"Failed to load displacement image {image_path}")
@@ -1076,9 +1076,16 @@ class SCOrg_tools_blender():
                                 existing_image = bpy.data.images.get(image_path)
                                 if existing_image:
                                     node.image = existing_image
+                                    image_obj = existing_image
                                     if globals_and_threading.debug: 
                                         print(f"Assigned existing displacement image {image_path} to POM_disp node group {node_group_data.name}")
-                                    return True
+                            
+                            # Set colorspace for displacement image
+                            if image_obj:
+                                image_obj.colorspace_settings.name = 'Non-Color'
+                                if globals_and_threading.debug: 
+                                    print(f"Set colorspace to Non-Color for displacement image")
+                                return True
                             break
                     break
         
@@ -1174,12 +1181,14 @@ class SCOrg_tools_blender():
                                     
                                     expected_label = suffix_to_label.get(suffix, '')
                                     if expected_label and expected_label in node_label_lower:
+                                        image_obj = None
+                                        
                                         # Load the image if it's a filepath, otherwise find existing image
                                         if image_path.startswith('//') or '/' in image_path or '\\' in image_path:
                                             # It's a filepath, try to load it
                                             try:
-                                                image = bpy.data.images.load(image_path)
-                                                node.image = image
+                                                image_obj = bpy.data.images.load(image_path)
+                                                node.image = image_obj
                                                 if globals_and_threading.debug: print(f"Assigned image {image_path} to node {node.label}")
                                             except:
                                                 if globals_and_threading.debug: print(f"Failed to load image {image_path}")
@@ -1188,7 +1197,18 @@ class SCOrg_tools_blender():
                                             existing_image = bpy.data.images.get(image_path)
                                             if existing_image:
                                                 node.image = existing_image
+                                                image_obj = existing_image
                                                 if globals_and_threading.debug: print(f"Assigned existing image {image_path} to node {node.label}")
+                                        
+                                        # Set colorspace based on image type
+                                        if image_obj:
+                                            if suffix == '_diff':
+                                                image_obj.colorspace_settings.name = 'sRGB'
+                                                if globals_and_threading.debug: print(f"Set colorspace to sRGB for {suffix} image")
+                                            else:
+                                                image_obj.colorspace_settings.name = 'Non-Color'
+                                                if globals_and_threading.debug: print(f"Set colorspace to Non-Color for {suffix} image")
+                                        
                                         break
                     
                     if globals_and_threading.debug: print(f"Successfully replaced material {old_mat_name} with scorg_pom material")
