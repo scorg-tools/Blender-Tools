@@ -1188,6 +1188,10 @@ class SCOrg_tools_blender():
                                 break
                 
                 if globals_and_threading.debug: print(f"Images used by {mat.name}: {images}")
+                # Exit early if _displ or _pom_height is not found
+                if not images.get('_displ') and not images.get('_pom_height'):
+                    if globals_and_threading.debug: print(f"Material {mat.name} does not have required displacement or height map images, skipping")
+                    continue
                 
                 # If we found any images, replace the material nodes with scorg_pom nodes
                 if images:
