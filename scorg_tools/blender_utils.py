@@ -991,6 +991,101 @@ class SCOrg_tools_blender():
             if globals_and_threading.debug: print(f"Error appending material: {str(e)}")
             return None
     
+    def make_node_groups_unique_recursive(node_tree, material_name, processed_groups=None, unique_mapping=None):
+        """
+        Recursively make all node groups unique within a node tree and its nested groups.
+        Reuses the same unique instance for multiple occurrences of the same node group.
+        """
+        if processed_groups is None:
+            processed_groups = set()
+        if unique_mapping is None:
+            unique_mapping = {}  # Maps original node group to its unique copy
+        
+        if not node_tree or id(node_tree) in processed_groups:
+            return unique_mapping
+        
+        processed_groups.add(id(node_tree))
+        
+        for node in node_tree.nodes:
+            if node.type == 'GROUP' and node.node_tree:
+                original_group = node.node_tree
+                
+                # Check if we've already made this node group unique for this material
+                if original_group in unique_mapping:
+                    # Reuse the existing unique copy
+                    node.node_tree = unique_mapping[original_group]
+                    if globals_and_threading.debug: 
+                        print(f"Reusing unique node group '{node.node_tree.name}' for material {material_name}")
+                else:
+                    # Make this node group unique if it has multiple users
+                    if original_group.users > 1:
+                        unique_copy = original_group.copy()
+                        unique_mapping[original_group] = unique_copy
+                        node.node_tree = unique_copy
+                        if globals_and_threading.debug: 
+                            print(f"Made node group '{unique_copy.name}' unique for material {material_name}")
+                    else:
+                        # Already unique, just map it to itself
+                        unique_mapping[original_group] = original_group
+                
+                # Recursively process nested node groups with the same mapping
+                __class__.make_node_groups_unique_recursive(node.node_tree, material_name, processed_groups, unique_mapping)
+        
+        return unique_mapping
+    
+    def find_and_set_displacement_image(material, image_path):
+        """
+        Find the POM_disp node group in the material and set its displacement image.
+        Only needs to be done once since all instances in the material share the same node group.
+        """
+        # Search through all node groups in the material to find POM_disp
+        for node_group_data in bpy.data.node_groups:
+            if 'pom_disp' in node_group_data.name.lower():
+                # Check if this node group is used in our material
+                group_used_in_material = False
+                for node in material.node_tree.nodes:
+                    if node.type == 'GROUP' and node.node_tree == node_group_data:
+                        group_used_in_material = True
+                        break
+                    # Also check nested groups (like in POM_vector or POM_parallax)
+                    elif node.type == 'GROUP' and node.node_tree:
+                        for nested_node in node.node_tree.nodes:
+                            if nested_node.type == 'GROUP' and nested_node.node_tree == node_group_data:
+                                group_used_in_material = True
+                                break
+                        if group_used_in_material:
+                            break
+                
+                if group_used_in_material:
+                    # Found the POM_disp node group used in this material
+                    # Find the displacement texture node inside it
+                    for node in node_group_data.nodes:
+                        if node.type == 'TEX_IMAGE' and 'pom_displ' in node.label.lower():
+                            # Found the displacement texture node
+                            if image_path.startswith('//') or '/' in image_path or '\\' in image_path:
+                                try:
+                                    image = bpy.data.images.load(image_path)
+                                    node.image = image
+                                    if globals_and_threading.debug: 
+                                        print(f"Assigned displacement image {image_path} to POM_disp node group {node_group_data.name}")
+                                    return True
+                                except:
+                                    if globals_and_threading.debug: 
+                                        print(f"Failed to load displacement image {image_path}")
+                            else:
+                                existing_image = bpy.data.images.get(image_path)
+                                if existing_image:
+                                    node.image = existing_image
+                                    if globals_and_threading.debug: 
+                                        print(f"Assigned existing displacement image {image_path} to POM_disp node group {node_group_data.name}")
+                                    return True
+                            break
+                    break
+        
+        if globals_and_threading.debug: 
+            print(f"Could not find POM_disp node group for material {material.name}")
+        return False
+
     def replace_pom_materials():
         """
         Replace all _pom_decal materials in the scene with the 'scorg_pom' material.
@@ -1004,13 +1099,11 @@ class SCOrg_tools_blender():
             return False
         
         suffix_list = ['_diff', '_ddna.glossmap', '_ddna', '_spec', '_displ']
-        if not pom_material:
-            if globals_and_threading.debug: print("Error: 'scorg_pom' material not found. Please append it first.")
-            return False
         
         # Iterate through all materials in the scene
         for mat in bpy.data.materials:
-            if '_pom_decal' in mat.name.lower():
+            # check if the material name contains _decal_pom, _pom_decal
+            if '_decal_pom' in mat.name.lower() or '_pom_decal' in mat.name.lower():
                 # Check if material uses nodes
                 if not mat.use_nodes or not mat.node_tree:
                     if globals_and_threading.debug: print(f"Material {mat.name} doesn't use nodes, skipping")
@@ -1042,6 +1135,9 @@ class SCOrg_tools_blender():
                     new_material = pom_material.copy()
                     new_material.name = f"{old_mat_name}_temp"
                     
+                    # Make all node groups unique for this material (including nested ones)
+                    __class__.make_node_groups_unique_recursive(new_material.node_tree, new_material.name)
+                    
                     # Remap all users of the old material to the new material
                     for obj in bpy.data.objects:
                         if obj.type == 'MESH':
@@ -1057,37 +1153,42 @@ class SCOrg_tools_blender():
                     
                     # Now assign the detected images to the appropriate texture nodes
                     for suffix, image_path in images.items():
-                        # Find texture nodes that might correspond to this suffix
-                        for node in new_material.node_tree.nodes:
-                            if node.type == 'TEX_IMAGE':
-                                node_label_lower = node.label.lower()
-                                # Match texture nodes by their labels containing the suffix
-                                # Map suffixes to expected labels
-                                suffix_to_label = {
-                                    '_diff': 'pom_diff',
-                                    '_ddna.glossmap': 'pom_glossmap',
-                                    '_ddna': 'pom_ddna', 
-                                    '_spec': 'pom_spec',
-                                    '_displ': 'pom_displ'
-                                }
-                                
-                                expected_label = suffix_to_label.get(suffix, '')
-                                if expected_label and expected_label in node_label_lower:
-                                    # Load the image if it's a filepath, otherwise find existing image
-                                    if image_path.startswith('//') or '/' in image_path or '\\' in image_path:
-                                        # It's a filepath, try to load it
-                                        try:
-                                            image = bpy.data.images.load(image_path)
-                                            node.image = image
-                                            if globals_and_threading.debug: print(f"Assigned image {image_path} to node {node.label}")
-                                        except:
-                                            if globals_and_threading.debug: print(f"Failed to load image {image_path}")
-                                    else:
-                                        # It's an image name, find existing image
-                                        existing_image = bpy.data.images.get(image_path)
-                                        if existing_image:
-                                            node.image = existing_image
-                                            if globals_and_threading.debug: print(f"Assigned existing image {image_path} to node {node.label}")
-                                    break
+                        if suffix == '_displ':
+                            # Handle displacement image - find and set it once in the POM_disp node group
+                            if not __class__.find_and_set_displacement_image(new_material, image_path):
+                                if globals_and_threading.debug: 
+                                    print(f"Could not find displacement texture node for {image_path} in material {new_material.name}")
+                        else:
+                            # Find texture nodes that might correspond to this suffix
+                            for node in new_material.node_tree.nodes:
+                                if node.type == 'TEX_IMAGE':
+                                    node_label_lower = node.label.lower()
+                                    # Match texture nodes by their labels containing the suffix
+                                    # Map suffixes to expected labels
+                                    suffix_to_label = {
+                                        '_diff': 'pom_diff',
+                                        '_ddna.glossmap': 'pom_glossmap',
+                                        '_ddna': 'pom_ddna', 
+                                        '_spec': 'pom_spec'
+                                    }
+                                    
+                                    expected_label = suffix_to_label.get(suffix, '')
+                                    if expected_label and expected_label in node_label_lower:
+                                        # Load the image if it's a filepath, otherwise find existing image
+                                        if image_path.startswith('//') or '/' in image_path or '\\' in image_path:
+                                            # It's a filepath, try to load it
+                                            try:
+                                                image = bpy.data.images.load(image_path)
+                                                node.image = image
+                                                if globals_and_threading.debug: print(f"Assigned image {image_path} to node {node.label}")
+                                            except:
+                                                if globals_and_threading.debug: print(f"Failed to load image {image_path}")
+                                        else:
+                                            # It's an image name, find existing image
+                                            existing_image = bpy.data.images.get(image_path)
+                                            if existing_image:
+                                                node.image = existing_image
+                                                if globals_and_threading.debug: print(f"Assigned existing image {image_path} to node {node.label}")
+                                        break
                     
                     if globals_and_threading.debug: print(f"Successfully replaced material {old_mat_name} with scorg_pom material")
