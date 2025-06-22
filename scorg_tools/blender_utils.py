@@ -216,6 +216,7 @@ class SCOrg_tools_blender():
         __class__.update_viewport_with_timer(redraw_now=True)
         __class__.replace_pom_materials()
         __class__.update_viewport_with_timer(redraw_now=True)
+        __class__.tidyup()
         # Clear progress when done
         misc_utils.SCOrg_tools_misc.clear_progress()
 
@@ -1307,3 +1308,24 @@ class SCOrg_tools_blender():
                                 break
                     
                     if globals_and_threading.debug: print(f"Successfully replaced material {old_mat_name} with scorg_pom material")
+
+    def deduplicate_images():
+        images = {}
+        for img in bpy.data.images:
+            if not img.filepath in images.keys():
+                images[img.filepath] = img
+            else:
+                if globals_and_threading.debug:
+                    print(f"Removing duplicate image: {img.name} with filepath {img.filepath}")
+                # remap all users of this image to the first instance
+                img.user_remap(images[img.filepath])
+                # Remove the duplicate image
+                bpy.data.images.remove(img)
+    
+    def tidyup():
+        """        Perform a cleanup of the Blender scene:
+        - De-duplicate images
+        - Remove orphaned data blocks (images, materials, meshes, etc.)
+        """
+        __class__.deduplicate_images()
+        bpy.ops.outliner.orphans_purge(do_local_ids=True, do_linked_ids=True, do_recursive=True)
