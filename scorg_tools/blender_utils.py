@@ -1269,4 +1269,41 @@ class SCOrg_tools_blender():
                                         
                                         break
                     
+                    # Check if _spec image was not found and handle accordingly
+                    if '_spec' not in images:
+                        if globals_and_threading.debug:
+                            print(f"No _spec image found for material {new_material.name}, removing spec nodes and setting base color")
+                        
+                        # Find and remove pom_spec image node
+                        spec_node_to_remove = None
+                        for node in new_material.node_tree.nodes:
+                            if node.type == 'TEX_IMAGE' and 'pom_spec' in node.label.lower():
+                                spec_node_to_remove = node
+                                break
+                        
+                        if spec_node_to_remove:
+                            new_material.node_tree.nodes.remove(spec_node_to_remove)
+                            if globals_and_threading.debug:
+                                print(f"Removed pom_spec image node from material {new_material.name}")
+                        
+                        # Find and remove Brightness/Contrast node
+                        brightness_node_to_remove = None
+                        for node in new_material.node_tree.nodes:
+                            if node.type == 'BRIGHTCONTRAST':
+                                brightness_node_to_remove = node
+                                break
+                        
+                        if brightness_node_to_remove:
+                            new_material.node_tree.nodes.remove(brightness_node_to_remove)
+                            if globals_and_threading.debug:
+                                print(f"Removed Brightness/Contrast node from material {new_material.name}")
+                        
+                        # Find Principled BSDF and set Base Color to dark gray
+                        for node in new_material.node_tree.nodes:
+                            if node.type == 'BSDF_PRINCIPLED':
+                                node.inputs['Base Color'].default_value = [0.06, 0.06, 0.06, 1.0]
+                                if globals_and_threading.debug:
+                                    print(f"Set Principled BSDF Base Color to dark gray for material {new_material.name}")
+                                break
+                    
                     if globals_and_threading.debug: print(f"Successfully replaced material {old_mat_name} with scorg_pom material")
