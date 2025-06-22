@@ -7,6 +7,7 @@ from . import import_utils # For import_utils.SCOrg_tools_import.import_missing_
 from . import misc_utils # Add this import for progress updates
 import xml.etree.ElementTree as ET
 from . import globals_and_threading
+import glob
 
 class SCOrg_tools_blender():
     _last_redraw_time = 0  # Class variable to track last redraw time
@@ -1164,6 +1165,10 @@ class SCOrg_tools_blender():
             return False
         
         suffix_list = ['_diff', '_ddna.glossmap', '_ddna', '_ddn', '_spec', '_displ', '_pom_height']
+        mapped_suffixes = {
+            '_ddn': '_ddna',
+            '_pom_height': '_displ'
+        }
         
         # Iterate through all materials in the scene
         for mat in bpy.data.materials:
@@ -1183,6 +1188,9 @@ class SCOrg_tools_blender():
                         # Check if the image name contains any of our suffixes
                         for suffix in suffix_list:
                             if suffix in node.image.name.lower():
+                                # Map alternative suffixes to the main ones
+                                if suffix in mapped_suffixes:
+                                    suffix = mapped_suffixes[suffix]
                                 images[suffix] = node.image.filepath if node.image.filepath else node.image.name
                                 if globals_and_threading.debug: print(f"Found {suffix} image: {images[suffix]}")
                                 break
@@ -1192,7 +1200,39 @@ class SCOrg_tools_blender():
                 if not images.get('_displ') and not images.get('_pom_height'):
                     if globals_and_threading.debug: print(f"Material {mat.name} does not have required displacement or height map images, skipping")
                     continue
+
+                # Check to see if we are missing any of the required images
+                missing_images = [suffix for suffix in suffix_list if suffix not in images]
+                # Remove the alternative suffixes as they will be remapped to the main ones
+                missing_images = [suffix for suffix in missing_images if suffix not in ['_ddn', '_pom_height']]
                 
+                if missing_images:
+                    if globals_and_threading.debug: 
+                        print(f"Material {mat.name} is missing images: {', '.join(missing_images)}. Attempting to find them")
+                    # Get the filepath of the displacement image (images dict contains strings, not image objects)
+                    displacement_image_path = images.get('_displ') or images.get('_pom_height')
+                    # strip the file extension from the displacement image path
+                    displacement_image_path = os.path.splitext(displacement_image_path)[0]
+                    # strip the _displ or _pom_height suffix
+                    displacement_image_path = displacement_image_path.rsplit('_', 1)[0]
+                    # Now try to find the missing images based on the displacement image path
+                    for suffix in missing_images:
+                        # Try multiple extensions
+                        found_images = []
+                        for ext in ['.tif', '.png', '.tga']:
+                            expected_image_path = f"{displacement_image_path}{suffix}{ext}"
+                            if globals_and_threading.debug: 
+                                print(f"Looking for missing image for {suffix}: {expected_image_path}")
+                            if os.path.exists(expected_image_path):
+                                found_images.append(expected_image_path)
+                                break
+                        
+                        if found_images:
+                            # If we found an image, use the first one
+                            images[suffix] = found_images[0]
+                            if globals_and_threading.debug: 
+                                print(f"Found missing image for {suffix}: {images[suffix]}")
+
                 # If we found any images, replace the material nodes with scorg_pom nodes
                 if images:
                     if globals_and_threading.debug: print(f"Replacing material {mat.name} with scorg_pom material")
