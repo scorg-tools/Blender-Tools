@@ -839,10 +839,12 @@ class SCOrg_tools_import():
             record = __class__.get_record(__class__.item_guid)
             
         if record:
-            if globals_and_threading.debug: print(f"DEBUG: Attempting to load tint palette for: {record.name}")
+            if globals_and_threading.debug: print(f"DEBUG: Attempting to load tint palette for: {record.name} - tint: {tint_number}")
             tints = tint_utils.SCOrg_tools_tint.get_tint_pallet_list(record)
+            # get the nth tint palette GUID from the dict's keys
+            tint = list(tints.keys())[tint_number]
             if tints:
-                __class__.load_tint_palette(tints[tint_number], tint_node_group.name)
+                __class__.load_tint_palette(tint, tint_node_group.name)
 
         if len(file_cache) > 0:
             # Import the materials using scdatatools
@@ -928,3 +930,47 @@ class SCOrg_tools_import():
         for decalColour in ["decalColorR", "decalColorG", "decalColorB"]:
             d = record.properties['root'].properties[decalColour].properties
             t.nodes["DecalConverter"].inputs[decalColour].default_value = scdatatools.blender.materials.a_to_c(d)
+    
+    def get_record_name(record):
+        """
+        Returns the name of the record
+        """
+        # Check if record is None
+        if record is None:
+            if globals_and_threading.debug: print("DEBUG: get_record_name called with None record")
+            return None
+        # Get the localisation index via Components -> VehicleComponentParams -> vehicleName
+        locale_id = None
+        if hasattr(record, 'properties') and hasattr(record.properties, 'Components'):
+            for comp in record.properties.Components:
+                if comp.name == "VehicleComponentParams":
+                    if hasattr(comp.properties, 'vehicleName'):
+                        locale_id = comp.properties.vehicleName
+                        if locale_id is not None:
+                            break;
+        if locale_id is None:
+            # Check Components -> SCItemPurchasableParams -> displayName
+            for comp in record.properties.Components:
+                if comp.name == "SCItemPurchasableParams":
+                    if hasattr(comp.properties, 'displayName'):
+                        locale_id = comp.properties.displayName
+                        if locale_id is not None:
+                            break;
+        if locale_id is None:
+            if globals_and_threading.debug: print("DEBUG: No locale id found in record properties")
+            return None
+        
+        # strip the "@" prefix if it exists
+        locale_id = locale_id.lstrip('@')
+
+        # Get the localisation string
+        try:
+            locale_string = globals_and_threading.localizer.gettext(locale_id)
+            if locale_string:
+                return locale_string
+            else:
+                if globals_and_threading.debug: print(f"DEBUG: No localisation string found for id {locale_id}")
+                return None
+        except Exception as e:
+            if globals_and_threading.debug: print(f"DEBUG: Error getting localisation string for id {locale_id}: {e}")
+            return None

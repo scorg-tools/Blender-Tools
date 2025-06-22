@@ -5,7 +5,7 @@ import time  # Add time import for timer functionality
 
 # Import globals
 from . import globals_and_threading
-from . import tint_utils
+from . import import_utils
 from .spinners import SPINNER_LIBRARY  # Import the spinner library
 
 class SCOrg_tools_misc():
@@ -99,7 +99,9 @@ class SCOrg_tools_misc():
                 print(f"❌ Error, could not match ship or vehicle for {name}")
                 return None
             
-            # Access global localizer
+            # Get ship name:
+            ship_name = import_utils.SCOrg_tools_import.get_record_name(records[0])
+        
             if globals_and_threading.localizer:
                 ship_name = globals_and_threading.localizer.gettext("vehicle_name"+name.lower())
                 globals_and_threading.ship_loaded = ship_name
