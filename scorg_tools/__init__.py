@@ -1,11 +1,11 @@
 bl_info = {
     "name": "SCOrg.tools Blender Tools alpha",
     "author": "Star-Destroyer@scorg.tools",
-    "version": (1, 0, 26),
+    "version": (1, 1, 27),
     "blender": (3, 6, 0),
     "location": "View3D > Sidebar > SCOrg.tools",
     "description": "Tools to supplement StarFab",
-    "warning": "EXPERIMENTAL ALPHA VERSION! Use with caution.",
+    "warning": "EXPERIMENTAL BETA VERSION! Use with caution.",
     "doc_url": "https://github.com/scorg-tools/Blender-Tools/",
     "category": "3D View"
 }
@@ -15,7 +15,6 @@ import bpy
 import os
 import sys
 
-# TODO: add functionality to add POM material and replace in-place with existing textures
 # TODO: Import multiple materials where the filename is the same but with two different paths
 #       check to see if requested material is in one then proceed to next if not
 # TODO: load paint materials if listed, instead of (?) the main material
