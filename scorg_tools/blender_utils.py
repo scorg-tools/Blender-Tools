@@ -1248,7 +1248,7 @@ class SCOrg_tools_blender():
                                         
                                         # Set colorspace based on image type
                                         if image_obj:
-                                            if suffix == '_diff':
+                                            if suffix == '_diff' or suffix == '_ddna.glossmap':
                                                 image_obj.colorspace_settings.name = 'sRGB'
                                                 if globals_and_threading.debug: print(f"Set colorspace to sRGB for {suffix} image")
                                             else:
