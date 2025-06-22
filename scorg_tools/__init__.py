@@ -1,7 +1,7 @@
 bl_info = {
     "name": "SCOrg.tools Blender Tools alpha",
     "author": "Star-Destroyer@scorg.tools",
-    "version": (1, 0, 25),
+    "version": (1, 0, 26),
     "blender": (3, 6, 0),
     "location": "View3D > Sidebar > SCOrg.tools",
     "description": "Tools to supplement StarFab",
@@ -15,9 +15,10 @@ import bpy
 import os
 import sys
 
-# TODO: load paint materials if listed, instead of (?) the main material
 # TODO: add functionality to add POM material and replace in-place with existing textures
 # TODO: Import multiple materials where the filename is the same but with two different paths
+#       check to see if requested material is in one then proceed to next if not
+# TODO: load paint materials if listed, instead of (?) the main material
 # TODO: Set the tint palette guid on the root object when importing, and read it back when refreshing the ship
 # TODO: find already imported non-ship items
 # TODO: fix extra thrusters on front of retro thrusters on Gladius
