@@ -85,6 +85,12 @@ class SCOrg_tools_AddonPreferences(bpy.types.AddonPreferences):
         precision=4
     )
 
+    enable_3d_pom: BoolProperty(
+        name="Enable 3D POM",
+        description="Enable 3D Parallax Occlusion Mapping (POM) material replacement for better visual quality",
+        default=True
+    )
+
     def draw(self, context):
         layout = self.layout
         layout.label(text="SCOrg.tools Settings")
@@ -93,8 +99,12 @@ class SCOrg_tools_AddonPreferences(bpy.types.AddonPreferences):
         layout.prop(self, "debug_mode")
         layout.separator()
         
+        # 3D POM setting
+        layout.prop(self, "enable_3d_pom")
+        layout.separator()
+        
         # Displacement settings
-        layout.label(text="Displacement Settings:")
+        layout.label(text="Physical decal displacement settings:")
         layout.prop(self, "decal_displacement_ship")
         layout.prop(self, "decal_displacement_non_ship")
         layout.separator()

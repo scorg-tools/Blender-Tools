@@ -213,6 +213,9 @@ class SCOrg_tools_blender():
         __class__.set_glass_materials_transparent()
         __class__.update_viewport_with_timer(redraw_now=True)
         __class__.fix_stencil_materials()
+        __class__.update_viewport_with_timer(redraw_now=True)
+        __class__.replace_pom_materials()
+        __class__.update_viewport_with_timer(redraw_now=True)
         # Clear progress when done
         misc_utils.SCOrg_tools_misc.clear_progress()
 
@@ -1143,6 +1146,14 @@ class SCOrg_tools_blender():
         """
         Replace all _pom_decal materials in the scene with the 'scorg_pom' material.
         """
+        # Check if 3D POM is enabled in preferences
+        addon_prefs = bpy.context.preferences.addons.get(__name__.split('.')[0])
+        if addon_prefs and hasattr(addon_prefs.preferences, 'enable_3d_pom'):
+            if not addon_prefs.preferences.enable_3d_pom:
+                if globals_and_threading.debug: 
+                    print("3D POM is disabled in preferences, skipping POM material replacement")
+                return False
+        
         pom_material = bpy.data.materials.get("scorg_pom")
         if not pom_material:
             pom_material = __class__.append_pom_material()
@@ -1151,12 +1162,12 @@ class SCOrg_tools_blender():
             if globals_and_threading.debug: print("Error: 'scorg_pom' material not found. Please append it first.")
             return False
         
-        suffix_list = ['_diff', '_ddna.glossmap', '_ddna', '_spec', '_displ']
+        suffix_list = ['_diff', '_ddna.glossmap', '_ddna', '_ddn', '_spec', '_displ', '_pom_height']
         
         # Iterate through all materials in the scene
         for mat in bpy.data.materials:
-            # check if the material name contains _decal_pom, _pom_decal
-            if '_decal_pom' in mat.name.lower() or '_pom_decal' in mat.name.lower():
+            # check if the material name contains _decal_pom, _pom_decal, or _mtl_POM
+            if '_decal_pom' in mat.name.lower() or '_pom_decal' in mat.name.lower() or '_mtl_pom' in mat.name.lower():
                 # Check if material uses nodes
                 if not mat.use_nodes or not mat.node_tree:
                     if globals_and_threading.debug: print(f"Material {mat.name} doesn't use nodes, skipping")
@@ -1206,7 +1217,7 @@ class SCOrg_tools_blender():
                     
                     # Now assign the detected images to the appropriate texture nodes
                     for suffix, image_path in images.items():
-                        if suffix == '_displ':
+                        if suffix == '_displ' or suffix == '_pom_height':
                             # Handle displacement image - find and set it once in the POM_disp node group
                             if not __class__.find_and_set_displacement_image(new_material, image_path):
                                 if globals_and_threading.debug: 
@@ -1222,6 +1233,7 @@ class SCOrg_tools_blender():
                                         '_diff': 'pom_diff',
                                         '_ddna.glossmap': 'pom_glossmap',
                                         '_ddna': 'pom_ddna', 
+                                        '_ddn': 'pom_ddna',  # Alternative normal map suffix
                                         '_spec': 'pom_spec'
                                     }
                                     
