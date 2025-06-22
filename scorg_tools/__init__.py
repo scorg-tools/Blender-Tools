@@ -15,9 +15,7 @@ import bpy
 import os
 import sys
 
-# TODO: Fix paint name lookups for ships with multiple words, e.g. guardian_mx
-#       or do it the proper way and use the databacore to lookup the paint to 
-#       get the key for the localisation
+# TODO: load paint materials if listed, instead of (?) the main material
 # TODO: add functionality to add POM material and replace in-place with existing textures
 # TODO: Import multiple materials where the filename is the same but with two different paths
 # TODO: Set the tint palette guid on the root object when importing, and read it back when refreshing the ship
