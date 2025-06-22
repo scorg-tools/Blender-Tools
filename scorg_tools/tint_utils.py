@@ -1,9 +1,13 @@
 import bpy
+import re
 # Import globals
 from . import globals_and_threading
 
 class SCOrg_tools_tint():
+    paint_records = None
+
     def get_tint_pallet_list(record):
+        __class__.get_paint_records()  # Ensure paint records are loaded
         tints = {}
         if hasattr(record, 'properties') and hasattr(record.properties, 'Components'):
             for i, comp in enumerate(record.properties.Components):
@@ -56,6 +60,15 @@ class SCOrg_tools_tint():
         
         globals_and_threading.button_labels = tints.values() if isinstance(tints, dict) else list(tints)
 
+    def clean_paint_tag(tag):
+        """Clean and format a paint tag for display."""
+        # Replace underscores with spaces, strip
+        cleaned_tag = tag.replace('_', ' ').strip()
+        # Add spaces between CamelCase words
+        cleaned_tag = re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', cleaned_tag)
+        # Capitalize Each Word
+        return cleaned_tag.title()
+    
     def get_paint_name_by_tag(tag):
         """Get the localized name of a paint by its tag."""
         if not tag or not isinstance(tag, str):
@@ -66,7 +79,7 @@ class SCOrg_tools_tint():
         try:
             # Validate globals
             if not globals_and_threading.dcb or not globals_and_threading.localizer:
-                return original_tag.replace('_', ' ').title()
+                return __class__.clean_paint_tag(original_tag)
             
             # Clean and format tag for file search
             search_tag = tag.strip().lower()
@@ -74,13 +87,12 @@ class SCOrg_tools_tint():
                 search_tag = 'paint_' + search_tag
             
             # Search for paint file
-            filename = f"libs/foundry/records/entities/scitem/ships/paints/{search_tag}.xml"
-            search_results = globals_and_threading.dcb.search_filename(filename)
-            if not search_results:
-                return original_tag.replace('_', ' ').title()
+            if search_tag in __class__.paint_records.keys():
+                record = __class__.paint_records[search_tag]
+            else:
+                return __class__.clean_paint_tag(original_tag)
             
             # Navigate to localization name with compact path
-            record = search_results[0]
             locale_name = record.properties.Components[0].properties.AttachDef.properties.Localization.properties.Name
             
             # Clean and localize
@@ -93,7 +105,22 @@ class SCOrg_tools_tint():
                     return localized_name
             
             # Fallback to formatted original tag name
-            return original_tag.replace('_', ' ').title()
+            return __class__.clean_paint_tag(original_tag)
             
         except (IndexError, AttributeError, KeyError, TypeError):
-            return original_tag.replace('_', ' ').title()
+            return __class__.clean_paint_tag(original_tag)
+    
+    def get_paint_records():
+        # Retrieve paint records from the database, caching them for future use.
+        if __class__.paint_records is None:
+            filename = f"libs/foundry/records/entities/scitem/ships/paints/*.xml"
+            search_results = globals_and_threading.dcb.search_filename(filename)
+            # loop through the search results and display the components -> SAttachableComponentParams -> tags
+            paint_records = {}
+            for paint in search_results:
+                tags = paint.properties.Components[0].properties.AttachDef.properties.Tags
+                # split tags by @ and get the second part
+                tag = tags.split('@')[1].strip().lower() if '@' in tags else None
+                paint_records[tag] = paint
+            __class__.paint_records = paint_records
+        return __class__.paint_records
