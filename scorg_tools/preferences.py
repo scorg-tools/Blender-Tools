@@ -78,7 +78,7 @@ class SCOrg_tools_AddonPreferences(bpy.types.AddonPreferences):
     decal_displacement_non_ship: FloatProperty(
         name="Decal Displacement (Non-Ship)",
         description="Displacement strength (m) for decal materials on non-ship items (weapons, equipment, etc.)",
-        default=0.0005,
+        default=0.0001,
         min=0.0,
         max=0.05,
         step=0.0001,
