@@ -1173,7 +1173,7 @@ class SCOrg_tools_blender():
         # Iterate through all materials in the scene
         for mat in bpy.data.materials:
             # check if the material name contains _decal_pom, _pom_decal, or _mtl_POM
-            if '_decal_pom' in mat.name.lower() or '_pom_decal' in mat.name.lower() or '_mtl_pom' in mat.name.lower():
+            if '_decal_pom' in mat.name.lower() or '_pom_decal' in mat.name.lower() or '_mtl_pom' in mat.name.lower() or '_mtl_decals_pom' in mat.name.lower():
                 # Check if material uses nodes
                 if not mat.use_nodes or not mat.node_tree:
                     if globals_and_threading.debug: print(f"Material {mat.name} doesn't use nodes, skipping")
