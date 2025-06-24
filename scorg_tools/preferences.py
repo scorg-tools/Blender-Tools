@@ -175,7 +175,7 @@ class SCOrg_tools_AddonPreferences(bpy.types.AddonPreferences):
         
         col = layout.column()        
         # Displacement settings
-        col.label(text="Modifier Functions (fix_modifiers):", icon='MODIFIER')
+        col.label(text="Modifier Functions:", icon='MODIFIER')
         col.prop(self, "enable_displace_decals")
         col.prop(self, "enable_remove_duplicate_displace")
         col.separator()
