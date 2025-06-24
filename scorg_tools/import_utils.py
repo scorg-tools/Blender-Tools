@@ -556,13 +556,20 @@ class SCOrg_tools_import():
                         __class__.missing_files.append(str(geometry_path));
                     continue
 
+                # Get a set of all objects before import
+                before = set(bpy.data.objects)
+
                 bpy.ops.object.select_all(action='DESELECT')
                 result = bpy.ops.wm.collada_import(filepath=str(geometry_path))
                 if 'FINISHED' not in result:
                     if globals_and_threading.debug: print(f"ERROR: Failed to import DAE for {guid_str}: {geometry_path}")
                     continue
 
-                imported_objs = [obj for obj in bpy.context.selected_objects]
+                # Get a set of all objects after import
+                after = set(bpy.data.objects)
+                # The difference is the set of newly imported objects
+                imported_objs = list(after - before)
+
                 root_objs = [obj for obj in imported_objs if obj.parent is None]
                 if not root_objs:
                     if globals_and_threading.debug: print(f"WARNING: No root object found for: {geometry_path}")
@@ -575,6 +582,8 @@ class SCOrg_tools_import():
 
                 if process_bones_file:
                     if globals_and_threading.debug: print("Deleting meshes for CDF import")
+                    # Store the root object name before deletion
+                    root_obj_name = root_obj.name
                     # Delete all meshes to avoid conflicts with CDF imports, the imported .dae objects will be selected
                     __class__.replace_selected_mesh_with_empties()
                     
@@ -588,13 +597,19 @@ class SCOrg_tools_import():
                                 __class__.missing_files.append(str(file))
                             continue
                         if globals_and_threading.debug: print(f"Processing bones file: {file}")
-                        __class__.import_file(file, root_obj.name)
+                        __class__.import_file(file, root_obj_name)
                     if globals_and_threading.debug: print("DEBUG: Finished processing bones files")
 
-                imported_empties = [
-                    obj for obj in imported_objs
-                    if obj.type == 'EMPTY'
-                ]
+                # Get empties from the current scene that are descendants of matching_empty
+                # This avoids referencing potentially deleted objects from imported_objs
+                imported_empties = []
+                def collect_empties(obj):
+                    if obj.type == 'EMPTY':
+                        imported_empties.append(obj)
+                    for child in obj.children:
+                        collect_empties(child)
+                
+                collect_empties(matching_empty)
 
                 mapping = __class__.get_hardpoint_mapping_from_guid(guid_str) or {}
                 if globals_and_threading.debug: print(f"DEBUG: Imported empties: {[e.name for e in imported_empties]}")
