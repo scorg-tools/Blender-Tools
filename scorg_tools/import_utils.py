@@ -842,10 +842,17 @@ class SCOrg_tools_import():
             if globals_and_threading.debug: print(f"DEBUG: Attempting to load tint palette for: {record.name} - tint: {tint_number}")
             tints = tint_utils.SCOrg_tools_tint.get_tint_pallet_list(record)
             # get the nth tint palette GUID from the dict's keys
-            tint = list(tints.keys())[tint_number]
-            if tints:
-                __class__.load_tint_palette(tint, tint_node_group.name)
-
+            if tints and len(tints) > tint_number:
+                tint = list(tints.keys())[tint_number]
+                if tints:
+                    __class__.load_tint_palette(tint, tint_node_group.name)
+            else:
+                if globals_and_threading.debug: 
+                    if not tints:
+                        print(f"DEBUG: No tints available for record {record.name}")
+                    else:
+                        print(f"DEBUG: Tint number {tint_number} out of range. Available tints: {len(tints)}")
+        
         if len(file_cache) > 0:
             # Import the materials using scdatatools
             from scdatatools.blender import materials
