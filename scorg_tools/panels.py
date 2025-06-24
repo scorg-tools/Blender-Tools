@@ -90,7 +90,7 @@ class VIEW3D_PT_scorg_tools_panel(bpy.types.Panel):
                 layout.operator("view3d.load_p4k_button", text="Load Data.p4k", icon='IMPORT')
             # State 3: P4K is successfully loaded
             else:
-                layout.label(text=f"Loaded Ship: {globals_and_threading.ship_loaded}" if globals_and_threading.ship_loaded else "Click Check to find ship", icon='CHECKBOX_HLT' if globals_and_threading.ship_loaded else 'ERROR')
+                layout.label(text=f"Loaded Ship: {globals_and_threading.ship_loaded}" if globals_and_threading.ship_loaded else "Click Refresh to find ship", icon='CHECKBOX_HLT' if globals_and_threading.ship_loaded else 'ERROR')
                 layout.operator("view3d.refresh_button", text="Refresh Ship Info", icon='FILE_REFRESH')
             
             # --- Sections that should always be visible (unless in StarFab scene) ---
