@@ -1,5 +1,5 @@
 bl_info = {
-    "name": "SCOrg.tools Blender Tools alpha",
+    "name": "SCOrg.tools Blender Tools beta",
     "author": "Star-Destroyer@scorg.tools",
     "version": (1, 1, 28),
     "blender": (3, 6, 0),
