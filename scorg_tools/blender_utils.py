@@ -197,27 +197,52 @@ class SCOrg_tools_blender():
                     #print(f"Removed duplicate Displace modifier '{mod_name}' from '{obj.name'.")
                     
     def fix_modifiers(displacement_strength=0.005):
-        __class__.add_weld_and_weighted_normal_modifiers()
-        __class__.update_viewport_with_timer(redraw_now=True)
-        __class__.add_displace_modifiers_for_decal(displacement_strength)
-        __class__.update_viewport_with_timer(redraw_now=True)
-        __class__.remove_duplicate_displace_modifiers()
-        __class__.update_viewport_with_timer(redraw_now=True)
-        __class__.remove_proxy_material_geometry()
-        __class__.update_viewport_with_timer(redraw_now=True)
-        __class__.remap_material_users()
-        __class__.update_viewport_with_timer(redraw_now=True)
-        import_utils.SCOrg_tools_import.import_missing_materials()
-        __class__.update_viewport_with_timer(redraw_now=True)
-        __class__.fix_materials_case_sensitivity()
-        __class__.update_viewport_with_timer(redraw_now=True)
-        __class__.set_glass_materials_transparent()
-        __class__.update_viewport_with_timer(redraw_now=True)
-        __class__.fix_stencil_materials()
-        __class__.update_viewport_with_timer(redraw_now=True)
-        __class__.replace_pom_materials()
-        __class__.update_viewport_with_timer(redraw_now=True)
-        __class__.tidyup()
+        # Get addon preferences
+        prefs = bpy.context.preferences.addons["scorg_tools"].preferences
+        
+        if prefs.enable_weld_weighted_normal:
+            __class__.add_weld_and_weighted_normal_modifiers()
+            __class__.update_viewport_with_timer(redraw_now=True)
+        
+        if prefs.enable_displace_decals:
+            __class__.add_displace_modifiers_for_decal(displacement_strength)
+            __class__.update_viewport_with_timer(redraw_now=True)
+        
+        if prefs.enable_remove_duplicate_displace:
+            __class__.remove_duplicate_displace_modifiers()
+            __class__.update_viewport_with_timer(redraw_now=True)
+        
+        if prefs.enable_remove_proxy_geometry:
+            __class__.remove_proxy_material_geometry()
+            __class__.update_viewport_with_timer(redraw_now=True)
+        
+        if prefs.enable_remap_material_users:
+            __class__.remap_material_users()
+            __class__.update_viewport_with_timer(redraw_now=True)
+        
+        if prefs.enable_import_missing_materials:
+            import_utils.SCOrg_tools_import.import_missing_materials()
+            __class__.update_viewport_with_timer(redraw_now=True)
+        
+        if prefs.enable_fix_materials_case:
+            __class__.fix_materials_case_sensitivity()
+            __class__.update_viewport_with_timer(redraw_now=True)
+        
+        if prefs.enable_set_glass_transparent:
+            __class__.set_glass_materials_transparent()
+            __class__.update_viewport_with_timer(redraw_now=True)
+        
+        if prefs.enable_fix_stencil_materials:
+            __class__.fix_stencil_materials()
+            __class__.update_viewport_with_timer(redraw_now=True)
+        
+        if prefs.enable_3d_pom:
+            __class__.replace_pom_materials()
+            __class__.update_viewport_with_timer(redraw_now=True)
+        
+        if prefs.enable_tidyup:
+            __class__.tidyup()
+        
         # Clear progress when done
         misc_utils.SCOrg_tools_misc.clear_progress()
 
@@ -1162,15 +1187,7 @@ class SCOrg_tools_blender():
     def replace_pom_materials():
         """
         Replace all _pom_decal materials in the scene with the 'scorg_pom' material.
-        """
-        # Check if 3D POM is enabled in preferences
-        addon_prefs = bpy.context.preferences.addons.get(__name__.split('.')[0])
-        if addon_prefs and hasattr(addon_prefs.preferences, 'enable_3d_pom'):
-            if not addon_prefs.preferences.enable_3d_pom:
-                if globals_and_threading.debug: 
-                    print("3D POM is disabled in preferences, skipping POM material replacement")
-                return False
-        
+        """       
         pom_material = bpy.data.materials.get("scorg_pom")
         if not pom_material:
             pom_material = __class__.append_pom_material()

@@ -91,6 +91,67 @@ class SCOrg_tools_AddonPreferences(bpy.types.AddonPreferences):
         default=True
     )
 
+    # New modifier function preferences
+    enable_weld_weighted_normal: BoolProperty(
+        name="Add Weld and Weighted Normal Modifiers",
+        description="Add Weld and Weighted Normal modifiers to mesh objects",
+        default=True
+    )
+    
+    enable_displace_decals: BoolProperty(
+        name="Add Displace Modifiers for Decals",
+        description="Add displacement modifiers for decal, POM, and stencil materials",
+        default=True
+    )
+    
+    enable_remove_duplicate_displace: BoolProperty(
+        name="Remove Duplicate Displace Modifiers",
+        description="Remove duplicate displacement modifiers with the same vertex group",
+        default=True
+    )
+    
+    enable_remove_proxy_geometry: BoolProperty(
+        name="Remove Proxy Material Geometry",
+        description="Remove geometry with proxy, nodraw, and physics_proxy materials",
+        default=True
+    )
+    
+    enable_remap_material_users: BoolProperty(
+        name="Remap Material Users",
+        description="Remap duplicate materials (with .001 suffixes) to their base versions",
+        default=True
+    )
+    
+    enable_import_missing_materials: BoolProperty(
+        name="Import Missing Materials",
+        description="Import missing material files and apply proper shaders",
+        default=True
+    )
+    
+    enable_fix_materials_case: BoolProperty(
+        name="Fix Materials Case Sensitivity",
+        description="Fix materials that were imported due to case sensitivity differences",
+        default=True
+    )
+    
+    enable_set_glass_transparent: BoolProperty(
+        name="Set Glass Materials Transparent",
+        description="Set glass materials to be transparent in the viewport",
+        default=True
+    )
+    
+    enable_fix_stencil_materials: BoolProperty(
+        name="Fix Stencil Materials",
+        description="Fix stencil materials by setting UseAlpha to 1.0",
+        default=True
+    )
+    
+    enable_tidyup: BoolProperty(
+        name="Cleanup Scene",
+        description="Perform scene cleanup (deduplicate images, remove orphaned data)",
+        default=True
+    )
+
     def draw(self, context):
         layout = self.layout
         layout.label(text="SCOrg.tools Settings")
@@ -98,17 +159,7 @@ class SCOrg_tools_AddonPreferences(bpy.types.AddonPreferences):
         # Debug mode checkbox
         layout.prop(self, "debug_mode")
         layout.separator()
-        
-        # 3D POM setting
-        layout.prop(self, "enable_3d_pom")
-        layout.separator()
-        
-        # Displacement settings
-        layout.label(text="Physical decal displacement settings:")
-        layout.prop(self, "decal_displacement_ship")
-        layout.prop(self, "decal_displacement_non_ship")
-        layout.separator()
-        
+
         layout.label(text=f"Current P4K: {self.p4k_path}")
         layout.operator("scorg_tools.select_p4k", text="Select .p4k File")
 
@@ -121,12 +172,31 @@ class SCOrg_tools_AddonPreferences(bpy.types.AddonPreferences):
             objects_dir = path.join(abs_chosen_dir, "Objects")
             if not path.isdir(objects_dir):
                 layout.label(text=f"Directory '{objects_dir}' not found. This doesn't appear to be the correct folder.", icon='ERROR')
-
-        # Display load progress if a message exists
-        if self.p4k_load_message:
-            layout.separator()
-            layout.label(text=self.p4k_load_message)
-            layout.prop(self, "p4k_load_progress", text="Progress")
+        
+        col = layout.column()        
+        # Displacement settings
+        col.label(text="Modifier Functions (fix_modifiers):", icon='MODIFIER')
+        col.prop(self, "enable_displace_decals")
+        col.prop(self, "enable_remove_duplicate_displace")
+        col.separator()
+        col.label(text="Physical decal displacement settings:", icon='MOD_DISPLACE')
+        col.prop(self, "decal_displacement_ship")
+        col.prop(self, "decal_displacement_non_ship")
+        col.prop(self, "enable_weld_weighted_normal")
+        col.separator()
+        col.label(text="Geometry settings:", icon='MESH_DATA')
+        col.prop(self, "enable_remove_proxy_geometry")
+        col.separator()
+        col.label(text="Material settings:", icon='MATERIAL')
+        col.prop(self, "enable_3d_pom")
+        col.prop(self, "enable_remap_material_users")
+        col.prop(self, "enable_import_missing_materials")
+        col.prop(self, "enable_fix_materials_case")
+        col.prop(self, "enable_set_glass_transparent")
+        col.prop(self, "enable_fix_stencil_materials")
+        col.separator()
+        col.label(text="Misc settings:", icon='SETTINGS')
+        col.prop(self, "enable_tidyup")
 
 
 class SCOrg_tools_OT_SelectP4K(bpy.types.Operator, ExportHelper):
@@ -141,5 +211,3 @@ class SCOrg_tools_OT_SelectP4K(bpy.types.Operator, ExportHelper):
         prefs = context.preferences.addons[__package__].preferences
         prefs.p4k_path = self.filepath
         return {'FINISHED'}
-
-# No explicit register/unregister functions here, as they are handled by __init__.py
