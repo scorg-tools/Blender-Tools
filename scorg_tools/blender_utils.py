@@ -1172,8 +1172,15 @@ class SCOrg_tools_blender():
         
         # Iterate through all materials in the scene
         for mat in bpy.data.materials:
-            # check if the material name contains _decal_pom, _pom_decal, or _mtl_POM
-            if '_decal_pom' in mat.name.lower() or '_pom_decal' in mat.name.lower() or '_mtl_pom' in mat.name.lower() or '_mtl_decals_pom' in mat.name.lower():
+            # Check if the material contains the '_Illum.pom' node group at the top level
+            has_pom_node_group = False
+            if mat.use_nodes and mat.node_tree:
+                for node in mat.node_tree.nodes:
+                    if node.type == 'GROUP' and node.node_tree and '_Illum.pom' in node.node_tree.name:
+                        has_pom_node_group = True
+                        break
+            
+            if has_pom_node_group:
                 # Check if material uses nodes
                 if not mat.use_nodes or not mat.node_tree:
                     if globals_and_threading.debug: print(f"Material {mat.name} doesn't use nodes, skipping")
