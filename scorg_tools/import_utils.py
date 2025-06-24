@@ -759,7 +759,7 @@ class SCOrg_tools_import():
             mtl_files = p4k.search(file_filters=".mtl", ignore_case=True, mode='endswith')
             if globals_and_threading.debug: print(f"DEBUG: Found {len(mtl_files)} .mtl files in p4k")
             
-            # Build lookup dictionary: lowercase filename -> full_path
+            # Build lookup dictionary: lowercase filename -> full_path or list of paths
             mtl_lookup = {}
             for match in mtl_files:
                 if hasattr(match, 'filename'):
@@ -770,8 +770,15 @@ class SCOrg_tools_import():
                 filename = Path(full_path).name.lower()
                 clean_path = full_path.removeprefix("Data/")
                 
-                # Only add if not already in dictionary (preserve first occurrence)
-                if filename not in mtl_lookup:
+                # Handle multiple files with same filename
+                if filename in mtl_lookup:
+                    # Convert to list if not already
+                    if isinstance(mtl_lookup[filename], str):
+                        mtl_lookup[filename] = [mtl_lookup[filename]]
+                    # Add new path to list
+                    mtl_lookup[filename].append(clean_path)
+                else:
+                    # First occurrence, store as string
                     mtl_lookup[filename] = clean_path
             if globals_and_threading.debug: print(f"DEBUG: Built lookup for {len(mtl_lookup)} .mtl files")
         except Exception as e:
@@ -803,22 +810,83 @@ class SCOrg_tools_import():
                         if globals_and_threading.debug: print(f"DEBUG: Looking for material file: {filename} (lookup key: {filename_lower})")
                         
                         if filename_lower in mtl_lookup:
-                            clean_path = mtl_lookup[filename_lower]
-                            if globals_and_threading.debug: print(f"DEBUG: Found in mtl_lookup: Data/{clean_path}")
-                            filepath = __class__.extract_dir / clean_path
-                            if filepath.exists():
-                                file_cache[filename] = filepath
-                                if globals_and_threading.debug: print(f"DEBUG: File exists on disk: {filepath}")
-                                # Check for Material01 or Tintable_01 type materials and remap:
-                                blender_utils.SCOrg_tools_blender.fix_unmapped_materials(str(filepath))
+                            paths_to_check = mtl_lookup[filename_lower]
+                            
+                            # If it's a string, there's only one file with this name, so use it directly
+                            if isinstance(paths_to_check, str):
+                                clean_path = paths_to_check
+                                if globals_and_threading.debug: print(f"DEBUG: Single file found: Data/{clean_path}")
+                                filepath = __class__.extract_dir / clean_path
+                                if filepath.exists():
+                                    file_cache[filename] = filepath
+                                    if globals_and_threading.debug: print(f"DEBUG: File exists on disk: {filepath}")
+                                    # Check for Material01 or Tintable_01 type materials and remap:
+                                    blender_utils.SCOrg_tools_blender.fix_unmapped_materials(str(filepath))
+                                else:
+                                    if globals_and_threading.debug: print(f"DEBUG: File NOT found on disk: {filepath}")
+                                    if str(filepath) not in __class__.missing_files:
+                                        __class__.missing_files.append(str(filepath))
+                                    missing_checked.append(filename)
                             else:
-                                if globals_and_threading.debug: print(f"DEBUG: File NOT found on disk: {filepath}")
-                                if str(filepath) not in __class__.missing_files:
-                                    __class__.missing_files.append(str(filepath))
-                                missing_checked.append(filename)
-                        else:
-                            if globals_and_threading.debug: print(f"DEBUG: NOT found in mtl_lookup: {filename_lower}")
-                            missing_checked.append(filename)
+                                # Multiple files with same name, need to search for the correct material
+                                # Extract the material name from the Blender material name
+                                # Remove everything before and including "_mtl_"
+                                material_name_in_xml = mat.name.split("_mtl_", 1)[1]
+
+                                if globals_and_threading.debug: print(f"DEBUG: Found multiple files with the same name for {mat.name}, looking for material '{material_name_in_xml}' in {len(paths_to_check)} file(s)")
+                                
+                                found_filepath = None
+                                for clean_path in paths_to_check:
+                                    if globals_and_threading.debug: print(f"DEBUG: Checking file: Data/{clean_path}")
+                                    filepath = __class__.extract_dir / clean_path
+                                    if filepath.exists():
+                                        # Read and parse the MTL file to check if it contains our material
+                                        try:
+                                            xml_content = __class__.read_file_from_p4k(f"Data/{clean_path}")
+                                            is_primary_material = False
+                                            if material_name_in_xml.lower() == "primary":
+                                                is_primary_material = True
+
+                                            # if the material name has no underscores it might be a primary material
+                                            if "_" not in material_name_in_xml:
+                                                # check to see if the material name is part of the file name, e.g. exterior_medium_frequnecy_panels_wear_mtl_Wear
+                                                if f'_{material_name_in_xml.lower()}' in clean_path.lower():
+                                                    is_primary_material = True
+
+                                            if is_primary_material:
+                                                # check to see if there are any material names in the file 
+                                                if 'Name=' in xml_content:
+                                                    # This cannot be a primary material, so skip it
+                                                    if globals_and_threading.debug: print(f"DEBUG: Material '{material_name_in_xml}' is not a primary material, skipping {clean_path}")
+                                                    continue
+                                                else:
+                                                    # We have to accept the first material found that doesn't have name attributes
+                                                    found_filepath = filepath
+                                                    break
+                                            
+                                            if xml_content and f'Name="{material_name_in_xml}"' in xml_content:
+                                                if globals_and_threading.debug: print(f"DEBUG: Found material '{material_name_in_xml}' in {clean_path}")
+                                                found_filepath = filepath
+                                                break
+                                            elif globals_and_threading.debug:
+                                                print(f"DEBUG: Material '{material_name_in_xml}' not found in {clean_path}")
+                                        except Exception as e:
+                                            if globals_and_threading.debug: print(f"DEBUG: Error reading {clean_path}: {e}")
+                                            continue
+                                    else:
+                                        if globals_and_threading.debug: print(f"DEBUG: File NOT found on disk: {filepath}")
+                                        if str(filepath) not in __class__.missing_files:
+                                            __class__.missing_files.append(str(filepath))
+                                
+                                if not found_filepath:
+                                    # If we didn't find the material in any of the files, assume it's the first one
+                                    if globals_and_threading.debug: print(f"DEBUG: Material '{material_name_in_xml}' not found in any of the files, using the first one: {paths_to_check[0]}")
+                                    found_filepath = __class__.extract_dir / paths_to_check[0]
+                                file_cache[filename] = found_filepath
+                                if globals_and_threading.debug: print(f"DEBUG: Using file: {found_filepath}")
+                                # Check for Material01 or Tintable_01 type materials and remap:
+                                blender_utils.SCOrg_tools_blender.fix_unmapped_materials(str(found_filepath))
+
             except ReferenceError:
                 # Material was removed during iteration, skip it
                 if globals_and_threading.debug: print(f"DEBUG: Material {mat_name} was removed during processing, skipping")
