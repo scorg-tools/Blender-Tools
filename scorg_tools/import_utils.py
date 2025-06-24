@@ -178,6 +178,9 @@ class SCOrg_tools_import():
                 __class__.replace_selected_mesh_with_empties()
                 
                 if globals_and_threading.debug: print(f"Converting bones to empties for {guid}: {geometry_path}")
+                # Ensure we're in object mode before converting armatures
+                if bpy.context.mode != 'OBJECT':
+                    bpy.ops.object.mode_set(mode='OBJECT')
                 blender_utils.SCOrg_tools_blender.convert_armatures_to_empties()
                 
                 if not root_object_name:
@@ -588,6 +591,9 @@ class SCOrg_tools_import():
                     __class__.replace_selected_mesh_with_empties()
                     
                     if globals_and_threading.debug: print(f"Converting bones to empties for {guid_str}: {geometry_path}")
+                    # Ensure we're in object mode before converting armatures
+                    if bpy.context.mode != 'OBJECT':
+                        bpy.ops.object.mode_set(mode='OBJECT')
                     blender_utils.SCOrg_tools_blender.convert_armatures_to_empties()
                     
                     for file in process_bones_file:

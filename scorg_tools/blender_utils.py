@@ -370,7 +370,16 @@ class SCOrg_tools_blender():
 
     def convert_bones_to_empties(armature_obj):
         if globals_and_threading.debug: print(f"DEBUG: Converting bones to empties for armature: {armature_obj.name}")
-        bpy.ops.object.mode_set(mode='OBJECT')
+        
+        # Ensure the armature object is set as active and selected before changing mode
+        bpy.context.view_layer.objects.active = armature_obj
+        bpy.ops.object.select_all(action='DESELECT')
+        armature_obj.select_set(True)
+        
+        # Only set mode if we're not already in OBJECT mode
+        if bpy.context.mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode='OBJECT')
+            
         armature = armature_obj.data
         empties = {}
         root_name = armature_obj.name
@@ -408,15 +417,21 @@ class SCOrg_tools_blender():
     def convert_armatures_to_empties():
         # Process all armatures in the scene
         empties = []
-        for obj in bpy.data.objects:
-            if obj.type == 'ARMATURE':
-                # convert the bones to empties
-                empty_name =__class__.convert_bones_to_empties(obj)
+        armature_objects = [obj for obj in bpy.data.objects if obj.type == 'ARMATURE']
+        
+        for obj in armature_objects:
+            if obj.name not in bpy.data.objects:
+                # Object was already deleted, skip it
+                continue
+                
+            # convert the bones to empties
+            empty_name = __class__.convert_bones_to_empties(obj)
 
-                # Delete the armature
-                name = obj.name
-                bpy.data.objects.remove(obj, do_unlink=True)
-                # Rename the empty to match the original armature name
+            # Delete the armature
+            name = obj.name
+            bpy.data.objects.remove(obj, do_unlink=True)
+            # Rename the empty to match the original armature name
+            if empty_name and empty_name in bpy.data.objects:
                 bpy.data.objects[empty_name].name = name
         return True
     
