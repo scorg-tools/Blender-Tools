@@ -981,3 +981,73 @@ class SCOrg_tools_import():
         except Exception as e:
             if globals_and_threading.debug: print(f"DEBUG: Error getting localisation string for id {locale_id}: {e}")
             return None
+    
+    @staticmethod
+    def read_file_from_p4k(filename):
+        """
+        Read any file from the loaded P4K archive.
+        
+        Args:
+            filename: Path to the file within the P4K archive
+        
+        Returns:
+            File content as string (decoded from bytes if necessary) or bytes if decoding fails
+        """
+        
+        if globals_and_threading.p4k is None:
+            print("Error: P4K archive not loaded")
+            return None
+        
+        try:
+            # Get file info and open it
+            file_info = globals_and_threading.p4k.getinfo(filename)
+            with globals_and_threading.p4k.open(file_info, mode='r') as file:
+                content = file.read()
+                
+                # If already a string, return as-is
+                if isinstance(content, str):
+                    return content
+                
+                # If bytes, check if it's a CryXML binary file first
+                if isinstance(content, bytes):
+                    # Check if it's a CryXMLB file (binary XML format)
+                    if content.startswith(b"CryXmlB"):
+                        try:
+                            from scdatatools.engine.cryxml import etree_from_cryxml_string, pprint_xml_tree
+                            import xml.etree.ElementTree as ET
+                            if globals_and_threading.debug: print(f"DEBUG: Detected CryXMLB binary format for {filename}, converting to XML")
+                            
+                            # Parse the binary CryXML and convert to XML string
+                            root_element = etree_from_cryxml_string(content)
+                            # Create ElementTree from Element and use pprint_xml_tree
+                            tree = ET.ElementTree(root_element)
+                            xml_content = pprint_xml_tree(tree)
+                            return xml_content
+                            
+                        except Exception as e:
+                            print(f"Warning: Failed to parse CryXMLB file {filename}: {e}")
+                            # Fall through to regular decoding
+                    
+                    # Try common encodings in order of likelihood
+                    encodings_to_try = ['utf-8', 'latin-1', 'cp1252', 'ascii']
+                    
+                    for encoding in encodings_to_try:
+                        try:
+                            decoded_content = content.decode(encoding)
+                            if globals_and_threading.debug: print(f"DEBUG: Successfully decoded {filename} using {encoding} encoding")
+                            return decoded_content
+                        except UnicodeDecodeError:
+                            continue
+                    
+                    # If all encodings fail, return the raw bytes
+                    print(f"Warning: Could not decode {filename} as text, returning raw bytes")
+                    return content
+                
+                return content
+                
+        except KeyError:
+            print(f"File {filename} not found in archive")
+            return None
+        except Exception as e:
+            print(f"Error reading file {filename}: {e}")
+            return None
