@@ -214,3 +214,21 @@ class VIEW3D_OT_separate_decals(bpy.types.Operator):
     def execute(self, context):
         blender_utils.SCOrg_tools_blender.separate_decal_materials()
         return {'FINISHED'}
+
+class VIEW3D_OT_open_preferences(bpy.types.Operator):
+    bl_idname = "view3d.open_preferences"
+    bl_label = "Open Preferences"
+    bl_description = "Open the SCOrg.tools addon preferences"
+    
+    def execute(self, context):
+        # Use the built-in addon preferences operator which should automatically expand the addon
+        try:
+            bpy.ops.preferences.addon_show(module=__package__)
+        except:
+            # Fallback to the manual method if the direct operator doesn't work
+            bpy.ops.screen.userpref_show('INVOKE_DEFAULT')
+            bpy.context.preferences.active_section = 'ADDONS'
+            from . import bl_info
+            bpy.context.window_manager.addon_search = bl_info["name"]
+        
+        return {'FINISHED'}

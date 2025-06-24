@@ -64,6 +64,7 @@ classes = (
     operators.VIEW3D_OT_reload,
     operators.GetGUIDOperator,
     operators.VIEW3D_OT_separate_decals,
+    operators.VIEW3D_OT_open_preferences,
     operators.SCORG_OT_copy_text_to_clipboard,
     operators.SCORG_OT_text_popup,
     preferences.SCOrg_tools_AddonPreferences,

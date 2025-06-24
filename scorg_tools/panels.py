@@ -44,9 +44,24 @@ class VIEW3D_PT_scorg_tools_panel(bpy.types.Panel):
                 pass
 
         prefs = context.preferences.addons[__package__].preferences # Access addon preferences
-        layout.label(text="v" + misc_utils.SCOrg_tools_misc.get_addon_version(), icon='INFO')
+        
+        # Version and preferences in two columns
+        row = layout.row()
+        # Always use a fixed split to ensure consistent button positioning
+        split = row.split(factor=0.7)  # Version takes 70% of space
+        
+        # Version column (left, takes most space)
+        version_col = split.column()
+        version_col.label(text="v" + misc_utils.SCOrg_tools_misc.get_addon_version(), icon='INFO')
+        
+        # Preferences button column (right, fixed size)
+        prefs_col = split.column()
+        prefs_row = prefs_col.row(align=True)
+        prefs_row.alignment = 'RIGHT'  # Force right alignment
+        # Add reload button if developer UI is enabled
         if bpy.context.preferences.view.show_developer_ui:
-            layout.operator("view3d.reload", text="Reload Addon", icon='FILE_REFRESH')
+            prefs_row.operator("view3d.reload", text="", icon='FILE_REFRESH')
+        prefs_row.operator("view3d.open_preferences", text="", icon='PREFERENCES')
         
         # Always show progress/status if there's something to display
         if prefs.p4k_load_message or prefs.p4k_load_progress > 0:
