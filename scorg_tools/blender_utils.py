@@ -556,7 +556,7 @@ class SCOrg_tools_blender():
         of the 'Material' elements within 'SubMaterials'.
 
         Args:
-            file_path (str): The path to the .mtl file.
+            file_path (str): The local path to the .mtl file. (not the P4K path)
 
         Returns:
             dict: A dictionary where the keys are the line numbers (starting from 1)
@@ -1172,193 +1172,200 @@ class SCOrg_tools_blender():
         
         # Iterate through all materials in the scene
         for mat in bpy.data.materials:
-            # Check if the material contains the '_Illum.pom' node group at the top level
-            has_pom_node_group = False
-            if mat.use_nodes and mat.node_tree:
-                for node in mat.node_tree.nodes:
-                    if node.type == 'GROUP' and node.node_tree and '_Illum.pom' in node.node_tree.name:
-                        has_pom_node_group = True
-                        break
+            # Check if material uses nodes
+            if not mat.use_nodes or not mat.node_tree:
+                if globals_and_threading.debug: print(f"Material {mat.name} doesn't use nodes, skipping")
+                continue
+
+            is_pom = False
+            # Check if the material has the custom property 'StringGenMask' and is a POM
+            if 'StringGenMask' in mat and "%PARALLAX_OCCLUSION_MAPPING" in str(mat['StringGenMask']):
+                is_pom = True
+            else:
+                # Fallback check: if the material contains the '_Illum.pom' node group at the top level
+                if mat.use_nodes and mat.node_tree:
+                    for node in mat.node_tree.nodes:
+                        if node.type == 'GROUP' and node.node_tree and '_Illum.pom' in node.node_tree.name:
+                            is_pom = True
+                            break
             
-            if has_pom_node_group:
-                # Check if material uses nodes
-                if not mat.use_nodes or not mat.node_tree:
-                    if globals_and_threading.debug: print(f"Material {mat.name} doesn't use nodes, skipping")
-                    continue
-                
-                # Extract images used by the material with specific suffixes
-                images = {}
-                for node in mat.node_tree.nodes:
-                    if node.type == 'TEX_IMAGE' and node.image:
-                        if globals_and_threading.debug: print(f"Checking image node '{node.name}' with image '{node.image.name}' in material {mat.name}")
-                        
-                        # Check if the image name contains any of our suffixes
-                        for suffix in suffix_list:
-                            if suffix in node.image.name.lower():
-                                # Map alternative suffixes to the main ones
-                                if suffix in mapped_suffixes:
-                                    suffix = mapped_suffixes[suffix]
-                                images[suffix] = node.image.filepath if node.image.filepath else node.image.name
-                                if globals_and_threading.debug: print(f"Found {suffix} image: {images[suffix]}")
-                                break
-                
-                if globals_and_threading.debug: print(f"Images used by {mat.name}: {images}")
-                # Exit early if _displ or _pom_height is not found
-                if not images.get('_displ') and not images.get('_pom_height'):
-                    if globals_and_threading.debug: print(f"Material {mat.name} does not have required displacement or height map images, skipping")
-                    continue
+            if not is_pom:
+                # skip this material as it's not a POM material
+                continue
+            
+            # Extract images used by the material with specific suffixes
+            images = {}
+            for node in mat.node_tree.nodes:
+                if node.type == 'TEX_IMAGE' and node.image:
+                    if globals_and_threading.debug: print(f"Checking image node '{node.name}' with image '{node.image.name}' in material {mat.name}")
+                    
+                    # Check if the image name contains any of our suffixes
+                    for suffix in suffix_list:
+                        if suffix in node.image.name.lower():
+                            # Map alternative suffixes to the main ones
+                            if suffix in mapped_suffixes:
+                                suffix = mapped_suffixes[suffix]
+                            images[suffix] = node.image.filepath if node.image.filepath else node.image.name
+                            if globals_and_threading.debug: print(f"Found {suffix} image: {images[suffix]}")
+                            break
+            
+            if globals_and_threading.debug: print(f"Images used by {mat.name}: {images}")
+            # Exit early if _displ or _pom_height is not found
+            if not images.get('_displ') and not images.get('_pom_height'):
+                if globals_and_threading.debug: print(f"Material {mat.name} does not have required displacement or height map images, skipping")
+                continue
 
-                # Check to see if we are missing any of the required images
-                missing_images = [suffix for suffix in suffix_list if suffix not in images]
-                # Remove the alternative suffixes as they will be remapped to the main ones
-                missing_images = [suffix for suffix in missing_images if suffix not in ['_ddn', '_pom_height']]
-                
-                if missing_images:
-                    if globals_and_threading.debug: 
-                        print(f"Material {mat.name} is missing images: {', '.join(missing_images)}. Attempting to find them")
-                    # Get the filepath of the displacement image (images dict contains strings, not image objects)
-                    displacement_image_path = images.get('_displ') or images.get('_pom_height')
-                    # strip the file extension from the displacement image path
-                    displacement_image_path = os.path.splitext(displacement_image_path)[0]
-                    # strip the _displ or _pom_height suffix
-                    displacement_image_path = displacement_image_path.rsplit('_', 1)[0]
-                    # Now try to find the missing images based on the displacement image path
-                    for suffix in missing_images:
-                        # Try multiple extensions
-                        found_images = []
-                        for ext in ['.tif', '.png', '.tga']:
-                            expected_image_path = f"{displacement_image_path}{suffix}{ext}"
-                            if globals_and_threading.debug: 
-                                print(f"Looking for missing image for {suffix}: {expected_image_path}")
-                            if os.path.exists(expected_image_path):
-                                found_images.append(expected_image_path)
-                                break
-                        
-                        if found_images:
-                            # If we found an image, use the first one
-                            images[suffix] = found_images[0]
-                            if globals_and_threading.debug: 
-                                print(f"Found missing image for {suffix}: {images[suffix]}")
+            # Check to see if we are missing any of the required images
+            missing_images = [suffix for suffix in suffix_list if suffix not in images]
+            # Remove the alternative suffixes as they will be remapped to the main ones
+            missing_images = [suffix for suffix in missing_images if suffix not in ['_ddn', '_pom_height']]
+            
+            if missing_images:
+                if globals_and_threading.debug: 
+                    print(f"Material {mat.name} is missing images: {', '.join(missing_images)}. Attempting to find them")
+                # Get the filepath of the displacement image (images dict contains strings, not image objects)
+                displacement_image_path = images.get('_displ') or images.get('_pom_height')
+                # strip the file extension from the displacement image path
+                displacement_image_path = os.path.splitext(displacement_image_path)[0]
+                # strip the _displ or _pom_height suffix
+                displacement_image_path = displacement_image_path.rsplit('_', 1)[0]
+                # Now try to find the missing images based on the displacement image path
+                for suffix in missing_images:
+                    # Try multiple extensions
+                    found_images = []
+                    for ext in ['.tif', '.png', '.tga']:
+                        expected_image_path = f"{displacement_image_path}{suffix}{ext}"
+                        if globals_and_threading.debug: 
+                            print(f"Looking for missing image for {suffix}: {expected_image_path}")
+                        if os.path.exists(expected_image_path):
+                            found_images.append(expected_image_path)
+                            break
+                    
+                    if found_images:
+                        # If we found an image, use the first one
+                        images[suffix] = found_images[0]
+                        if globals_and_threading.debug: 
+                            print(f"Found missing image for {suffix}: {images[suffix]}")
 
-                # If we found any images, replace the material nodes with scorg_pom nodes
-                if images:
-                    if globals_and_threading.debug: print(f"Replacing material {mat.name} with scorg_pom material")
-                    
-                    # Store the old material name for reference
-                    old_mat_name = mat.name
-                    
-                    # Duplicate the scorg_pom material
-                    new_material = pom_material.copy()
-                    new_material.name = f"{old_mat_name}_temp"
-                    
-                    # Make all node groups unique for this material (including nested ones)
-                    __class__.make_node_groups_unique_recursive(new_material.node_tree, new_material.name)
-                    
-                    # Remap all users of the old material to the new material
-                    for obj in bpy.data.objects:
-                        if obj.type == 'MESH':
-                            for slot in obj.material_slots:
-                                if slot.material == mat:
-                                    slot.material = new_material
-                    
-                    # Delete the old material
-                    bpy.data.materials.remove(mat)
-                    
-                    # Rename the new material to the old name
-                    new_material.name = old_mat_name
-                    
-                    # Now assign the detected images to the appropriate texture nodes
-                    for suffix, image_path in images.items():
-                        if suffix == '_displ' or suffix == '_pom_height':
-                            # Handle displacement image - find and set it once in the POM_disp node group
-                            if not __class__.find_and_set_displacement_image(new_material, image_path):
-                                if globals_and_threading.debug: 
-                                    print(f"Could not find displacement texture node for {image_path} in material {new_material.name}")
-                        else:
-                            # Find texture nodes that might correspond to this suffix
-                            for node in new_material.node_tree.nodes:
-                                if node.type == 'TEX_IMAGE':
-                                    node_label_lower = node.label.lower()
-                                    # Match texture nodes by their labels containing the suffix
-                                    # Map suffixes to expected labels
-                                    suffix_to_label = {
-                                        '_diff': 'pom_diff',
-                                        '_ddna.glossmap': 'pom_glossmap',
-                                        '_ddna': 'pom_ddna', 
-                                        '_ddn': 'pom_ddna',  # Alternative normal map suffix
-                                        '_spec': 'pom_spec'
-                                    }
+            # If we found any images, replace the material nodes with scorg_pom nodes
+            if images:
+                if globals_and_threading.debug: print(f"Replacing material {mat.name} with scorg_pom material")
+                
+                # Store the old material name for reference
+                old_mat_name = mat.name
+                
+                # Duplicate the scorg_pom material
+                new_material = pom_material.copy()
+                new_material.name = f"{old_mat_name}_temp"
+                
+                # Make all node groups unique for this material (including nested ones)
+                __class__.make_node_groups_unique_recursive(new_material.node_tree, new_material.name)
+                
+                # Remap all users of the old material to the new material
+                for obj in bpy.data.objects:
+                    if obj.type == 'MESH':
+                        for slot in obj.material_slots:
+                            if slot.material == mat:
+                                slot.material = new_material
+                
+                # Delete the old material
+                bpy.data.materials.remove(mat)
+                
+                # Rename the new material to the old name
+                new_material.name = old_mat_name
+                
+                # Now assign the detected images to the appropriate texture nodes
+                for suffix, image_path in images.items():
+                    if suffix == '_displ' or suffix == '_pom_height':
+                        # Handle displacement image - find and set it once in the POM_disp node group
+                        if not __class__.find_and_set_displacement_image(new_material, image_path):
+                            if globals_and_threading.debug: 
+                                print(f"Could not find displacement texture node for {image_path} in material {new_material.name}")
+                    else:
+                        # Find texture nodes that might correspond to this suffix
+                        for node in new_material.node_tree.nodes:
+                            if node.type == 'TEX_IMAGE':
+                                node_label_lower = node.label.lower()
+                                # Match texture nodes by their labels containing the suffix
+                                # Map suffixes to expected labels
+                                suffix_to_label = {
+                                    '_diff': 'pom_diff',
+                                    '_ddna.glossmap': 'pom_glossmap',
+                                    '_ddna': 'pom_ddna', 
+                                    '_ddn': 'pom_ddna',  # Alternative normal map suffix
+                                    '_spec': 'pom_spec'
+                                }
+                                
+                                expected_label = suffix_to_label.get(suffix, '')
+                                if expected_label and expected_label in node_label_lower:
+                                    image_obj = None
                                     
-                                    expected_label = suffix_to_label.get(suffix, '')
-                                    if expected_label and expected_label in node_label_lower:
-                                        image_obj = None
-                                        
-                                        # Load the image if it's a filepath, otherwise find existing image
-                                        if image_path.startswith('//') or '/' in image_path or '\\' in image_path:
-                                            # It's a filepath, try to load it
-                                            try:
-                                                image_obj = bpy.data.images.load(image_path)
-                                                node.image = image_obj
-                                                if globals_and_threading.debug: print(f"Assigned image {image_path} to node {node.label}")
-                                            except:
-                                                if globals_and_threading.debug: print(f"Failed to load image {image_path}")
+                                    # Load the image if it's a filepath, otherwise find existing image
+                                    if image_path.startswith('//') or '/' in image_path or '\\' in image_path:
+                                        # It's a filepath, try to load it
+                                        try:
+                                            image_obj = bpy.data.images.load(image_path)
+                                            node.image = image_obj
+                                            if globals_and_threading.debug: print(f"Assigned image {image_path} to node {node.label}")
+                                        except:
+                                            if globals_and_threading.debug: print(f"Failed to load image {image_path}")
+                                    else:
+                                        # It's an image name, find existing image
+                                        existing_image = bpy.data.images.get(image_path)
+                                        if existing_image:
+                                            node.image = existing_image
+                                            image_obj = existing_image
+                                            if globals_and_threading.debug: print(f"Assigned existing image {image_path} to node {node.label}")
+                                    
+                                    # Set colorspace based on image type
+                                    if image_obj:
+                                        if suffix == '_diff' or suffix == '_ddna.glossmap':
+                                            image_obj.colorspace_settings.name = 'sRGB'
+                                            if globals_and_threading.debug: print(f"Set colorspace to sRGB for {suffix} image")
                                         else:
-                                            # It's an image name, find existing image
-                                            existing_image = bpy.data.images.get(image_path)
-                                            if existing_image:
-                                                node.image = existing_image
-                                                image_obj = existing_image
-                                                if globals_and_threading.debug: print(f"Assigned existing image {image_path} to node {node.label}")
-                                        
-                                        # Set colorspace based on image type
-                                        if image_obj:
-                                            if suffix == '_diff' or suffix == '_ddna.glossmap':
-                                                image_obj.colorspace_settings.name = 'sRGB'
-                                                if globals_and_threading.debug: print(f"Set colorspace to sRGB for {suffix} image")
-                                            else:
-                                                image_obj.colorspace_settings.name = 'Non-Color'
-                                                if globals_and_threading.debug: print(f"Set colorspace to Non-Color for {suffix} image")
-                                        
-                                        break
+                                            image_obj.colorspace_settings.name = 'Non-Color'
+                                            if globals_and_threading.debug: print(f"Set colorspace to Non-Color for {suffix} image")
+                                    
+                                    break
+                
+                # Check if _spec image was not found and handle accordingly
+                if '_spec' not in images:
+                    if globals_and_threading.debug:
+                        print(f"No _spec image found for material {new_material.name}, removing spec nodes and setting base color")
                     
-                    # Check if _spec image was not found and handle accordingly
-                    if '_spec' not in images:
+                    # Find and remove pom_spec image node
+                    spec_node_to_remove = None
+                    for node in new_material.node_tree.nodes:
+                        if node.type == 'TEX_IMAGE' and 'pom_spec' in node.label.lower():
+                            spec_node_to_remove = node
+                            break
+                    
+                    if spec_node_to_remove:
+                        new_material.node_tree.nodes.remove(spec_node_to_remove)
                         if globals_and_threading.debug:
-                            print(f"No _spec image found for material {new_material.name}, removing spec nodes and setting base color")
-                        
-                        # Find and remove pom_spec image node
-                        spec_node_to_remove = None
-                        for node in new_material.node_tree.nodes:
-                            if node.type == 'TEX_IMAGE' and 'pom_spec' in node.label.lower():
-                                spec_node_to_remove = node
-                                break
-                        
-                        if spec_node_to_remove:
-                            new_material.node_tree.nodes.remove(spec_node_to_remove)
-                            if globals_and_threading.debug:
-                                print(f"Removed pom_spec image node from material {new_material.name}")
-                        
-                        # Find and remove Brightness/Contrast node
-                        brightness_node_to_remove = None
-                        for node in new_material.node_tree.nodes:
-                            if node.type == 'BRIGHTCONTRAST':
-                                brightness_node_to_remove = node
-                                break
-                        
-                        if brightness_node_to_remove:
-                            new_material.node_tree.nodes.remove(brightness_node_to_remove)
-                            if globals_and_threading.debug:
-                                print(f"Removed Brightness/Contrast node from material {new_material.name}")
-                        
-                        # Find Principled BSDF and set Base Color to dark gray
-                        for node in new_material.node_tree.nodes:
-                            if node.type == 'BSDF_PRINCIPLED':
-                                node.inputs['Base Color'].default_value = [0.06, 0.06, 0.06, 1.0]
-                                if globals_and_threading.debug:
-                                    print(f"Set Principled BSDF Base Color to dark gray for material {new_material.name}")
-                                break
+                            print(f"Removed pom_spec image node from material {new_material.name}")
                     
-                    if globals_and_threading.debug: print(f"Successfully replaced material {old_mat_name} with scorg_pom material")
+                    # Find and remove Brightness/Contrast node
+                    brightness_node_to_remove = None
+                    for node in new_material.node_tree.nodes:
+                        if node.type == 'BRIGHTCONTRAST':
+                            brightness_node_to_remove = node
+                            break
+                    
+                    if brightness_node_to_remove:
+                        new_material.node_tree.nodes.remove(brightness_node_to_remove)
+                        if globals_and_threading.debug:
+                            print(f"Removed Brightness/Contrast node from material {new_material.name}")
+                    
+                    # Find Principled BSDF and set Base Color to dark gray
+                    for node in new_material.node_tree.nodes:
+                        if node.type == 'BSDF_PRINCIPLED':
+                            node.inputs['Base Color'].default_value = [0.06, 0.06, 0.06, 1.0]
+                            if globals_and_threading.debug:
+                                print(f"Set Principled BSDF Base Color to dark gray for material {new_material.name}")
+                            break
+                
+                if globals_and_threading.debug: print(f"Successfully replaced material {old_mat_name} with scorg_pom material")
 
     def deduplicate_images():
         images = {}
