@@ -270,6 +270,89 @@ class SCOrg_tools_misc():
         Get the addon version from bl_info.
         Returns the version as a tuple (major, minor, patch)
         """
-        # Method 2: Direct import from parent module
         from . import bl_info
         return ".".join(map(str, bl_info.get('version', None))) if bl_info else None
+
+    @staticmethod
+    def capture_console_output(func, *args, **kwargs):
+        """
+        Capture console output from a function call while still displaying it in the console.
+        Returns a tuple: (function_result, captured_stdout, captured_stderr)
+        """
+        import sys
+        import io
+        import logging
+        
+        # Create string buffers to capture output
+        stdout_buffer = io.StringIO()
+        stderr_buffer = io.StringIO()
+        
+        # Also capture logging output
+        log_buffer = io.StringIO()
+        
+        # Custom tee class to duplicate output
+        class TeeOutput:
+            def __init__(self, original, buffer):
+                self.original = original
+                self.buffer = buffer
+            
+            def write(self, text):
+                self.original.write(text)  # Write to console
+                self.buffer.write(text)    # Write to buffer
+                return len(text)
+            
+            def flush(self):
+                self.original.flush()
+                self.buffer.flush()
+        
+        # Custom log handler to capture logging output
+        class BufferHandler(logging.Handler):
+            def __init__(self, buffer):
+                super().__init__()
+                self.buffer = buffer
+            
+            def emit(self, record):
+                log_msg = self.format(record)
+                self.buffer.write(log_msg + '\n')
+        
+        # Set up tee outputs
+        tee_stdout = TeeOutput(sys.stdout, stdout_buffer)
+        tee_stderr = TeeOutput(sys.stderr, stderr_buffer)
+        
+        # Set up logging capture
+        buffer_handler = BufferHandler(log_buffer)
+        buffer_handler.setLevel(logging.WARNING)  # Capture WARNING and above
+        
+        # Get the scdatatools logger if it exists
+        scdatatools_logger = logging.getLogger('scdatatools')
+        original_level = scdatatools_logger.level
+        
+        function_result = None
+        try:
+            # Redirect both stdout and stderr through tee
+            original_stdout = sys.stdout
+            original_stderr = sys.stderr
+            sys.stdout = tee_stdout
+            sys.stderr = tee_stderr
+            
+            # Add our buffer handler to capture logging output
+            scdatatools_logger.addHandler(buffer_handler)
+            scdatatools_logger.setLevel(logging.WARNING)
+            
+            # Run the function
+            function_result = func(*args, **kwargs)
+            
+        finally:
+            # Restore original outputs
+            sys.stdout = original_stdout
+            sys.stderr = original_stderr
+            
+            # Remove our logging handler
+            scdatatools_logger.removeHandler(buffer_handler)
+            scdatatools_logger.setLevel(original_level)
+        
+        # Combine all captured output
+        combined_stdout = stdout_buffer.getvalue() + log_buffer.getvalue()
+        combined_stderr = stderr_buffer.getvalue()
+        
+        return function_result, combined_stdout, combined_stderr

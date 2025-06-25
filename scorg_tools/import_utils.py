@@ -770,6 +770,41 @@ class SCOrg_tools_import():
             return False
         return bool(re.match(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", str(s)))
     
+    def extract_missing_textures_from_output(captured_stdout, captured_stderr):
+        """
+        Extract missing texture paths from captured console output.
+        Returns a list of full paths to missing texture files.
+        """
+        import re
+        from pathlib import Path
+        
+        # Combine captured output
+        captured_output = captured_stdout + captured_stderr
+        
+        # Updated regex pattern to match the actual scdatatools warning format
+        missing_texture_pattern = r'missing texture for mat ([^:]+): (.+?)(?:\n|$)'
+        missing_textures = re.findall(missing_texture_pattern, captured_output)
+                
+        # Convert to full paths and add to missing files
+        missing_texture_paths = []
+        if missing_textures:
+            for material_name, texture_path in missing_textures:
+                # Convert relative path to full path
+                #full_path = __class__.extract_dir / texture_path
+                #missing_texture_paths.append(str(full_path))
+                missing_texture_paths.append(texture_path)
+            
+            # Make unique list and add to missing_files
+            unique_missing = list(set(missing_texture_paths))
+            for missing_path in unique_missing:
+                if missing_path not in __class__.missing_files:
+                    __class__.missing_files.append(missing_path)
+            
+            if globals_and_threading.debug:
+                print(f"DEBUG: Found {len(unique_missing)} unique missing texture paths")
+        
+        return missing_texture_paths
+
     def import_missing_materials(tint_number = 0):
         hasattr(__class__, 'extract_dir') or __class__.init()
         if not __class__.extract_dir:
@@ -974,8 +1009,22 @@ class SCOrg_tools_import():
             if globals_and_threading.debug:
                 print(f"DEBUG: Importing {len(values)} materials from files:")
                 pprint(values)
-            materials.load_materials(values, data_dir='', tint_palette_node_group = tint_node_group)
             
+            # Use misc_utils to capture console output
+            _, captured_stdout, captured_stderr = misc_utils.SCOrg_tools_misc.capture_console_output(
+                materials.load_materials, 
+                values, 
+                data_dir='', 
+                tint_palette_node_group=tint_node_group
+            )
+            
+            # Extract missing texture paths from captured output
+            __class__.extract_missing_textures_from_output(captured_stdout, captured_stderr)
+        
+        # Clear progress when done
+        misc_utils.SCOrg_tools_misc.clear_progress()
+        if globals_and_threading.debug: print("DEBUG: Cleared progress after import_missing_materials")
+    
     def get_material_filename(material_name):
         before, sep, after = material_name.partition('_mtl')
         if sep:
