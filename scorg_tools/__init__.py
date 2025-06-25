@@ -17,7 +17,6 @@ import sys
 
 # TODO: capture list of missing materials and show them at the end of the import
 # TODO: load paint materials if listed, instead of (?) the main material
-# TODO: Set the tint palette guid on the root object when importing, and read it back when refreshing the ship
 # TODO: find already imported non-ship items
 # TODO: fix extra thrusters on front of retro thrusters on Gladius
 # TODO: make a friendly error when installing to detect if the starfab addon is not installed
