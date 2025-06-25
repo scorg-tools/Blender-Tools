@@ -1,7 +1,7 @@
 bl_info = {
     "name": "SCOrg.tools Blender Tools beta",
     "author": "Star-Destroyer@scorg.tools",
-    "version": (1, 1, 30),
+    "version": (1, 1, 31),
     "blender": (3, 6, 0),
     "location": "View3D > Sidebar > SCOrg.tools",
     "description": "Tools to supplement StarFab",
@@ -15,6 +15,7 @@ import bpy
 import os
 import sys
 
+# TODO: capture list of missing materials and show them at the end of the import
 # TODO: load paint materials if listed, instead of (?) the main material
 # TODO: Set the tint palette guid on the root object when importing, and read it back when refreshing the ship
 # TODO: find already imported non-ship items
