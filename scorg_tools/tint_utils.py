@@ -2,6 +2,7 @@ import bpy
 import re
 # Import globals
 from . import globals_and_threading
+from . import misc_utils
 
 class SCOrg_tools_tint():
     paint_records = None
@@ -47,7 +48,9 @@ class SCOrg_tools_tint():
         print(f"Button {index} pressed: {index}")
         # apply the tint
         import_utils.SCOrg_tools_import.import_missing_materials(tint_number=index)
-    
+        # Clear progress when done
+        misc_utils.SCOrg_tools_misc.clear_progress()
+
     def update_tints(record):
         if not record:
             print("WARNING: No record provided to update tints.")
