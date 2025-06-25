@@ -125,8 +125,19 @@ class VIEW3D_PT_scorg_tools_panel(bpy.types.Panel):
                     # Paints section
                     layout.label(text="Paints")
                     if globals_and_threading.button_labels:
+                        # Get the currently applied tint index for highlighting
+                        from . import tint_utils
+                        applied_tint_index = tint_utils.SCOrg_tools_tint.get_applied_tint_number()
+                        
                         for idx, label in enumerate(globals_and_threading.button_labels):
-                            op = layout.operator("view3d.dynamic_button", text=label)
+                            # Highlight the currently applied tint
+                            if applied_tint_index is not None and idx == applied_tint_index:
+                                # Use both checkmark icon AND depress for maximum visual feedback
+                                op = layout.operator("view3d.dynamic_button", text=label, icon='CHECKMARK', depress=True)
+                            else:
+                                # Normal button without icon or depress
+                                op = layout.operator("view3d.dynamic_button", text=label)
+                            
                             op.button_index = idx
                     else:
                         layout.label(text="No paints found for this ship.", icon='INFO')
