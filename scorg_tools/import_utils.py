@@ -218,14 +218,21 @@ class SCOrg_tools_import():
                     text_content=__class__.missing_files,
                     header_text="The following files were missing, please extract them with StarFab, under Data -> Data.p4k:"
                 )
-    
-    def get_all_empties_blueprint():
-        # First find the base container empty
+    def get_base_empty():
+        """
+        Get the base empty object that serves as the root for the ship.
+        This is usually the first empty in the scene that has children.
+        """
         base_empty = None
         for obj in bpy.data.objects:
             if obj.type == 'EMPTY' and 'container_name' in obj and obj['container_name'] == 'base':
                 base_empty = obj
                 break
+        return base_empty
+
+    def get_all_empties_blueprint():
+        # First find the base container empty
+        base_empty = __class__.get_base_empty()
         
         if not base_empty:
             if globals_and_threading.debug: print("WARNING: No base container empty found, using all empties")
@@ -932,9 +939,25 @@ class SCOrg_tools_import():
             tints = tint_utils.SCOrg_tools_tint.get_tint_pallet_list(record)
             # get the nth tint palette GUID from the dict's keys
             if tints and len(tints) > tint_number:
-                tint = list(tints.keys())[tint_number]
+                tint_guid = list(tints.keys())[tint_number]
                 if tints:
-                    __class__.load_tint_palette(tint, tint_node_group.name)
+                    __class__.load_tint_palette(tint_guid, tint_node_group.name)
+                    
+                    # Apply the tint GUID to the root ship object as a custom property
+                    try:
+                        # Find the base empty object (root ship object)
+                        base_empty = __class__.get_base_empty()
+                        
+                        if base_empty:
+                            base_empty['Applied_Tint'] = tint_guid
+                            if globals_and_threading.debug: 
+                                print(f"DEBUG: Applied tint GUID {tint_guid} to base object {base_empty.name}")
+                        else:
+                            if globals_and_threading.debug: 
+                                print("DEBUG: Could not find base empty object to apply tint GUID")
+                    except Exception as e:
+                        if globals_and_threading.debug: 
+                            print(f"DEBUG: Error applying tint GUID to base object: {e}")
             else:
                 if globals_and_threading.debug: 
                     if not tints:
