@@ -127,3 +127,44 @@ class SCOrg_tools_tint():
                 paint_records[tag] = paint
             __class__.paint_records = paint_records
         return __class__.paint_records
+    
+    def get_applied_tint():
+        """
+        Get the currently applied tint for the active ship or item.
+        Returns the GUID of the applied tint or None if no tint is applied.
+        """
+        if globals_and_threading.ship_loaded:
+            # Get base empty from import_utils since it has the function
+            from . import import_utils
+            base_empty = import_utils.SCOrg_tools_import.get_base_empty()
+            if base_empty:
+                tint_guid = base_empty.get("Applied_Tint", None)
+                return tint_guid
+        return None
+    
+    def get_applied_tint_number():
+        """
+        Get the index of the currently applied tint for the active ship or item.
+        Returns the index of the applied tint or None if no tint is applied.
+        """
+        tint_guid = __class__.get_applied_tint()
+        if tint_guid:
+            # Get the current ship/item record to get the tint list
+            from . import misc_utils
+            record = misc_utils.SCOrg_tools_misc.get_ship_record(skip_error=True)
+            if record:
+                tints = __class__.get_tint_pallet_list(record)
+                # Get list of tint GUIDs in the same order as button labels
+                tint_guids = list(tints.keys()) if isinstance(tints, dict) else []
+                
+                try:
+                    # Find the index of the applied tint GUID
+                    index = tint_guids.index(tint_guid)
+                    if globals_and_threading.debug:
+                        print(f"DEBUG: Applied tint GUID {tint_guid} found at index {index}")
+                    return index
+                except ValueError:
+                    if globals_and_threading.debug:
+                        print(f"DEBUG: Applied tint GUID {tint_guid} not found in current tint list")
+                    return None
+        return None
