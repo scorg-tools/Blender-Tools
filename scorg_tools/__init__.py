@@ -1,7 +1,7 @@
 bl_info = {
     "name": "SCOrg.tools Blender Tools beta",
     "author": "Star-Destroyer@scorg.tools",
-    "version": (1, 1, 31),
+    "version": (1, 1, 32),
     "blender": (3, 6, 0),
     "location": "View3D > Sidebar > SCOrg.tools",
     "description": "Tools to supplement StarFab",
@@ -15,9 +15,8 @@ import bpy
 import os
 import sys
 
-# TODO: capture list of missing materials and show them at the end of the import
-# TODO: load paint materials if listed, instead of (?) the main material
 # TODO: find already imported non-ship items
+# TODO: load paint .mtl if listed, instead of (?) the main material
 # TODO: fix extra thrusters on front of retro thrusters on Gladius
 # TODO: make a friendly error when installing to detect if the starfab addon is not installed
 
