@@ -559,14 +559,21 @@ class SCOrg_tools_blender():
         
         # Check if tint group already exists to prevent duplicates
         from scdatatools.blender.utils import hashed_path_key
-        expected_group_name = hashed_path_key(f"{entity_name}_Tint")
+        expected_group_name = hashed_path_key(f"{entity_name}_tint")
+        double_hashed_group_name = hashed_path_key(f"{expected_group_name}")
         existing_group = bpy.data.node_groups.get(expected_group_name)
         
         if existing_group:
             if globals_and_threading.debug: print(f"Tint group '{expected_group_name}' already exists, reusing")
             return existing_group
         else :
-            if globals_and_threading.debug: print(f"Could not find tint group '{expected_group_name}'")
+            existing_group = bpy.data.node_groups.get(double_hashed_group_name)
+            if existing_group:
+                if globals_and_threading.debug: print(f"Tint group '{double_hashed_group_name}' already exists, renaming to '{expected_group_name}'")
+                existing_group.name = expected_group_name
+                return existing_group
+            else:
+                if globals_and_threading.debug: print(f"Could not find tint group '{expected_group_name}'")
         
         from scdatatools import blender
         node_group = blender.materials.utils.tint_palette_node_group_for_entity(entity_name)
