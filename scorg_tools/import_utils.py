@@ -11,7 +11,8 @@ from . import tint_utils # For SCOrg_tools_tint.get_tint_pallets
 class SCOrg_tools_import():
     item_name = None
     item_guid = None
-    
+    translation_new_data_preference = None
+
     def init():
         if globals_and_threading.debug: print("SCOrg_tools_import initialized")
         __class__.prefs = bpy.context.preferences.addons["scorg_tools"].preferences
@@ -106,6 +107,7 @@ class SCOrg_tools_import():
         __class__.skip_imported_files = {}
         __class__.INCLUDE_HARDPOINTS = [] # all
         __class__.missing_files = []
+        __class__.set_translation_new_data_preference()
                 
         #Load item by GUID
         record = __class__.get_record(guid)
@@ -218,6 +220,7 @@ class SCOrg_tools_import():
                     text_content=__class__.missing_files,
                     header_text="The following files were missing, please extract them with StarFab, under Data -> Data.p4k:"
                 )
+            __class__.set_translation_new_data_preference(reset=True)
     def get_base_empty():
         """
         Get the base empty object that serves as the root for the ship.
@@ -709,7 +712,8 @@ class SCOrg_tools_import():
         __class__.imported_guid_objects = {}
         __class__.INCLUDE_HARDPOINTS = [] # all
         __class__.missing_files = []
-        
+        __class__.set_translation_new_data_preference()
+
         misc_utils.SCOrg_tools_misc.select_base_collection() # Ensure the base collection is active before importing
         record = misc_utils.SCOrg_tools_misc.get_ship_record()
         
@@ -742,6 +746,7 @@ class SCOrg_tools_import():
                 text_content=__class__.missing_files,
                 header_text="The following files were missing, please extract them with StarFab, under Data -> Data.p4k:"
             )
+        __class__.set_translation_new_data_preference(reset=True)
 
     def get_loadout_from_record(record):
         if globals_and_threading.debug: print(f"DEBUG: get_loadout_from_record called with record: {record.name}")
@@ -1212,3 +1217,24 @@ class SCOrg_tools_import():
         except Exception as e:
             print(f"Error reading file {filename}: {e}")
             return None
+    
+    def set_translation_new_data_preference(reset = False):
+        """
+        If Blender is not in English, set the translation for the New data preference to off
+        """
+        # Check if the current language is not English
+        if bpy.context.preferences.view.language != 'en_US':
+            if not reset:
+                # Get the current preference and save it to be restored later
+                __class__.translation_new_data_preference = bpy.context.preferences.view.use_translate_new_dataname
+                # Set the Blender global preference for translate new dataname to False
+                bpy.context.preferences.view.use_translate_new_dataname = False
+                if globals_and_threading.debug: print("DEBUG: Set translation for New data preference to on due to non-English language")
+            else:
+                # Reset the preference to the original value
+                if __class__.translation_new_data_preference is not None:
+                    bpy.context.preferences.view.use_translate_new_dataname = __class__.translation_new_data_preference
+                    if globals_and_threading.debug: print("DEBUG: Reset translation for New data preference to original value")
+        else:
+            if globals_and_threading.debug: print("DEBUG: Blender is in English, no need to change New data preference")
+        
