@@ -145,6 +145,12 @@ class SCOrg_tools_AddonPreferences(bpy.types.AddonPreferences):
         description="Fix stencil materials by setting UseAlpha to 1.0",
         default=True
     )
+
+    enable_remove_engine_flame_materials: BoolProperty(
+        name="Remove Engine Flame Materials",
+        description="Set engine flame materials to transparent",
+        default=True
+    )
     
     enable_tidyup: BoolProperty(
         name="Cleanup Scene",
@@ -194,6 +200,7 @@ class SCOrg_tools_AddonPreferences(bpy.types.AddonPreferences):
         col.prop(self, "enable_fix_materials_case")
         col.prop(self, "enable_set_glass_transparent")
         col.prop(self, "enable_fix_stencil_materials")
+        col.prop(self, "enable_remove_engine_flame_materials")
         col.separator()
         col.label(text="Misc settings:", icon='SETTINGS')
         col.prop(self, "enable_tidyup")

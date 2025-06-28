@@ -240,6 +240,10 @@ class SCOrg_tools_blender():
             __class__.replace_pom_materials()
             __class__.update_viewport_with_timer(redraw_now=True)
         
+        if prefs.enable_remove_engine_flame_materials:
+            __class__.set_engine_flame_mat_transparent()
+            __class__.update_viewport_with_timer(redraw_now=True)
+        
         if prefs.enable_tidyup:
             __class__.tidyup()
         
@@ -1419,3 +1423,19 @@ class SCOrg_tools_blender():
         """
         __class__.deduplicate_images()
         bpy.ops.outliner.orphans_purge(do_local_ids=True, do_linked_ids=True, do_recursive=True)
+    
+    def set_engine_flame_mat_transparent():
+        """
+        Set all engine flame materials to be transparent in the viewport.
+        This is useful for engine flames that need to be rendered with transparency.
+        """
+        if globals_and_threading.debug: print("Setting engine flame materials to transparent.")
+        for mat in bpy.data.materials:
+            if 'engine_flame' in mat.name.lower() and mat.use_nodes:
+                # Find material output node
+                for node in mat.node_tree.nodes:
+                    if node.type == 'OUTPUT_MATERIAL':
+                        # Create a transparent shader node
+                        transparent_node = mat.node_tree.nodes.new('ShaderNodeBsdfTransparent')
+                        # connect it to the material output
+                        mat.node_tree.links.new(node.inputs['Surface'], transparent_node.outputs['BSDF'])
