@@ -137,10 +137,12 @@ class SCOrg_tools_import():
                 if str(geometry_path) not in __class__.missing_files:
                     __class__.missing_files.append(str(geometry_path))
                 print(f"⚠️ ERROR: Failed to import DAE for {guid}: {geometry_path} - file missing")
-                misc_utils.SCOrg_tools_misc.show_text_popup(
-                    text_content=__class__.missing_files.sort(key=str.lower),
-                    header_text="The following files were missing, please extract them with StarFab, under Data -> Data.p4k:"
-                )
+                if __class__.missing_files:
+                    sorted_missing_files = sorted(__class__.missing_files, key=str.lower)
+                    misc_utils.SCOrg_tools_misc.show_text_popup(
+                        text_content='\n'.join(sorted_missing_files),
+                        header_text="The following files were missing, please extract them with StarFab, under Data -> Data.p4k:"
+                    )
                 return None
             
             # Get a set of all objects before import
@@ -216,8 +218,9 @@ class SCOrg_tools_import():
             blender_utils.SCOrg_tools_blender.fix_modifiers(displacement_strength);
             globals_and_threading.item_loaded = True
             if len(__class__.missing_files) > 0:
+                sorted_missing_files = sorted(__class__.missing_files, key=str.lower)
                 misc_utils.SCOrg_tools_misc.show_text_popup(
-                    text_content=__class__.missing_files.sort(key=str.lower),
+                    text_content='\n'.join(sorted_missing_files),
                     header_text="The following files were missing, please extract them with StarFab, under Data -> Data.p4k:"
                 )
             __class__.set_translation_new_data_preference(reset=True)
@@ -776,8 +779,9 @@ class SCOrg_tools_import():
         blender_utils.SCOrg_tools_blender.fix_modifiers(displacement_strength)
         
         if len(__class__.missing_files) > 0:
+            sorted_missing_files = sorted(__class__.missing_files, key=str.lower)
             misc_utils.SCOrg_tools_misc.show_text_popup(
-                text_content=__class__.missing_files.sort(key=str.lower),
+                text_content='\n'.join(sorted_missing_files),
                 header_text="The following files were missing, please extract them with StarFab, under Data -> Data.p4k:"
             )
         __class__.set_translation_new_data_preference(reset=True)
