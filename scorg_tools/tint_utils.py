@@ -20,6 +20,25 @@ class SCOrg_tools_tint():
                             if globals_and_threading.debug:
                                 print(f"DEBUG: Found default tint GUID {guid} in component {i} for item {record.name}")
                             tints[guid] = record.name.replace('_', ' ').title()
+                        else:
+                            name = record.name.lower() # e.g. "misc_starlancer_max"
+                            # get the manufacturer name from the first part of the name
+                            man = name.split('_')[0]
+                            # search dcb for a default paint record, e.g. "misc_starlancer_max_default"
+                            # Loop through the name parts, removing the last part each time until we find a match or we reach 2 parts
+                            while len(name.split('_')) >= 2:
+                                if globals_and_threading.debug: print(f"DEBUG: Searching for default paint record for {name} in component {i}")
+                                # Check if the paint record exists in the dcb
+                                results = globals_and_threading.dcb.search_filename(f"libs/foundry/records/tintpalettes/brand/{man}/*{name}_default.xml")
+                                if results:
+                                    # If we find a record, use it as the default paint
+                                    tint_guid = results[0].id.value
+                                    tint_name = results[0].name
+                                    if globals_and_threading.debug: print(f"DEBUG: Found default paint record for {name}: {guid} ({tint_name})")
+                                    tints[tint_guid] = tint_name.replace('_', ' ').title()
+                                    break
+                                # Remove the last part of the name and try again, e.g. "misc_starlancer_default"
+                                name = '_'.join(name.split('_')[:-1])
                         for subgeo in comp.properties.Geometry.properties.SubGeometry:
                             guid = str(subgeo.properties.Geometry.properties.Palette.properties.RootRecord)
                             tags = subgeo.properties.Tags
