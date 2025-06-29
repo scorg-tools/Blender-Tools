@@ -1234,7 +1234,4 @@ class SCOrg_tools_import():
                 # Reset the preference to the original value
                 if __class__.translation_new_data_preference is not None:
                     bpy.context.preferences.view.use_translate_new_dataname = __class__.translation_new_data_preference
-                    if globals_and_threading.debug: print("DEBUG: Reset translation for New data preference to original value")
-        else:
-            if globals_and_threading.debug: print("DEBUG: Blender is in English, no need to change New data preference")
-        
+                    if globals_and_threading.debug: print("DEBUG: Reset translation for New data preference to original value")        
