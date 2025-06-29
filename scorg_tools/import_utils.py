@@ -138,7 +138,7 @@ class SCOrg_tools_import():
                     __class__.missing_files.append(str(geometry_path))
                 print(f"⚠️ ERROR: Failed to import DAE for {guid}: {geometry_path} - file missing")
                 misc_utils.SCOrg_tools_misc.show_text_popup(
-                    text_content=__class__.missing_files,
+                    text_content=__class__.missing_files.sort(key=str.lower),
                     header_text="The following files were missing, please extract them with StarFab, under Data -> Data.p4k:"
                 )
                 return None
@@ -217,7 +217,7 @@ class SCOrg_tools_import():
             globals_and_threading.item_loaded = True
             if len(__class__.missing_files) > 0:
                 misc_utils.SCOrg_tools_misc.show_text_popup(
-                    text_content=__class__.missing_files,
+                    text_content=__class__.missing_files.sort(key=str.lower),
                     header_text="The following files were missing, please extract them with StarFab, under Data -> Data.p4k:"
                 )
             __class__.set_translation_new_data_preference(reset=True)
@@ -772,7 +772,7 @@ class SCOrg_tools_import():
         
         if len(__class__.missing_files) > 0:
             misc_utils.SCOrg_tools_misc.show_text_popup(
-                text_content=__class__.missing_files,
+                text_content=__class__.missing_files.sort(key=str.lower),
                 header_text="The following files were missing, please extract them with StarFab, under Data -> Data.p4k:"
             )
         __class__.set_translation_new_data_preference(reset=True)
