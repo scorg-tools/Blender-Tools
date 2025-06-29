@@ -443,6 +443,11 @@ class SCOrg_tools_import():
             __class__.duplicate_hierarchy_linked(child, new_obj)
     
     def import_hardpoint_hierarchy(loadout, empties_to_fill, is_top_level=True, parent_guid=None):        
+        # Check if loadout is None to prevent AttributeError
+        if loadout is None:
+            if globals_and_threading.debug: print("DEBUG: Loadout is None, skipping hierarchy import")
+            return
+            
         entries = loadout.properties.get('entries', [])
 
         # Initialize timer on first call (top level)
@@ -532,7 +537,7 @@ class SCOrg_tools_import():
                 if not entity_class_name:
                     if globals_and_threading.debug: print("DEBUG: GUID is all zeros, but no entityClassName found, skipping geometry import")
                     # Still recurse into nested loadout if present
-                    if should_process_nested:
+                    if should_process_nested and nested_loadout:
                         entries_count = len(nested_loadout.properties.get('entries', [])) if nested_loadout else 0
                         if globals_and_threading.debug: print(f"DEBUG: Nested loadout detected with {entries_count} entries, recursing into GUID {guid_str} (all zeros)...")
                         # For filled hardpoints, we need to get empties from within that hardpoint

@@ -19,10 +19,38 @@ class VIEW3D_PT_scorg_tools_panel(bpy.types.Panel):
     
     # Class variable to track last known width for responsive updates
     _last_known_width = None
+    # Cache for applied tint index to avoid expensive lookups on every redraw
+    _cached_applied_tint_index = None
+    _cache_valid = False
 
     @classmethod
     def poll(cls, context):
         return hasattr(bpy.types, PARENT_PANEL_BL_IDNAME)
+    
+    @classmethod
+    def get_cached_applied_tint_index(cls):
+        """Get the applied tint index with caching to avoid expensive lookups on every redraw"""
+        # Check if cache is still valid
+        if cls._cache_valid and cls._cached_applied_tint_index is not None:
+            return cls._cached_applied_tint_index
+        
+        # Cache is invalid or doesn't exist, update it
+        try:
+            from . import tint_utils
+            cls._cached_applied_tint_index = tint_utils.SCOrg_tools_tint.get_applied_tint_number()
+            cls._cache_valid = True
+        except Exception as e:
+            # If there's an error, don't cache and return None
+            cls._cached_applied_tint_index = None
+            cls._cache_valid = False
+            
+        return cls._cached_applied_tint_index
+    
+    @classmethod
+    def invalidate_tint_cache(cls):
+        """Invalidate the tint cache to force a refresh on next access"""
+        cls._cache_valid = False
+        cls._cached_applied_tint_index = None
     
     def draw(self, context):
         layout = self.layout
@@ -125,9 +153,8 @@ class VIEW3D_PT_scorg_tools_panel(bpy.types.Panel):
                     # Paints section
                     layout.label(text="Paints")
                     if globals_and_threading.button_labels:
-                        # Get the currently applied tint index for highlighting
-                        from . import tint_utils
-                        applied_tint_index = tint_utils.SCOrg_tools_tint.get_applied_tint_number()
+                        # Get the currently applied tint index for highlighting (cached to avoid expensive lookups)
+                        applied_tint_index = self.get_cached_applied_tint_index()
                         
                         for idx, label in enumerate(globals_and_threading.button_labels):
                             # Highlight the currently applied tint

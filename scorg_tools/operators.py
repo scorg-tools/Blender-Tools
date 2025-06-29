@@ -17,6 +17,9 @@ class VIEW3D_OT_dynamic_button(bpy.types.Operator):
 
     def execute(self, context):
         tint_utils.SCOrg_tools_tint.on_button_pressed(self.button_index)
+        # Invalidate the tint cache so the UI updates immediately
+        from . import panels
+        panels.VIEW3D_PT_scorg_tools_panel.invalidate_tint_cache()
         return {'FINISHED'}
 
 
@@ -78,6 +81,9 @@ class VIEW3D_OT_refresh_button(bpy.types.Operator):
             return {'CANCELLED'}
 
         tint_utils.SCOrg_tools_tint.update_tints(record)
+        # Invalidate the tint cache since tint data may have changed
+        from . import panels
+        panels.VIEW3D_PT_scorg_tools_panel.invalidate_tint_cache()
         misc_utils.SCOrg_tools_misc.force_ui_update()
         return {'FINISHED'}
     
