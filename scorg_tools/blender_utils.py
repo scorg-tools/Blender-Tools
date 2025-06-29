@@ -199,6 +199,9 @@ class SCOrg_tools_blender():
     def fix_modifiers(displacement_strength=0.005):
         # Get addon preferences
         prefs = bpy.context.preferences.addons["scorg_tools"].preferences
+
+        # Set to object mode
+        bpy.ops.object.mode_set(mode='OBJECT')
         
         if prefs.enable_weld_weighted_normal:
             __class__.add_weld_and_weighted_normal_modifiers()
@@ -1224,17 +1227,22 @@ class SCOrg_tools_blender():
             # Check if the material has the custom property 'StringGenMask' and is a POM
             if 'StringGenMask' in mat and "%PARALLAX_OCCLUSION_MAPPING" in str(mat['StringGenMask']):
                 is_pom = True
+                custom_properties = {}
+                for key in mat.keys():
+                    if key != "cycles":
+                        print(f"{key} = {mat.get(key)}")
+                        custom_properties[key] = mat.get(key)
             else:
-                # Fallback check: if the material contains the '_Illum.pom' node group at the top level
-                if mat.use_nodes and mat.node_tree:
-                    for node in mat.node_tree.nodes:
-                        if node.type == 'GROUP' and node.node_tree and '_Illum.pom' in node.node_tree.name:
-                            is_pom = True
-                            break
-            
-            if not is_pom:
                 # skip this material as it's not a POM material
                 continue
+
+            #else:
+            #    # Fallback check: if the material contains the '_Illum.pom' node group at the top level
+            #    if mat.use_nodes and mat.node_tree:
+            #        for node in mat.node_tree.nodes:
+            #            if node.type == 'GROUP' and node.node_tree and '_Illum.pom' in node.node_tree.name:
+            #                is_pom = True
+            #                break          
             
             # Extract images used by the material with specific suffixes
             images = {}
@@ -1316,6 +1324,10 @@ class SCOrg_tools_blender():
                 
                 # Rename the new material to the old name
                 new_material.name = old_mat_name
+
+                # Copy the custom properties from the old material to the new one
+                for key, value in custom_properties.items():
+                    new_material[key] = value
                 
                 # Now assign the detected images to the appropriate texture nodes
                 for suffix, image_path in images.items():
@@ -1408,6 +1420,14 @@ class SCOrg_tools_blender():
                                 print(f"Set Principled BSDF Base Color to dark gray for material {new_material.name}")
                             break
                 
+                # metal_thin materials should use alpha transparency (yeah, it's strange)
+                for node in new_material.node_tree.nodes:
+                    if node.type == 'VALUE' and node.label == 'Alpha mid-level control':
+                        if "SurfaceType" in new_material and new_material["SurfaceType"] == "metal_thin":
+                            node.outputs['Value'].default_value = 0.0
+                        else:
+                            node.outputs['Value'].default_value = -1.0
+                        break
                 if globals_and_threading.debug: print(f"Successfully replaced material {old_mat_name} with scorg_pom material")
 
     def deduplicate_images():
