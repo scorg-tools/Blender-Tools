@@ -139,7 +139,7 @@ class SCOrg_tools_misc():
         # Only change mode if there's an active object
         if bpy.context.active_object is not None:
             bpy.ops.object.mode_set(mode='OBJECT')
-            bpy.ops.object.select_all(action='DESELECT') # Deselect all objects for a clean slate
+        bpy.ops.object.select_all(action='DESELECT') # Deselect all objects for a clean slate
 
         found_base_empty = None
         # Search for the base empty object in the scene
