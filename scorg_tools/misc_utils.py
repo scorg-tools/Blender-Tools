@@ -136,6 +136,7 @@ class SCOrg_tools_misc():
         Finds a specific 'base' empty object, determines its direct parent collection,
         and sets that collection as the active one for new imports/items.
         """
+        bpy.ops.object.mode_set(mode='OBJECT')
         bpy.ops.object.select_all(action='DESELECT') # Deselect all objects for a clean slate
 
         found_base_empty = None
