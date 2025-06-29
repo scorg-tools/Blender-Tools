@@ -137,10 +137,10 @@ class SCOrg_tools_import():
                 if str(geometry_path) not in __class__.missing_files:
                     __class__.missing_files.append(str(geometry_path))
                 print(f"⚠️ ERROR: Failed to import DAE for {guid}: {geometry_path} - file missing")
-                if __class__.missing_files:
+                if len(__class__.missing_files) > 0:
                     sorted_missing_files = sorted(__class__.missing_files, key=str.lower)
                     misc_utils.SCOrg_tools_misc.show_text_popup(
-                        text_content='\n'.join(sorted_missing_files),
+                        text_content=sorted_missing_files,
                         header_text="The following files were missing, please extract them with StarFab, under Data -> Data.p4k:"
                     )
                 return None
@@ -220,7 +220,7 @@ class SCOrg_tools_import():
             if len(__class__.missing_files) > 0:
                 sorted_missing_files = sorted(__class__.missing_files, key=str.lower)
                 misc_utils.SCOrg_tools_misc.show_text_popup(
-                    text_content='\n'.join(sorted_missing_files),
+                    text_content=sorted_missing_files,
                     header_text="The following files were missing, please extract them with StarFab, under Data -> Data.p4k:"
                 )
             __class__.set_translation_new_data_preference(reset=True)
@@ -579,7 +579,11 @@ class SCOrg_tools_import():
 
             # Only import geometry if we have an empty hardpoint
             if should_import_geometry:
-                if guid_str in __class__.imported_guid_objects:
+                # Check if this specific hardpoint already has children (is already filled)
+                if len(matching_empty.children) > 0:
+                    if globals_and_threading.debug: print(f"DEBUG: Hardpoint '{matching_empty.name}' already has children, skipping geometry import to avoid duplication")
+                    # Still allow nested loadout processing to continue - don't skip the entire section
+                elif guid_str in __class__.imported_guid_objects:
                     # If the GUID is already imported, duplicate the hierarchy linked
                     original_root = __class__.imported_guid_objects[guid_str]
                     __class__.duplicate_hierarchy_linked(original_root, matching_empty)
@@ -781,7 +785,7 @@ class SCOrg_tools_import():
         if len(__class__.missing_files) > 0:
             sorted_missing_files = sorted(__class__.missing_files, key=str.lower)
             misc_utils.SCOrg_tools_misc.show_text_popup(
-                text_content='\n'.join(sorted_missing_files),
+                text_content=sorted_missing_files,
                 header_text="The following files were missing, please extract them with StarFab, under Data -> Data.p4k:"
             )
         __class__.set_translation_new_data_preference(reset=True)
