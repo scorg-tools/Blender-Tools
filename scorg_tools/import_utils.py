@@ -471,7 +471,6 @@ class SCOrg_tools_import():
             nested_loadout = props.get('loadout')
 
             entity_class_name = getattr(props, 'entityClassName', None)
-            # Always print debug for every entry
             if globals_and_threading.debug: print(f"DEBUG: Entry {i}: item_port_name='{item_port_name}', guid={guid}, entityClassName={entity_class_name}, has_nested_loadout={nested_loadout is not None}")
 
             if not item_port_name or (not guid and not entity_class_name):
@@ -483,12 +482,6 @@ class SCOrg_tools_import():
                 if globals_and_threading.debug: print(f"DEBUG: Skipping '{item_port_name}' due to top-level filter")
                 continue
 
-            # Use mapping if available (for nested)
-        #    if not is_top_level and hardpoint_mapping:
-        #        mapped_name = hardpoint_mapping.get(item_port_name, item_port_name)
-        #    else:
-        #       mapped_name = {item_port_name}
-
             mapped_name = item_port_name
             for hardpoint_name, item_port_names in hardpoint_mapping.items():
                 if globals_and_threading.debug: print(f"DEBUG: Checking hardpoint mapping: {hardpoint_name} -> {item_port_names}")
@@ -496,27 +489,64 @@ class SCOrg_tools_import():
                     mapped_name = hardpoint_name
                     break
             if globals_and_threading.debug: print(f"DEBUG: Looking for matching empty for item_port_name='{item_port_name}', mapped_name='{mapped_name}'")
+            
+            # Try to find matching empty in empties_to_fill (empty hardpoints)
             matching_empty = None
             for empty in empties_to_fill:
                 orig_name = empty.get('orig_name', '') if hasattr(empty, 'get') else ''
+                
                 if __class__.matches_blender_name(orig_name, mapped_name) or __class__.matches_blender_name(empty.name, mapped_name):
                     matching_empty = empty
                     break
+            
+            # If no empty hardpoint found, check if there's a filled hardpoint that we should process for nested loadout
+            filled_hardpoint = None
             if not matching_empty:
-                if globals_and_threading.debug: print(f"WARNING: No matching empty found for hardpoint '{mapped_name}' (original item_port_name: '{item_port_name}'), skipping this entry")
+                # Search all empties (not just empty ones) for a match to handle filled hardpoints with nested loadouts
+                for obj in bpy.data.objects:
+                    if obj.type == 'EMPTY':
+                        orig_name = obj.get('orig_name', '') if hasattr(obj, 'get') else ''
+                        if __class__.matches_blender_name(orig_name, mapped_name) or __class__.matches_blender_name(obj.name, mapped_name):
+                            # Check if this hardpoint has children (is filled)
+                            if len(obj.children) > 0:
+                                filled_hardpoint = obj
+                                if globals_and_threading.debug: print(f"DEBUG: Found filled hardpoint: {filled_hardpoint.name} for '{mapped_name}'")
+                                break
+            
+            # Determine if we should process nested loadout and whether to import geometry
+            should_import_geometry = matching_empty is not None
+            should_process_nested = nested_loadout is not None or filled_hardpoint is not None
+            target_empty = matching_empty or filled_hardpoint
+            
+            if not target_empty:
+                if globals_and_threading.debug: print(f"WARNING: No matching empty or filled hardpoint found for '{mapped_name}' (original item_port_name: '{item_port_name}'), skipping this entry")
                 continue
-            else:
-                if globals_and_threading.debug: print(f"DEBUG: Found matching empty: {matching_empty.name} for hardpoint '{mapped_name}, item port: {item_port_name}'")
 
+            if globals_and_threading.debug: 
+                status = "empty" if should_import_geometry else "filled"
+                print(f"DEBUG: Found {status} hardpoint: {target_empty.name} for '{mapped_name}', will_import_geometry={should_import_geometry}, will_process_nested={should_process_nested}")
+
+            # Handle GUID resolution
             guid_str = str(guid)
             if not __class__.is_guid(guid_str): # must be 00000000-0000-0000-0000-000000000000 or blank
                 if not entity_class_name:
                     if globals_and_threading.debug: print("DEBUG: GUID is all zeros, but no entityClassName found, skipping geometry import")
                     # Still recurse into nested loadout if present
-                    if nested_loadout:
-                        entries_count = len(nested_loadout.properties.get('entries', []))
+                    if should_process_nested:
+                        entries_count = len(nested_loadout.properties.get('entries', [])) if nested_loadout else 0
                         if globals_and_threading.debug: print(f"DEBUG: Nested loadout detected with {entries_count} entries, recursing into GUID {guid_str} (all zeros)...")
-                        __class__.import_hardpoint_hierarchy(nested_loadout, empties_to_fill, is_top_level=False, parent_guid=guid_str)
+                        # For filled hardpoints, we need to get empties from within that hardpoint
+                        if filled_hardpoint:
+                            nested_empties = []
+                            def collect_empties(obj):
+                                if obj.type == 'EMPTY' and len(obj.children) == 0:
+                                    nested_empties.append(obj)
+                                for child in obj.children:
+                                    collect_empties(child)
+                            collect_empties(filled_hardpoint)
+                            __class__.import_hardpoint_hierarchy(nested_loadout, nested_empties, is_top_level=False, parent_guid=guid_str)
+                        else:
+                            __class__.import_hardpoint_hierarchy(nested_loadout, empties_to_fill, is_top_level=False, parent_guid=guid_str)
                     else:
                         if globals_and_threading.debug: print("DEBUG: No nested loadout found, recursion ends here")
                     continue
@@ -533,104 +563,109 @@ class SCOrg_tools_import():
                 child_record = __class__.get_record(guid_str)
                 if child_record:
                     nested_loadout = __class__.get_loadout_from_record(child_record)
+                    should_process_nested = nested_loadout is not None
                     if not nested_loadout:
                        if globals_and_threading.debug: print(f"DEBUG: Could not find a nested loadout for GUID {guid_str}: {nested_loadout}")
                     else:
-                        if globals_and_threading.debug: print(f"DEBUG: Found nested loadout for GUID {guid_str}: {nested_loadout}")
-                        from pprint import pprint
-                        pprint(child_record)
-                        pprint(nested_loadout)
+                        if globals_and_threading.debug: print(f"DEBUG: Found nested loadout for GUID {guid_str}")
 
+            # Only import geometry if we have an empty hardpoint
+            if should_import_geometry:
+                if guid_str in __class__.imported_guid_objects:
+                    # If the GUID is already imported, duplicate the hierarchy linked
+                    original_root = __class__.imported_guid_objects[guid_str]
+                    __class__.duplicate_hierarchy_linked(original_root, matching_empty)
+                    if globals_and_threading.debug: print(f"Duplicated hierarchy for '{item_port_name}' from GUID {guid_str}")
+                else:
+                    # The item was not imported yet, so we need to import it
+                    geometry_path = __class__.get_geometry_path_by_guid(guid_str)
+                    if geometry_path is None:
+                        if globals_and_threading.debug: print(f"ERROR: No geometry for GUID {guid_str}: {geometry_path}")
+                        continue
 
+                    process_bones_file = False
+                    # if the geometry path is an array, it means we have a CDF XML file that points to the real geometry
+                    if isinstance(geometry_path, list):
+                        if globals_and_threading.debug: print(f"DEBUG: CDF XML file found with references to: {geometry_path}")
+                        process_bones_file = geometry_path
+                        geometry_path = process_bones_file.pop(0)  # Get the first file in the array, which is the base armature DAE file
 
-            if guid_str in __class__.imported_guid_objects:
-                # If the GUID is already imported, duplicate the hierarchy linked
-                original_root = __class__.imported_guid_objects[guid_str]
-                __class__.duplicate_hierarchy_linked(original_root, matching_empty)
-                if globals_and_threading.debug: print(f"Duplicated hierarchy for '{item_port_name}' from GUID {guid_str}")
-            else:
-                # The item was not imported yet, so we need to import it
-                geometry_path = __class__.get_geometry_path_by_guid(guid_str)
-                if geometry_path is None:
-                    if globals_and_threading.debug: print(f"ERROR: No geometry for GUID {guid_str}: {geometry_path}")
-                    continue
+                    if not geometry_path.exists():
+                        print(f"Error: .DAE file not found at: {geometry_path}")
+                        if globals_and_threading.debug: print(f"DEBUG: Attempted DAE import path: {geometry_path}, but file was missing")
+                        if str(geometry_path) not in __class__.missing_files:
+                            __class__.missing_files.append(str(geometry_path));
+                        continue
 
-                process_bones_file = False
-                # if the geometry path is an array, it means we have a CDF XML file that points to the real geometry
-                if isinstance(geometry_path, list):
-                    if globals_and_threading.debug: print(f"DEBUG: CDF XML file found with references to: {geometry_path}")
-                    process_bones_file = geometry_path
-                    geometry_path = process_bones_file.pop(0)  # Get the first file in the array, which is the base armature DAE file
+                    # Get a set of all objects before import
+                    before = set(bpy.data.objects)
 
-                if not geometry_path.exists():
-                    print(f"Error: .DAE file not found at: {geometry_path}")
-                    if globals_and_threading.debug: print(f"DEBUG: Attempted DAE import path: {geometry_path}, but file was missing")
-                    if str(geometry_path) not in __class__.missing_files:
-                        __class__.missing_files.append(str(geometry_path));
-                    continue
+                    bpy.ops.object.select_all(action='DESELECT')
+                    result = bpy.ops.wm.collada_import(filepath=str(geometry_path))
+                    if 'FINISHED' not in result:
+                        if globals_and_threading.debug: print(f"ERROR: Failed to import DAE for {guid_str}: {geometry_path}")
+                        continue
 
-                # Get a set of all objects before import
-                before = set(bpy.data.objects)
+                    # Get a set of all objects after import
+                    after = set(bpy.data.objects)
+                    # The difference is the set of newly imported objects
+                    imported_objs = list(after - before)
 
-                bpy.ops.object.select_all(action='DESELECT')
-                result = bpy.ops.wm.collada_import(filepath=str(geometry_path))
-                if 'FINISHED' not in result:
-                    if globals_and_threading.debug: print(f"ERROR: Failed to import DAE for {guid_str}: {geometry_path}")
-                    continue
+                    root_objs = [obj for obj in imported_objs if obj.parent is None]
+                    if not root_objs:
+                        if globals_and_threading.debug: print(f"WARNING: No root object found for: {geometry_path}")
+                        continue
 
-                # Get a set of all objects after import
-                after = set(bpy.data.objects)
-                # The difference is the set of newly imported objects
-                imported_objs = list(after - before)
+                    root_obj = root_objs[0]
+                    root_obj.parent = matching_empty
+                    root_obj.matrix_parent_inverse.identity()
+                    __class__.imported_guid_objects[guid_str] = root_obj
 
-                root_objs = [obj for obj in imported_objs if obj.parent is None]
-                if not root_objs:
-                    if globals_and_threading.debug: print(f"WARNING: No root object found for: {geometry_path}")
-                    continue
+                    if process_bones_file:
+                        if globals_and_threading.debug: print("Deleting meshes for CDF import")
+                        # Store the root object name before deletion
+                        root_obj_name = root_obj.name
+                        # Delete all meshes to avoid conflicts with CDF imports, the imported .dae objects will be selected
+                        __class__.replace_selected_mesh_with_empties()
+                        
+                        if globals_and_threading.debug: print(f"Converting bones to empties for {guid_str}: {geometry_path}")
+                        # Ensure we're in object mode before converting armatures
+                        if bpy.context.mode != 'OBJECT':
+                            bpy.ops.object.mode_set(mode='OBJECT')
+                        blender_utils.SCOrg_tools_blender.convert_armatures_to_empties()
+                        
+                        for file in process_bones_file:
+                            if not file.is_file():
+                                if globals_and_threading.debug: print(f"⚠️ ERROR: Bones file missing: {file}")
+                                if str(file) not in __class__.missing_files:
+                                    __class__.missing_files.append(str(file))
+                                continue
+                            if globals_and_threading.debug: print(f"Processing bones file: {file}")
+                            __class__.import_file(file, root_obj_name)
+                        if globals_and_threading.debug: print("DEBUG: Finished processing bones files")
 
-                root_obj = root_objs[0]
-                root_obj.parent = matching_empty
-                root_obj.matrix_parent_inverse.identity()
-                __class__.imported_guid_objects[guid_str] = root_obj
+                    if globals_and_threading.debug: print(f"Imported object for '{item_port_name}' GUID {guid_str} → {geometry_path}")
 
-                if process_bones_file:
-                    if globals_and_threading.debug: print("Deleting meshes for CDF import")
-                    # Store the root object name before deletion
-                    root_obj_name = root_obj.name
-                    # Delete all meshes to avoid conflicts with CDF imports, the imported .dae objects will be selected
-                    __class__.replace_selected_mesh_with_empties()
-                    
-                    if globals_and_threading.debug: print(f"Converting bones to empties for {guid_str}: {geometry_path}")
-                    # Ensure we're in object mode before converting armatures
-                    if bpy.context.mode != 'OBJECT':
-                        bpy.ops.object.mode_set(mode='OBJECT')
-                    blender_utils.SCOrg_tools_blender.convert_armatures_to_empties()
-                    
-                    for file in process_bones_file:
-                        if not file.is_file():
-                            if globals_and_threading.debug: print(f"⚠️ ERROR: Bones file missing: {file}")
-                            if str(file) not in __class__.missing_files:
-                                __class__.missing_files.append(str(file))
-                            continue
-                        if globals_and_threading.debug: print(f"Processing bones file: {file}")
-                        __class__.import_file(file, root_obj_name)
-                    if globals_and_threading.debug: print("DEBUG: Finished processing bones files")
-
-                # Get empties from the current scene that are descendants of matching_empty
-                # This avoids referencing potentially deleted objects from imported_objs
-                imported_empties = []
+            # Process nested loadout regardless of whether we imported geometry
+            if should_process_nested and nested_loadout:
+                entries_count = len(nested_loadout.properties.get('entries', []))
+                if globals_and_threading.debug: print(f"DEBUG: Processing nested loadout with {entries_count} entries for GUID {guid_str}...")
+                
+                # Get empties from the target hardpoint (whether newly imported or existing)
+                nested_empties = []
                 def collect_empties(obj):
                     if obj.type == 'EMPTY':
-                        imported_empties.append(obj)
+                        nested_empties.append(obj)
                     for child in obj.children:
                         collect_empties(child)
                 
-                collect_empties(matching_empty)
+                collect_empties(target_empty)
 
                 mapping = __class__.get_hardpoint_mapping_from_guid(guid_str) or {}
-                if globals_and_threading.debug: print(f"DEBUG: Imported empties: {[e.name for e in imported_empties]}")
-                if globals_and_threading.debug: print(f"DEBUG: Mapping for imported GUID {guid_str}: {mapping}")
-                for empty in imported_empties:
+                if globals_and_threading.debug: print(f"DEBUG: Found empties in target hardpoint: {[e.name for e in nested_empties]}")
+                if globals_and_threading.debug: print(f"DEBUG: Mapping for GUID {guid_str}: {mapping}")
+                
+                for empty in nested_empties:
                     # Set orig_name to the mapping key if the name matches, otherwise to the base name without suffix
                     for key in mapping:
                         if __class__.matches_blender_name(empty.name, key):
@@ -643,15 +678,9 @@ class SCOrg_tools_import():
                     else:
                         empty['orig_name'] = re.sub(r'\.\d+$', '', empty.name)
 
-                if globals_and_threading.debug: print(f"Imported object for '{item_port_name}' GUID {guid_str} → {geometry_path}")
-
-                # Recurse into nested loadout with is_top_level=False and pass guid_str as parent_guid
-                if nested_loadout:
-                    entries_count = len(nested_loadout.properties.get('entries', []))
-                    if globals_and_threading.debug: print(f"DEBUG: Nested loadout detected with {entries_count} entries, recursing into GUID {guid_str}...")
-                    __class__.import_hardpoint_hierarchy(nested_loadout, imported_empties, is_top_level=False, parent_guid=guid_str)
-                else:
-                    if globals_and_threading.debug: print("DEBUG: No nested loadout found, recursion ends here")
+                __class__.import_hardpoint_hierarchy(nested_loadout, nested_empties, is_top_level=False, parent_guid=guid_str)
+            else:
+                if globals_and_threading.debug: print("DEBUG: No nested loadout to process")
 
         # Clear progress when done with this level
         if is_top_level:
@@ -1234,4 +1263,4 @@ class SCOrg_tools_import():
                 # Reset the preference to the original value
                 if __class__.translation_new_data_preference is not None:
                     bpy.context.preferences.view.use_translate_new_dataname = __class__.translation_new_data_preference
-                    if globals_and_threading.debug: print("DEBUG: Reset translation for New data preference to original value")        
+                    if globals_and_threading.debug: print("DEBUG: Reset translation for New data preference to original value")
