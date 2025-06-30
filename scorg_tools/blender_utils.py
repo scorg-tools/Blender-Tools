@@ -762,29 +762,33 @@ class SCOrg_tools_blender():
     
     def fix_stencil_materials():
         """
-        Find all materials containing '_stencil' (case insensitive) and set their 
-        the UseAlpha to 1.0
-        """        
-        # Get a list of material names that contain '_stencil'
-        material_names = [mat.name for mat in bpy.data.materials if '_stencil' in mat.name.lower()]
-        
-        for i, mat_name in enumerate(material_names):
-            misc_utils.SCOrg_tools_misc.update_progress("Setting stencil to use alpha", i, len(material_names), spinner_type="arc")
-            
-            # Get fresh reference to the material
-            material = bpy.data.materials.get(mat_name)
-            if material is None:
+        Fix materials that use stencil textures by ensuring they are set up correctly.
+        """
+        if globals_and_threading.debug: print("Fixing stencil materials.")
+        # Iterate through all materials in the scene
+        for mat in bpy.data.materials:
+            # Check if material uses nodes
+            if not mat.use_nodes or not mat.node_tree:
                 continue
 
-            # Ensure the material has a node called group
-            if "Group" not in material.node_tree.nodes:
-                print(f"Warning: Material '{material.name}' does not have a 'Group' node. Skipping.")
-                continue
-            # Check if UseAlpha input exists
-            if 'UseAlpha' not in material.node_tree.nodes["Group"].inputs:
-                print(f"Warning: Material '{material.name}' does not have 'UseAlpha' input in 'Group' node. Skipping.")
-                continue
-            material.node_tree.nodes["Group"].inputs['UseAlpha'].default_value=1.0
+            # Check if the material has the custom property 'STENCIL_MAP'
+            if 'StringGenMask' in mat and "STENCIL_MAP" in str(mat['StringGenMask']):
+                # Find the _Illum node group
+                for node in mat.node_tree.nodes:
+                    if node.type == 'GROUP' and node.node_tree and '_illum' in node.node_tree.name.lower():
+                        if globals_and_threading.debug: print(f"Updating alpha and shadow settings for stencil material: {mat.name}")
+                        mat.blend_method = "HASHED"
+                        mat.shadow_method = "NONE"
+                        mat.show_transparent_back = True
+                        mat.cycles.use_transparent_shadow = True
+                        mat.use_screen_refraction = True
+                        mat.refraction_depth = 0.01
+                        # Set the UseAlpha input to 1
+                        if 'UseAlpha' in node.inputs:
+                            node.inputs['UseAlpha'].default_value = 1.0
+                            break
+                        else:
+                            if globals_and_threading.debug: print(f"Warning: _Illum node group in material {mat.name} does not have UseAlpha input")
 
     def create_transparent_image(name="transparent", width=1, height=1):
         """
@@ -1223,10 +1227,8 @@ class SCOrg_tools_blender():
                 if globals_and_threading.debug: print(f"Material {mat.name} doesn't use nodes, skipping")
                 continue
 
-            is_pom = False
             # Check if the material has the custom property 'StringGenMask' and is a POM
-            if 'StringGenMask' in mat and "%PARALLAX_OCCLUSION_MAPPING" in str(mat['StringGenMask']):
-                is_pom = True
+            if 'StringGenMask' in mat and ("%PARALLAX_OCCLUSION_MAPPING" in str(mat['StringGenMask']) or "_trim_tyre" in mat.name.lower()):
                 custom_properties = {}
                 for key in mat.keys():
                     if key != "cycles":
@@ -1235,14 +1237,6 @@ class SCOrg_tools_blender():
             else:
                 # skip this material as it's not a POM material
                 continue
-
-            #else:
-            #    # Fallback check: if the material contains the '_Illum.pom' node group at the top level
-            #    if mat.use_nodes and mat.node_tree:
-            #        for node in mat.node_tree.nodes:
-            #            if node.type == 'GROUP' and node.node_tree and '_Illum.pom' in node.node_tree.name:
-            #                is_pom = True
-            #                break          
             
             # Extract images used by the material with specific suffixes
             images = {}
@@ -1428,6 +1422,20 @@ class SCOrg_tools_blender():
                         else:
                             node.outputs['Value'].default_value = -1.0
                         break
+                if "_trim_tyre" in new_material.name.lower():
+                    # Update various settings for tyre materials
+                    for node in new_material.node_tree.nodes:
+                        if node.type == 'GROUP' and node.node_tree and 'pom_vector' in node.node_tree.name.lower():
+                            # Set the Bias and Scale for POM_vector
+                            node.inputs['Bias'].default_value = 0.5
+                            node.inputs['Scale'].default_value = 2.0
+                        elif node.label.lower() == 'n_strength':
+                            # Set the normal strength for tyre materials
+                            node.outputs['Value'].default_value = 5.0
+                        elif node.type == 'BSDF_PRINCIPLED':
+                            # Set the Base Color to black for tyre materials
+                            node.inputs['Base Color'].default_value = [0.0, 0.0, 0.0, 1.0]
+
                 if globals_and_threading.debug: print(f"Successfully replaced material {old_mat_name} with scorg_pom material")
 
     def deduplicate_images():
@@ -1466,3 +1474,16 @@ class SCOrg_tools_blender():
                         transparent_node = mat.node_tree.nodes.new('ShaderNodeBsdfTransparent')
                         # connect it to the material output
                         mat.node_tree.links.new(node.inputs['Surface'], transparent_node.outputs['BSDF'])
+
+    def boost_normal_strength_tyre_mats():
+        """
+        Boost the normal strength of all tyre materials
+        """
+        if globals_and_threading.debug: print("Boosting normal strength for tyre materials.")
+        for mat in bpy.data.materials:
+            if 'trim_tyre' in mat.name.lower() and mat.use_nodes:
+                # Find the _Illum node group
+                for node in mat.node_tree.nodes:
+                    if node.type == 'GROUP' and node.node_tree and '_illum' in node.node_tree.name.lower():
+                        if globals_and_threading.debug: print(f"Updating normal strength for tyre material: {mat.name}")
+                        node.inputs['n Strength'].default_value = 10
