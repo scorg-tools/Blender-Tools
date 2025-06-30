@@ -1214,7 +1214,7 @@ class SCOrg_tools_blender():
             if globals_and_threading.debug: print("Error: 'scorg_pom' material not found. Please append it first.")
             return False
         
-        suffix_list = ['_diff', '_ddna.glossmap', '_ddna', '_ddn', '_spec', '_displ', '_pom_height']
+        suffix_list = ['_diff', '_ddna.glossmap', '_ddna', '_ddn', '_spec', '_displ', '_pom_height', '_disp']
         mapped_suffixes = {
             '_ddn': '_ddna',
             '_pom_height': '_displ'
@@ -1228,7 +1228,7 @@ class SCOrg_tools_blender():
                 continue
 
             # Check if the material has the custom property 'StringGenMask' and is a POM
-            if 'StringGenMask' in mat and ("%PARALLAX_OCCLUSION_MAPPING" in str(mat['StringGenMask']) or "_trim_tyre" in mat.name.lower()):
+            if 'StringGenMask' in mat and ("%PARALLAX_OCCLUSION_MAPPING" in str(mat['StringGenMask']) or "_tire" in mat.name.lower() or "_tyre" in mat.name.lower()):
                 custom_properties = {}
                 for key in mat.keys():
                     if key != "cycles":
@@ -1256,7 +1256,7 @@ class SCOrg_tools_blender():
             
             if globals_and_threading.debug: print(f"Images used by {mat.name}: {images}")
             # Exit early if _displ or _pom_height is not found
-            if not images.get('_displ') and not images.get('_pom_height'):
+            if not images.get('_displ') and not images.get('_pom_height') and not images.get('_disp'):
                 if globals_and_threading.debug: print(f"Material {mat.name} does not have required displacement or height map images, skipping")
                 continue
 
@@ -1269,11 +1269,15 @@ class SCOrg_tools_blender():
                 if globals_and_threading.debug: 
                     print(f"Material {mat.name} is missing images: {', '.join(missing_images)}. Attempting to find them")
                 # Get the filepath of the displacement image (images dict contains strings, not image objects)
-                displacement_image_path = images.get('_displ') or images.get('_pom_height')
+                displacement_image_path = images.get('_displ') or images.get('_pom_height') or images.get('_disp')
                 # strip the file extension from the displacement image path
                 displacement_image_path = os.path.splitext(displacement_image_path)[0]
-                # strip the _displ or _pom_height suffix
-                displacement_image_path = displacement_image_path.rsplit('_', 1)[0]
+                # strip the displacement suffix (_displ, _pom_height, or _disp)
+                displacement_suffixes = ['_pom_height', '_displ', '_disp']  # Order by length (longest first) to avoid partial matches
+                for disp_suffix in displacement_suffixes:
+                    if displacement_image_path.lower().endswith(disp_suffix):
+                        displacement_image_path = displacement_image_path[:-len(disp_suffix)]
+                        break
                 # Now try to find the missing images based on the displacement image path
                 for suffix in missing_images:
                     # Try multiple extensions
@@ -1325,7 +1329,7 @@ class SCOrg_tools_blender():
                 
                 # Now assign the detected images to the appropriate texture nodes
                 for suffix, image_path in images.items():
-                    if suffix == '_displ' or suffix == '_pom_height':
+                    if suffix == '_displ' or suffix == '_pom_height' or suffix == '_disp':
                         # Handle displacement image - find and set it once in the POM_disp node group
                         if not __class__.find_and_set_displacement_image(new_material, image_path):
                             if globals_and_threading.debug: 
@@ -1422,7 +1426,7 @@ class SCOrg_tools_blender():
                         else:
                             node.outputs['Value'].default_value = -1.0
                         break
-                if "_trim_tyre" in new_material.name.lower():
+                if "_tire" in new_material.name.lower() or "_tyre" in new_material.name.lower():
                     # Update various settings for tyre materials
                     for node in new_material.node_tree.nodes:
                         if node.type == 'GROUP' and node.node_tree and 'pom_vector' in node.node_tree.name.lower():
