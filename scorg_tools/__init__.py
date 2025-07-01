@@ -1,7 +1,7 @@
 bl_info = {
     "name": "SCOrg.tools Blender Tools beta",
     "author": "Star-Destroyer@scorg.tools",
-    "version": (1, 1, 37),
+    "version": (1, 1, 38),
     "blender": (3, 6, 0),
     "location": "View3D > Sidebar > SCOrg.tools",
     "description": "Tools to supplement StarFab",
