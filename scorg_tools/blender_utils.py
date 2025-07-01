@@ -774,9 +774,12 @@ class SCOrg_tools_blender():
             # Check if the material has the custom property 'STENCIL_MAP'
             if 'StringGenMask' in mat and "STENCIL_MAP" in str(mat['StringGenMask']):
                 # Find the _Illum node group
+                illum_node = None
+                stencil_image_node = None
                 for node in mat.node_tree.nodes:
                     if node.type == 'GROUP' and node.node_tree and '_illum' in node.node_tree.name.lower():
                         if globals_and_threading.debug: print(f"Updating alpha and shadow settings for stencil material: {mat.name}")
+                        illum_node = node
                         mat.blend_method = "HASHED"
                         mat.shadow_method = "NONE"
                         mat.show_transparent_back = True
@@ -786,9 +789,28 @@ class SCOrg_tools_blender():
                         # Set the UseAlpha input to 1
                         if 'UseAlpha' in node.inputs:
                             node.inputs['UseAlpha'].default_value = 1.0
-                            break
                         else:
                             if globals_and_threading.debug: print(f"Warning: _Illum node group in material {mat.name} does not have UseAlpha input")
+                    elif node.type == 'TEX_IMAGE':
+                        # Check if the image texture is a stencil map
+                        if globals_and_threading.debug: print(f"Checking image node {node.name} in material {mat.name}")
+                        if "_stencil" in node.image.filepath.lower():
+                            stencil_image_node = node
+                if illum_node and stencil_image_node:
+                    # check the stencil image is connected
+                    if not stencil_image_node.outputs['Color'].is_linked:
+                        if globals_and_threading.debug: print(f"Stencil image node {stencil_image_node.name} in material {mat.name} is not linked, adding _TintDecalConverter node")
+                        # If not linked, add a _TintDecalConverter group node
+                        tint_decal_converter_node = mat.node_tree.nodes.new('ShaderNodeGroup')
+                        tint_decal_converter_node.node_tree = bpy.data.node_groups.get('_TintDecalConverter')
+                        tint_decal_converter_node.location = stencil_image_node.location
+                        stencil_image_node.location.x -= 300  # Move the stencil image node to the left
+                        # Connect the stencil image node to the _TintDecalConverter node
+                        mat.node_tree.links.new(stencil_image_node.outputs['Color'], tint_decal_converter_node.inputs['Image'])
+                        mat.node_tree.links.new(stencil_image_node.outputs['Alpha'], tint_decal_converter_node.inputs['Alpha'])
+                        # Connect the _TintDecalConverter node to the _Illum node
+                        mat.node_tree.links.new(tint_decal_converter_node.outputs['Color'], illum_node.inputs['diff Color'])
+                        mat.node_tree.links.new(tint_decal_converter_node.outputs['Alpha'], illum_node.inputs['diff Alpha'])
 
     def create_transparent_image(name="transparent", width=1, height=1):
         """
