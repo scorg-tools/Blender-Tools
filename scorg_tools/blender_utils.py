@@ -200,8 +200,16 @@ class SCOrg_tools_blender():
         # Get addon preferences
         prefs = bpy.context.preferences.addons["scorg_tools"].preferences
 
-        # Set to object mode
-        bpy.ops.object.mode_set(mode='OBJECT')
+        # Ensure we're in object mode (only if there's an active object)
+        if bpy.context.active_object is not None:
+            bpy.ops.object.mode_set(mode='OBJECT')
+        elif bpy.context.mode != 'OBJECT':
+            # If no active object but we're not in object mode, try to find any object to make active
+            scene_objects = [obj for obj in bpy.context.scene.objects if obj.type == 'MESH']
+            if scene_objects:
+                bpy.context.view_layer.objects.active = scene_objects[0]
+                bpy.ops.object.mode_set(mode='OBJECT')
+            # If still no objects available, we'll proceed without setting mode
         
         if prefs.enable_weld_weighted_normal:
             __class__.add_weld_and_weighted_normal_modifiers()
