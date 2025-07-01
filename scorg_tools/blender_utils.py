@@ -598,10 +598,10 @@ class SCOrg_tools_blender():
             input_string: The string to parse.
 
         Returns:
-            A tuple containing the 'something_mtl' part, the material name (or 'Tintable'), and the number,
+            A tuple containing the 'something_mtl' part, the material name, and the number,
             or None if the string does not match the expected format.
         """
-        pattern = r"^(.*_mtl)_(material|Tintable(?:_))(\d+)$"
+        pattern = r"^(.*_mtl)_(material)(\d+)$"
         match = re.match(pattern, input_string, re.IGNORECASE)
 
         if match:
