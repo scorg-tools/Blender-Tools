@@ -909,8 +909,13 @@ class SCOrg_tools_blender():
             for original_obj, all_objects_with_mesh, decal_material_indices in objects_to_process:
                 modifiers_to_apply = [mod for mod in original_obj.modifiers if mod.type == 'DISPLACE']
                 if modifiers_to_apply:
-                    bpy.context.view_layer.objects.active = original_obj
-                    bpy.ops.object.mode_set(mode='OBJECT')
+                    # Ensure the object exists and can be made active
+                    if original_obj.name in bpy.data.objects:
+                        bpy.context.view_layer.objects.active = original_obj
+                        # Only set mode if we have a valid active object
+                        if bpy.context.active_object == original_obj:
+                            if bpy.context.mode != 'OBJECT':
+                                bpy.ops.object.mode_set(mode='OBJECT')
                     
                     for mod in modifiers_to_apply:
                         try:
@@ -929,9 +934,12 @@ class SCOrg_tools_blender():
                 print(f"Processing {original_obj.name} with {face_count} decal faces ({linked_count} linked duplicates)")
 
             # Ensure we're in object mode
-            bpy.context.view_layer.objects.active = original_obj
-            if bpy.context.mode != 'OBJECT':
-                bpy.ops.object.mode_set(mode='OBJECT')
+            # First check if the object exists and can be made active
+            if original_obj.name in bpy.data.objects:
+                bpy.context.view_layer.objects.active = original_obj
+                # Only set mode if we have a valid active object
+                if bpy.context.active_object == original_obj and bpy.context.mode != 'OBJECT':
+                    bpy.ops.object.mode_set(mode='OBJECT')
 
             # Deselect all and select only our target object
             bpy.ops.object.select_all(action='DESELECT')
