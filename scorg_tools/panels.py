@@ -80,7 +80,9 @@ class VIEW3D_PT_scorg_tools_panel(bpy.types.Panel):
         
         # Version column (left, takes most space)
         version_col = split.column()
-        version_col.label(text="v" + misc_utils.SCOrg_tools_misc.get_addon_version(), icon='INFO')
+        # display the addon and Blender version
+        blender_version = f"{bpy.app.version[0]}.{bpy.app.version[1]}.{bpy.app.version[2]}"
+        version_col.label(text="v" + misc_utils.SCOrg_tools_misc.get_addon_version() + " (" + blender_version+")")
         
         # Preferences button column (right, fixed size)
         prefs_col = split.column()
