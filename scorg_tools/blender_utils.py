@@ -774,7 +774,9 @@ class SCOrg_tools_blender():
         """
         if globals_and_threading.debug: print("Fixing stencil materials.")
         # Iterate through all materials in the scene
-        for mat in bpy.data.materials:
+        material_list = list(bpy.data.materials)
+        for i, mat in enumerate(material_list):
+            misc_utils.SCOrg_tools_misc.update_progress("Fixing stencil materials", i, len(material_list), spinner_type="arc")
             # Check if material uses nodes
             if not mat.use_nodes or not mat.node_tree:
                 continue
@@ -819,6 +821,9 @@ class SCOrg_tools_blender():
                         # Connect the _TintDecalConverter node to the _Illum node
                         mat.node_tree.links.new(tint_decal_converter_node.outputs['Color'], illum_node.inputs['diff Color'])
                         mat.node_tree.links.new(tint_decal_converter_node.outputs['Alpha'], illum_node.inputs['diff Alpha'])
+        
+        # Clear progress when done
+        misc_utils.SCOrg_tools_misc.clear_progress()
 
     def create_transparent_image(name="transparent", width=1, height=1):
         """
@@ -1203,35 +1208,39 @@ class SCOrg_tools_blender():
                 width = image_obj.size[0]
                 height = image_obj.size[1]
                 
-                if width > 0 and height > 0:
-                    # Blender stores pixels in a flat array: [R,G,B,A, R,G,B,A, ...]
-                    # Top-left pixel is at index 0
-                    pixel_data = image_obj.pixels[0:4]  # Get first 4 values (RGBA)
-                    
-                    # Calculate brightness (luminance) from RGB values
-                    # Using standard luminance formula: 0.299*R + 0.587*G + 0.114*B
-                    brightness = 0.299 * pixel_data[0] + 0.587 * pixel_data[1] + 0.114 * pixel_data[2]
-                    
-                    if globals_and_threading.debug:
-                        print(f"Top-left pixel RGB: ({pixel_data[0]:.3f}, {pixel_data[1]:.3f}, {pixel_data[2]:.3f})")
-                        print(f"Calculated brightness: {brightness:.3f}")
-                    
-                    # Now find POM_vector node groups and set the Bias value
-                    # Only look for POM_vector that's used in this specific material
-                    for node in material.node_tree.nodes:
-                        if node.type == 'GROUP' and node.node_tree and 'pom_vector' in node.node_tree.name.lower():
-                            # This is the POM_vector node group used in this material
-                            if 'Bias' in node.inputs:
-                                node.inputs['Bias'].default_value = brightness
-                                if globals_and_threading.debug:
-                                    print(f"Set Bias to {brightness:.3f} on POM_vector node {node.name} for material {material.name}")
-                                break
-                    
-                    return True
+                # check to see if the HeightBias custom property exists
+                bias = 0
+                if 'HeightBias' in material and float(material['HeightBias']) > 0:
+                    # If it exists, we will use it to set the Bias value
+                    bias = float(material['HeightBias'])
+                    if globals_and_threading.debug: print(f"Using HeightBias from material: {bias:.3f}")
                 else:
-                    if globals_and_threading.debug:
-                        print(f"Warning: Displacement image has invalid dimensions: {width}x{height}")
-                        
+                    # If not, we will calculate it from the top-left pixel
+                    if width > 0 and height > 0:
+                        # Blender stores pixels in a flat array: [R,G,B,A, R,G,B,A, ...]
+                        # Top-left pixel is at index 0
+                        pixel_data = image_obj.pixels[0:4]  # Get first 4 values (RGBA)
+                        # Calculate brightness (luminance) from RGB values
+                        # Using standard luminance formula: 0.299*R + 0.587*G + 0.114*B
+                        bias = 0.299 * pixel_data[0] + 0.587 * pixel_data[1] + 0.114 * pixel_data[2]
+                        if globals_and_threading.debug: print(f"Calculated brightness: {bias:.3f}")
+                    else:
+                        if globals_and_threading.debug: print(f"Warning: Displacement image has invalid dimensions: {width}x{height}")
+                        return False
+                if bias == 0:
+                    if globals_and_threading.debug: print(f"Warning: Calculated bias is zero, using default value of 0.5")
+                    bias = 0.5
+                # Now find POM_vector node groups and set the Bias value
+                # Only look for POM_vector that's used in this specific material
+                for node in material.node_tree.nodes:
+                    if node.type == 'GROUP' and node.node_tree and 'pom_vector' in node.node_tree.name.lower():
+                        # This is the POM_vector node group used in this material
+                        if 'Bias' in node.inputs:
+                            node.inputs['Bias'].default_value = bias
+                            if globals_and_threading.debug: print(f"Set Bias to {bias:.3f} on POM_vector node {node.name} for material {material.name}")
+                            break
+                
+                return True                        
             except Exception as e:
                 if globals_and_threading.debug:
                     print(f"Error sampling displacement image pixel: {e}")
@@ -1259,7 +1268,9 @@ class SCOrg_tools_blender():
         }
         
         # Iterate through all materials in the scene
-        for mat in bpy.data.materials:
+        material_list = list(bpy.data.materials)
+        for i, mat in enumerate(material_list):
+            misc_utils.SCOrg_tools_misc.update_progress("Replacing POM materials", i, len(material_list), spinner_type="arc")
             # Check if material uses nodes
             if not mat.use_nodes or not mat.node_tree:
                 if globals_and_threading.debug: print(f"Material {mat.name} doesn't use nodes, skipping")
@@ -1479,10 +1490,15 @@ class SCOrg_tools_blender():
                             node.inputs['Base Color'].default_value = [0.0, 0.0, 0.0, 1.0]
 
                 if globals_and_threading.debug: print(f"Successfully replaced material {old_mat_name} with scorg_pom material")
+        
+        # Clear progress when done
+        misc_utils.SCOrg_tools_misc.clear_progress()
 
     def deduplicate_images():
         images = {}
-        for img in bpy.data.images:
+        image_list = list(bpy.data.images)
+        for i, img in enumerate(image_list):
+            misc_utils.SCOrg_tools_misc.update_progress("Deduplicating images", i, len(image_list), spinner_type="arc")
             if not img.filepath in images.keys():
                 images[img.filepath] = img
             else:
@@ -1492,6 +1508,9 @@ class SCOrg_tools_blender():
                 img.user_remap(images[img.filepath])
                 # Remove the duplicate image
                 bpy.data.images.remove(img)
+        
+        # Clear progress when done
+        misc_utils.SCOrg_tools_misc.clear_progress()
     
     def tidyup():
         """        Perform a cleanup of the Blender scene:
@@ -1507,7 +1526,9 @@ class SCOrg_tools_blender():
         This is useful for engine flames that need to be rendered with transparency.
         """
         if globals_and_threading.debug: print("Setting engine flame materials to transparent.")
-        for mat in bpy.data.materials:
+        material_list = list(bpy.data.materials)
+        for i, mat in enumerate(material_list):
+            misc_utils.SCOrg_tools_misc.update_progress("Setting engine flame materials transparent", i, len(material_list), spinner_type="arc")
             if 'engine_flame' in mat.name.lower() and mat.use_nodes:
                 # Find material output node
                 for node in mat.node_tree.nodes:
@@ -1516,16 +1537,6 @@ class SCOrg_tools_blender():
                         transparent_node = mat.node_tree.nodes.new('ShaderNodeBsdfTransparent')
                         # connect it to the material output
                         mat.node_tree.links.new(node.inputs['Surface'], transparent_node.outputs['BSDF'])
-
-    def boost_normal_strength_tyre_mats():
-        """
-        Boost the normal strength of all tyre materials
-        """
-        if globals_and_threading.debug: print("Boosting normal strength for tyre materials.")
-        for mat in bpy.data.materials:
-            if 'trim_tyre' in mat.name.lower() and mat.use_nodes:
-                # Find the _Illum node group
-                for node in mat.node_tree.nodes:
-                    if node.type == 'GROUP' and node.node_tree and '_illum' in node.node_tree.name.lower():
-                        if globals_and_threading.debug: print(f"Updating normal strength for tyre material: {mat.name}")
-                        node.inputs['n Strength'].default_value = 10
+        
+        # Clear progress when done
+        misc_utils.SCOrg_tools_misc.clear_progress()
