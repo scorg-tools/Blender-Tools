@@ -18,7 +18,6 @@ import sys
 # TODO: find already imported non-ship items
 # TODO: load paint .mtl if listed, instead of (?) the main material
 # TODO: fix extra thrusters on front of retro thrusters on Gladius
-# TODO: make a friendly error when installing to detect if the starfab addon is not installed
 
 # Add addon directory to sys.path to allow relative imports
 if __package__ in sys.modules:
@@ -36,9 +35,51 @@ from . import operators
 from . import panels
 from . import preferences
 
+# Version compatibility check
+def check_blender_version():
+    """Check if the current Blender version matches the addon requirements."""
+    required_version = bl_info["blender"]
+    current_version = bpy.app.version
+    
+    # Compare major and minor versions (ignore patch version)
+    required_major, required_minor = required_version[0], required_version[1]
+    current_major, current_minor = current_version[0], current_version[1]
+    
+    if current_major != required_major or current_minor != required_minor:
+        error_msg = (
+            f"SCOrg.tools Blender Tools: UNSUPPORTED BLENDER VERSION!\n"
+            f"Required: Blender {required_major}.{required_minor}.x\n"
+            f"Current:  Blender {current_major}.{current_minor}.{current_version[2]}\n"
+            f"Please use the latest version of Blender {required_major}.{required_minor}.x for compatibility."
+        )
+        
+        # Print to console
+        print("\n" * 3)
+        print("=" * 70)
+        print(error_msg)
+        print("=" * 70)
+        
+        # Show popup dialog
+        def draw_version_error(self, context):
+            self.layout.label(text="SCOrg.tools: UNSUPPORTED BLENDER VERSION!", icon='ERROR')
+            self.layout.separator()
+            self.layout.label(text=f"Required: Blender {required_major}.{required_minor}.x")
+            self.layout.label(text=f"Current: Blender {current_major}.{current_minor}.{current_version[2]}")
+            self.layout.separator()
+            self.layout.label(text=f"Please use Blender {required_major}.{required_minor}.x for compatibility.")
+        
+        bpy.context.window_manager.popup_menu(draw_version_error, title="Version Mismatch", icon='ERROR')
+        
+        return False
+    
+    return True
+
+# Perform version check
+version_compatible = check_blender_version()
+
 try:
     import scdatatools
-    dependencies_met = True
+    dependencies_met = True and version_compatible
 except ImportError:
     # If scdatatools is not found, set the flag to False.
     dependencies_met = False
@@ -131,6 +172,13 @@ def delayed_panel_registration():
 
 def register():
     # Register all classes EXCEPT the main panel (which is handled by the timer)
+    
+    # Check version compatibility first
+    if not version_compatible:
+        # Version check already showed popup and printed error, don't register anything
+        print("SCOrg.tools: Skipping registration due to incompatible Blender version.")
+        return
+    
     if not dependencies_met:
         # If dependencies are NOT met, show the popup and print to console.
         # This popup will appear immediately when the user tries to enable the add-on.
@@ -143,7 +191,8 @@ def register():
 
         # Show the popup menu. This will be triggered when the add-on is enabled.
         bpy.context.window_manager.popup_menu(draw_error_message, title="SCOrg.tools Installation Error", icon='ERROR')
-
+        # Still register classes even if dependencies aren't met, so user can access preferences
+    
     for cls in classes:
         try:
             bpy.utils.register_class(cls)
@@ -160,10 +209,14 @@ def register():
         print(f"SCOrg.tools: Could not initialize debug mode from preferences: {e}")
         globals_and_threading.debug = False
 
-    print("Attempting to register SCOrg_tools panel with deferred parenting...")
-    # Register the timer for the delayed panel registration.
-    # It must be persistent so it continues running until the parent is found.
-    bpy.app.timers.register(delayed_panel_registration, first_interval=_retry_interval, persistent=True)
+    # Only register the panel timer if version is compatible and dependencies are met
+    if dependencies_met:
+        print("Attempting to register SCOrg_tools panel with deferred parenting...")
+        # Register the timer for the delayed panel registration.
+        # It must be persistent so it continues running until the parent is found.
+        bpy.app.timers.register(delayed_panel_registration, first_interval=_retry_interval, persistent=True)
+    else:
+        print("SCOrg.tools: Skipping panel registration due to missing dependencies.")
 
 
 def unregister():
