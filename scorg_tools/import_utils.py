@@ -1,6 +1,7 @@
 import bpy
 from pathlib import Path
 import os
+import typing
 import re
 # Import globals
 from . import globals_and_threading
@@ -149,8 +150,8 @@ class SCOrg_tools_import():
             before = set(bpy.data.objects)
 
             bpy.ops.object.select_all(action='DESELECT')
-            result = bpy.ops.wm.collada_import(filepath=str(geometry_path))
-            if 'FINISHED' not in result:
+            result = __class__.import_dae(geometry_path)
+            if result != True:
                 print(f"⚠️ ERROR: Failed to import DAE for {guid}: {geometry_path}")
                 return None
 
@@ -613,8 +614,8 @@ class SCOrg_tools_import():
                     before = set(bpy.data.objects)
 
                     bpy.ops.object.select_all(action='DESELECT')
-                    result = bpy.ops.wm.collada_import(filepath=str(geometry_path))
-                    if 'FINISHED' not in result:
+                    result = __class__.import_dae(geometry_path)
+                    if result != True:
                         if globals_and_threading.debug: print(f"ERROR: Failed to import DAE for {guid_str}: {geometry_path}")
                         continue
 
@@ -722,8 +723,8 @@ class SCOrg_tools_import():
         before = set(bpy.data.objects)
 
         bpy.ops.object.select_all(action='DESELECT')
-        result = bpy.ops.wm.collada_import(filepath=str(geometry_path))
-        if 'FINISHED' not in result:
+        result = __class__.import_dae(geometry_path)
+        if result != True:
             if globals_and_threading.debug: print(f"❌ ERROR: Failed to import DAE for: {geometry_path}")
             return
         
@@ -1277,3 +1278,16 @@ class SCOrg_tools_import():
                 if __class__.translation_new_data_preference is not None:
                     bpy.context.preferences.view.use_translate_new_dataname = __class__.translation_new_data_preference
                     if globals_and_threading.debug: print("DEBUG: Reset translation for New data preference to original value")
+    
+    def import_dae(geometry_path: typing.Union[str, Path]):
+        """Import a .dae file using Blender's built-in Collada importer."""
+        file = geometry_path.with_suffix(".dae")
+        if not file.is_file():
+            if globals_and_threading.debug: print(f"Skipping file {geometry_path.stem}: dae does not exist {geometry_path}")
+            return False
+
+        result = bpy.ops.wm.collada_import(filepath=str(geometry_path), auto_connect=False)
+        if 'FINISHED' not in result:
+            if globals_and_threading.debug: print(f"❌ ERROR: Failed to import DAE for: {geometry_path}")
+            return False
+        return True
