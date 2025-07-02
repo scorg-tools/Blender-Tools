@@ -2,6 +2,7 @@ import bpy
 from pathlib import Path
 import re
 import time  # Add time import for timer functionality
+from typing import Union
 
 # Import globals
 from . import globals_and_threading
@@ -86,6 +87,7 @@ class SCOrg_tools_misc():
         """Clear both the progress bar and status message."""
         SCOrg_tools_misc.update_progress(hide_message=True, hide_progress=True, force_update=True)
 
+    @staticmethod
     def get_ship_record(skip_error = False):
         dcb = globals_and_threading.dcb
         empty_name = SCOrg_tools_misc.find_base_name()
@@ -113,6 +115,7 @@ class SCOrg_tools_misc():
             if not skip_error: print("❌ Error, no Empty object with 'container_name' = 'base' found.")
             return None
         
+    @staticmethod
     def find_base_name():
         for obj in bpy.context.scene.objects:
             if obj.type == 'EMPTY':
@@ -121,6 +124,7 @@ class SCOrg_tools_misc():
                         return obj.name
         return None
     
+    @staticmethod
     def recurLayerCollection(layerColl, collName):
         """Recursively finds a LayerCollection by its name within the view layer hierarchy."""
         if layerColl.name == collName:
@@ -131,6 +135,7 @@ class SCOrg_tools_misc():
                 return found
         return None
 
+    @staticmethod
     def select_base_collection():
         """
         Finds a specific 'base' empty object, determines its direct parent collection,
@@ -213,6 +218,7 @@ class SCOrg_tools_misc():
         except Exception as e:
             print(f"Error in force_ui_update: {e}")
 
+    @staticmethod
     def error(message="An error occurred"):
         bpy.context.window_manager.popup_menu(
             lambda self, context: self.layout.label(text=message),
@@ -220,6 +226,7 @@ class SCOrg_tools_misc():
             icon='ERROR'
         )
 
+    @staticmethod
     def reload_addon():
         """
         Reloads the current addon, useful for applying changes without restarting Blender.
@@ -256,8 +263,14 @@ class SCOrg_tools_misc():
             scorg_tools.register()
 
     @staticmethod
-    def show_text_popup(text_content="", header_text=""):
-        """Show a popup with multi-line text and copy functionality"""
+    def show_text_popup(text_content: Union[str, list[str]] = "", header_text: str = ""):
+        """
+        Show a popup with multi-line text and copy functionality
+        
+        Args:
+            text_content (str | list[str]): Text content to display, can be a string or list of strings
+            header_text (str): Header text for the popup
+        """
         # Convert list to string if needed
         if isinstance(text_content, list):
             text_content = '\n'.join(text_content)

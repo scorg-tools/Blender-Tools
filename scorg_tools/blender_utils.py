@@ -2,12 +2,10 @@ import bpy
 import re
 import time  # Add time import
 import os
-from mathutils import Matrix
 from . import import_utils # For import_utils.SCOrg_tools_import.import_missing_materials
 from . import misc_utils # Add this import for progress updates
 import xml.etree.ElementTree as ET
 from . import globals_and_threading
-import glob
 
 class SCOrg_tools_blender():
     _last_redraw_time = 0  # Class variable to track last redraw time
@@ -64,6 +62,7 @@ class SCOrg_tools_blender():
         
         return False
 
+    @staticmethod
     def add_weld_and_weighted_normal_modifiers():
         for i, obj in enumerate(bpy.data.objects):
             misc_utils.SCOrg_tools_misc.update_progress("Adding weld modifiers", i, len(bpy.data.objects), spinner_type="arc")
@@ -87,7 +86,7 @@ class SCOrg_tools_blender():
                 wn.thresh = 0.01  # Corrected attribute name
                 #print(f"Added Weighted Normal modifier to {obj.name}")
 
-
+    @staticmethod
     def material_matches_decals(name):
         """
         Check if the material name matches the pattern for decals, POM, or stencils.
@@ -99,6 +98,7 @@ class SCOrg_tools_blender():
         name = name.lower()
         return "_pom" in name or "_decal" in name or "_stencil" in name
 
+    @staticmethod
     def ensure_vertex_group(obj, mat_index, group_name):
         # Check if vertex group already exists (case-insensitive)
         for vg in obj.vertex_groups:
@@ -125,6 +125,7 @@ class SCOrg_tools_blender():
 
         return vg
 
+    @staticmethod
     def add_displace_modifiers_for_decal(displacement_strength = 0.005):
         objects_list = list(bpy.data.objects)
         for i, obj in enumerate(objects_list):
@@ -159,6 +160,7 @@ class SCOrg_tools_blender():
                         mod.vertex_group = vg.name
                         #print(f"Added Displace modifier for {obj.name} using group '{vg.name}'")
 
+    @staticmethod
     def remove_duplicate_displace_modifiers():
         objects_list = list(bpy.data.objects)
         for i, obj in enumerate(objects_list):
@@ -196,6 +198,7 @@ class SCOrg_tools_blender():
                     obj.modifiers.remove(obj.modifiers[mod_name])
                     #print(f"Removed duplicate Displace modifier '{mod_name}' from '{obj.name'.")
                     
+    @staticmethod
     def fix_modifiers(displacement_strength=0.005):
         # Get addon preferences
         prefs = bpy.context.preferences.addons["scorg_tools"].preferences
@@ -261,6 +264,7 @@ class SCOrg_tools_blender():
         # Clear progress when done
         misc_utils.SCOrg_tools_misc.clear_progress()
 
+    @staticmethod
     def select_children(obj):
         if hasattr(obj, 'objects'):
             children = obj.objects
@@ -270,6 +274,7 @@ class SCOrg_tools_blender():
             child.select_set(True)
             __class__.select_children(child)
 
+    @staticmethod
     def make_instances_real(collection_name):
         if globals_and_threading.debug: print('Collection:'+collection_name)
         __class__.select_children(bpy.data.collections[collection_name])
@@ -299,6 +304,7 @@ class SCOrg_tools_blender():
         misc_utils.SCOrg_tools_misc.clear_progress()
         return {"FINISHED"}
         
+    @staticmethod
     def get_main_collection():
         found_base_empty = None
         # Search for the base empty object in the scene
@@ -328,6 +334,7 @@ class SCOrg_tools_blender():
             return None
         return target_collection
 
+    @staticmethod
     def run_make_instances_real():
         collection = __class__.get_main_collection()
         collection_name = collection.name
@@ -348,11 +355,13 @@ class SCOrg_tools_blender():
             # link to the Collection collection
             bpy.data.collections['Collection'].children.link(bpy.data.collections[collection_name])
 
+    @staticmethod
     def fix_bright_lights():
         for obj in bpy.data.objects:
             if obj.type == "LIGHT" and obj.data.energy > 30000:
                 obj.data.energy /= 1000
 
+    @staticmethod
     def remove_proxy_material_geometry():
         objects_list = list(bpy.data.objects)
         for i, obj in enumerate(objects_list):
@@ -408,6 +417,7 @@ class SCOrg_tools_blender():
                     if globals_and_threading.debug:
                         print(f"DEBUG: Removed material slot {slot_idx} from object '{obj.name}'")
 
+    @staticmethod
     def convert_bones_to_empties(armature_obj):
         if globals_and_threading.debug: print(f"DEBUG: Converting bones to empties for armature: {armature_obj.name}")
         
@@ -454,6 +464,7 @@ class SCOrg_tools_blender():
 
         return return_name
 
+    @staticmethod
     def convert_armatures_to_empties():
         # Process all armatures in the scene
         empties = []
@@ -475,6 +486,7 @@ class SCOrg_tools_blender():
                 bpy.data.objects[empty_name].name = name
         return True
     
+    @staticmethod
     def get_original_material(name):
         # Regex pattern to detect material names like "Material.001"
         suffix_pattern = re.compile(r"(.*)\.(\d{3})$")
@@ -485,6 +497,7 @@ class SCOrg_tools_blender():
                 return bpy.data.materials[base_name]
         return None
 
+    @staticmethod
     def remap_material_users():
         # Regex pattern to detect material names with numeric suffixes
         suffix_pattern = re.compile(r"^(.+)\.(\d{3})$")
@@ -550,6 +563,7 @@ class SCOrg_tools_blender():
                     print(f"Removing unused material: {mat.name}")
                 bpy.data.materials.remove(mat)
 
+    @staticmethod
     def is_material_vanilla(mat):
         """
         Check if the material is a vanilla material.
@@ -565,6 +579,7 @@ class SCOrg_tools_blender():
         else:
             return True  # Non-node materials are considered vanilla
         
+    @staticmethod
     def init_tint_group(entity_name):
         if globals_and_threading.debug: print("Initializing tint group for ship: ", entity_name)
         
@@ -590,6 +605,7 @@ class SCOrg_tools_blender():
         node_group = blender.materials.utils.tint_palette_node_group_for_entity(entity_name)
         return node_group
     
+    @staticmethod
     def parse_unmapped_material_string(input_string):
         """
         Parses a string in the format 'something_mtl_material123' and extracts the parts.
@@ -612,6 +628,7 @@ class SCOrg_tools_blender():
         else:
             return None, None, None
     
+    @staticmethod
     def parse_mtl_names(file_path):
         """
         Parses an .mtl file (XML format) and extracts the 'Name' attributes
@@ -647,6 +664,7 @@ class SCOrg_tools_blender():
             return {}
         return material_names
     
+    @staticmethod
     def fix_unmapped_materials(mtl_file_path):
         """
         Loops through all materials in the scene, checks if they match a specific pattern.
@@ -691,6 +709,7 @@ class SCOrg_tools_blender():
                         if globals_and_threading.debug: print(f"Renaming material '{mat.name}' to '{correct_name}'")
                         mat.name = correct_name
 
+    @staticmethod
     def remap_material(from_mat_name, to_mat_name, delete_old=False):
         """
         Remaps all users of a material from one name to another.
@@ -719,6 +738,7 @@ class SCOrg_tools_blender():
                 if globals_and_threading.debug: print(f"Removing unused material: {from_mat.name}")
                 bpy.data.materials.remove(from_mat)
     
+    @staticmethod
     def fix_materials_case_sensitivity():
         """
         Fixes materials that have been imported due to different case in names.
@@ -768,6 +788,7 @@ class SCOrg_tools_blender():
                 material.diffuse_color = (*material.diffuse_color[:3], 0.1)
                 if globals_and_threading.debug: print(f"Setting viewport transparency for glass material: {material.name}")
     
+    @staticmethod
     def fix_stencil_materials():
         """
         Fix materials that use stencil textures by ensuring they are set up correctly.
@@ -825,6 +846,7 @@ class SCOrg_tools_blender():
         # Clear progress when done
         misc_utils.SCOrg_tools_misc.clear_progress()
 
+    @staticmethod
     def create_transparent_image(name="transparent", width=1, height=1):
         """
         Creates a new 1x1 image with 0% alpha (fully transparent).
@@ -853,6 +875,7 @@ class SCOrg_tools_blender():
         print(f"Created transparent image: '{image.name}' ({image.size[0]}x{image.size[1]})")
         return image
     
+    @staticmethod
     def separate_decal_materials():
         """
         Separates materials that match the pattern for decals, POM, or stencils
@@ -1057,6 +1080,7 @@ class SCOrg_tools_blender():
         # Clear progress when done
         misc_utils.SCOrg_tools_misc.clear_progress()
     
+    @staticmethod
     def append_pom_material():
         """
         Append the 'scorg_pom' material from pom.blend to the current Blender file.
@@ -1097,6 +1121,7 @@ class SCOrg_tools_blender():
             if globals_and_threading.debug: print(f"Error appending material: {str(e)}")
             return None
     
+    @staticmethod
     def make_node_groups_unique_recursive(node_tree, material_name, processed_groups=None, unique_mapping=None):
         """
         Recursively make all node groups unique within a node tree and its nested groups.
@@ -1139,6 +1164,7 @@ class SCOrg_tools_blender():
         
         return unique_mapping
     
+    @staticmethod
     def find_and_set_displacement_image(material, image_path):
         """
         Find the POM_disp node group in the material and set its displacement image.
@@ -1249,6 +1275,7 @@ class SCOrg_tools_blender():
             print(f"Could not find POM_disp node group for material {material.name}")
         return False
 
+    @staticmethod
     def replace_pom_materials():
         """
         Replace all _pom_decal materials in the scene with the 'scorg_pom' material.
@@ -1494,6 +1521,7 @@ class SCOrg_tools_blender():
         # Clear progress when done
         misc_utils.SCOrg_tools_misc.clear_progress()
 
+    @staticmethod
     def deduplicate_images():
         images = {}
         image_list = list(bpy.data.images)
@@ -1512,6 +1540,7 @@ class SCOrg_tools_blender():
         # Clear progress when done
         misc_utils.SCOrg_tools_misc.clear_progress()
     
+    @staticmethod
     def tidyup():
         """        Perform a cleanup of the Blender scene:
         - De-duplicate images
@@ -1520,6 +1549,7 @@ class SCOrg_tools_blender():
         __class__.deduplicate_images()
         bpy.ops.outliner.orphans_purge(do_local_ids=True, do_linked_ids=True, do_recursive=True)
     
+    @staticmethod
     def set_engine_flame_mat_transparent():
         """
         Set all engine flame materials to be transparent in the viewport.

@@ -1,3 +1,4 @@
+import stat
 import bpy
 from pathlib import Path
 import os
@@ -13,17 +14,31 @@ class SCOrg_tools_import():
     item_name = None
     item_guid = None
     translation_new_data_preference = None
+    prefs = None
+    extract_dir = None
+    missing_files = None
+    item_name = None
+    item_guid = None
+    tint_palette_node_group_name = None
+    default_tint_guid = None
+    imported_guid_objects = {}
+    skip_imported_files = {}
+    INCLUDE_HARDPOINTS = [] # all
 
+    @staticmethod
     def init():
+        """ Initialize the import class. """
         if globals_and_threading.debug: print("SCOrg_tools_import initialized")
         __class__.prefs = bpy.context.preferences.addons["scorg_tools"].preferences
-        __class__.extract_dir = Path(__class__.prefs.extract_dir) # Ensure Path object
+        extract_dir = getattr(__class__.prefs, 'extract_dir', None)
+        __class__.extract_dir = Path(extract_dir) if extract_dir else None
         __class__.missing_files = []  # List to track missing files
         __class__.item_name = None
         __class__.item_guid = None
         __class__.tint_palette_node_group_name = None
         __class__.default_tint_guid = None
 
+    @staticmethod
     def get_record(id):
         """
         Get a record by GUID from the global dcb.
@@ -55,6 +70,7 @@ class SCOrg_tools_import():
             misc_utils.SCOrg_tools_misc.error(f"⚠️ Could not find record with name: {id}")
             return None
 
+    @staticmethod
     def get_guid_by_name(name):
         record = __class__.get_record(name)
         if record:
@@ -62,6 +78,7 @@ class SCOrg_tools_import():
         else:
             return None
 
+    @staticmethod
     def replace_selected_mesh_with_empties():
         for obj in list(bpy.context.selected_objects):
             if obj.type == 'MESH':
@@ -92,6 +109,7 @@ class SCOrg_tools_import():
                     child.parent = empty
                     child.matrix_parent_inverse.identity()
 
+    @staticmethod
     def import_by_id(id):
         os.system('cls')
         if globals_and_threading.debug: print(f"Received ID: {id}")
@@ -141,8 +159,8 @@ class SCOrg_tools_import():
                 if len(__class__.missing_files) > 0:
                     sorted_missing_files = sorted(__class__.missing_files, key=str.lower)
                     misc_utils.SCOrg_tools_misc.show_text_popup(
-                        text_content=sorted_missing_files,
-                        header_text="The following files were missing, please extract them with StarFab, under Data -> Data.p4k:"
+                        text_content = sorted_missing_files,
+                        header_text = "The following files were missing, please extract them with StarFab, under Data -> Data.p4k:"
                     )
                 return None
             
@@ -225,6 +243,8 @@ class SCOrg_tools_import():
                     header_text="The following files were missing, please extract them with StarFab, under Data -> Data.p4k:"
                 )
             __class__.set_translation_new_data_preference(reset=True)
+    
+    @staticmethod
     def get_base_empty():
         """
         Get the base empty object that serves as the root for the ship.
@@ -237,6 +257,7 @@ class SCOrg_tools_import():
                 break
         return base_empty
 
+    @staticmethod
     def get_all_empties_blueprint():
         # First find the base container empty
         base_empty = __class__.get_base_empty()
@@ -309,9 +330,7 @@ class SCOrg_tools_import():
                         filled_hardpoint_names[normalized_name].append(obj)
         
         if globals_and_threading.debug: 
-            print(f"DEBUG: Found {len(filled_hardpoint_names)} hardpoint types already filled:")
-            for name, objs in filled_hardpoint_names.items():
-                print(f"  '{name}': {len(objs)} objects - {[obj.name for obj in objs[:3]]}{'...' if len(objs) > 3 else ''}")
+            print(f"DEBUG: Found {len(filled_hardpoint_names)} hardpoint types already filled")
         
         # Find empty hardpoints, excluding those that have variants with geometry
         empty_hardpoints = []
@@ -344,8 +363,10 @@ class SCOrg_tools_import():
         
         return empty_hardpoints
     
+    @staticmethod
     def get_geometry_path_by_guid(guid):
-        hasattr(__class__, 'extract_dir') or __class__.init()
+        if __class__.extract_dir is None:
+            __class__.init()
         dcb = globals_and_threading.dcb
 
         if not dcb:
@@ -406,6 +427,7 @@ class SCOrg_tools_import():
             print(f"❌ Error in get_geometry_path_by_guid GUID {guid}: {e}")
         return None
 
+    @staticmethod
     def get_hardpoint_mapping_from_guid(guid):
         dcb = globals_and_threading.dcb
         mapping = {}
@@ -434,6 +456,7 @@ class SCOrg_tools_import():
             print(f"❌ Error in get_hardpoint_mapping_from_guid GUID {guid}: {e}")
             return None
 
+    @staticmethod
     def duplicate_hierarchy_linked(original_obj, parent_empty):
         new_obj = original_obj.copy()
         new_obj.data = original_obj.data  # share mesh data (linked duplicate)
@@ -446,6 +469,7 @@ class SCOrg_tools_import():
         for child in original_obj.children:
             __class__.duplicate_hierarchy_linked(child, new_obj)
     
+    @staticmethod
     def import_hardpoint_hierarchy(loadout, empties_to_fill, is_top_level=True, parent_guid=None):        
         # Check if loadout is None to prevent AttributeError
         if loadout is None:
@@ -703,6 +727,7 @@ class SCOrg_tools_import():
             except Exception as e:
                 print(f"ERROR: Failed to clear progress: {e}")
 
+    @staticmethod
     def import_file(geometry_path, parent_empty_name):
         """
         Import a single file without recursion.
@@ -748,8 +773,8 @@ class SCOrg_tools_import():
             root_obj.parent = bpy.data.objects.get(parent_empty_name)
             root_obj.matrix_parent_inverse.identity()
 
+    @staticmethod
     def run_import():
-        
         os.system('cls')
         __class__.imported_guid_objects = {}
         __class__.INCLUDE_HARDPOINTS = [] # all
@@ -791,6 +816,7 @@ class SCOrg_tools_import():
             )
         __class__.set_translation_new_data_preference(reset=True)
 
+    @staticmethod
     def get_loadout_from_record(record):
         if globals_and_threading.debug: print(f"DEBUG: get_loadout_from_record called with record: {record.name}")
         try:
@@ -806,10 +832,12 @@ class SCOrg_tools_import():
         if globals_and_threading.debug: print("DEBUG: Record has no loadout")
         return None
     
+    @staticmethod
     def matches_blender_name(name, target):
         #print(f"DEBUG: matches_blender_name called with name='{name}', target='{target}'")
         return name == target or re.match(rf"^{re.escape(target)}\.\d+$", name)
 
+    @staticmethod
     def is_guid(s):
         """
         Returns True if s is a valid GUID and non-zero string.
@@ -818,6 +846,7 @@ class SCOrg_tools_import():
             return False
         return bool(re.match(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", str(s)))
     
+    @staticmethod
     def extract_missing_textures_from_output(captured_stdout, captured_stderr):
         """
         Extract missing texture paths from captured console output.
@@ -853,8 +882,10 @@ class SCOrg_tools_import():
         
         return missing_texture_paths
 
+    @staticmethod
     def import_missing_materials(tint_number = 0):
-        hasattr(__class__, 'extract_dir') or __class__.init()
+        if __class__.extract_dir is None:
+            __class__.init()
         if not __class__.extract_dir:
             if globals_and_threading.debug: print("ERROR: extract_dir is not set. Please set it in the addon preferences.")
             return None
@@ -1073,6 +1104,7 @@ class SCOrg_tools_import():
         misc_utils.SCOrg_tools_misc.clear_progress()
         if globals_and_threading.debug: print("DEBUG: Cleared progress after import_missing_materials")
     
+    @staticmethod
     def get_material_filename(material_name):
         before, sep, after = material_name.partition('_mtl')
         if sep:
@@ -1081,10 +1113,12 @@ class SCOrg_tools_import():
             result = material_name  # _mtl not found, leave unchanged
         return result
     
+    @staticmethod
     def load_tint_palette(palette_guid, tint_palette_node_group_name):
         if globals_and_threading.debug: print("Loading tint palette for GUID:", palette_guid)
         import scdatatools
-        hasattr(__class__, 'extract_dir') or __class__.init()
+        if __class__.extract_dir is None:
+            __class__.init()
         
         record = globals_and_threading.dcb.records_by_guid[palette_guid]
         if not record:
@@ -1147,6 +1181,7 @@ class SCOrg_tools_import():
             d = record.properties['root'].properties[decalColour].properties
             t.nodes["DecalConverter"].inputs[decalColour].default_value = scdatatools.blender.materials.a_to_c(d)
     
+    @staticmethod
     def get_record_name(record):
         """
         Returns the name of the record
@@ -1261,6 +1296,7 @@ class SCOrg_tools_import():
             print(f"Error reading file {filename}: {e}")
             return None
     
+    @staticmethod
     def set_translation_new_data_preference(reset = False):
         """
         If Blender is not in English, set the translation for the New data preference to off
@@ -1279,6 +1315,7 @@ class SCOrg_tools_import():
                     bpy.context.preferences.view.use_translate_new_dataname = __class__.translation_new_data_preference
                     if globals_and_threading.debug: print("DEBUG: Reset translation for New data preference to original value")
     
+    @staticmethod
     def import_dae(geometry_path: typing.Union[str, Path]):
         """Import a .dae file using Blender's built-in Collada importer."""
         file = geometry_path.with_suffix(".dae")
