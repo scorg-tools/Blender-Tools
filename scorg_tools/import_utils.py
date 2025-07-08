@@ -1533,6 +1533,13 @@ class SCOrg_tools_import():
                     text_content=sorted_missing_files,
                     header_text="The following files were missing, please extract them with StarFab, under Data -> Data.p4k:"
                 )
+        # remove the temporary material file
+        if tmp_paint_material_file.exists():
+            try:
+                tmp_paint_material_file.unlink()
+                if globals_and_threading.debug: print(f"DEBUG: Removed temporary material file {tmp_paint_material_file}")
+            except Exception as e:
+                if globals_and_threading.debug: print(f"Error removing temporary material file: {e}")
 
     @staticmethod
     def get_material_names_from_file(filename):
