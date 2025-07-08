@@ -1,7 +1,7 @@
 bl_info = {
     "name": "SCOrg.tools Blender Tools beta",
     "author": "Star-Destroyer@scorg.tools",
-    "version": (1, 1, 41),
+    "version": (1, 2, 41),
     "blender": (3, 6, 0),
     "location": "View3D > Sidebar > SCOrg.tools",
     "description": "Tools to supplement StarFab",
@@ -15,7 +15,6 @@ import bpy
 import os
 import sys
 
-# TODO: load paint .mtl if listed, instead of (?) the main material, e.g. Starlancer TAC, see https://www.youtube.com/watch?v=V5jjP8BXYLI for reference
 # TODO: fix extra remote turret placed on manned turrets in Starlancer TAC
 # TODO: fix tints on weapons, e.g. Starlancer TAC (might be Texslot 13 issue)
 # TODO: see if it's possible to fix metallic values on shaders, e.g. Starlancer MAX
