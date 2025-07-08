@@ -74,6 +74,8 @@ class SCOrg_tools_tint():
     # Function to call when a button is pressed
     def on_button_pressed(index):
         from . import import_utils
+        import os
+        os.system('cls')
         print(f"Button {index} pressed: {index}")
         # apply the tint
         import_utils.SCOrg_tools_import.import_missing_materials(tint_number=index)

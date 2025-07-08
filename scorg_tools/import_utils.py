@@ -1083,14 +1083,16 @@ class SCOrg_tools_import():
                         material_name = tint_materials[tint_guid]
                         if globals_and_threading.debug: 
                             print(f"DEBUG: Tint {tint_number} ({tint_guid}) has custom material: {material_name}")
-                        # import the custom material:
-                        __class__.change_paint_material(material_name)
+                    else:
+                        # No custom material for this tint, use the default
+                        if globals_and_threading.debug: print(f"DEBUG: Tint {tint_number} ({tint_guid}) has no custom material, using default")
+                        material_name = None
+                    # import the custom material:
+                    __class__.change_paint_material(material_name)
             else:
                 if globals_and_threading.debug: 
-                    if not tints:
-                        print(f"DEBUG: No tints available for record {record.name}")
-                    else:
-                        print(f"DEBUG: Tint number {tint_number} out of range. Available tints: {len(tints)}")
+                    if not tints: print(f"DEBUG: No tints available for record {record.name}")
+                    else: print(f"DEBUG: Tint number {tint_number} out of range. Available tints: {len(tints)}")
         
         if len(file_cache) > 0:
             # Import the materials using scdatatools
@@ -1396,13 +1398,32 @@ class SCOrg_tools_import():
     
     @staticmethod
     def change_paint_material(paint_material_file = None):
+        if globals_and_threading.debug: print("DEBUG: change_paint_material called with paint_material_file:", paint_material_file)
         if __class__.extract_dir is None:
             __class__.init()
         # Get material file from paint
         if paint_material_file is None:
-            if globals_and_threading.debug: print("DEBUG: No paint material file provided, not changing paint material")
-            return None
-        
+            if globals_and_threading.debug: print("DEBUG: No paint material file provided, using default material")
+            main_material_file = __class__.get_main_material_file()
+            if not main_material_file:
+                if globals_and_threading.debug: print("DEBUG: No main material file found, cannot change paint material")
+                return None
+            main_material_name = main_material_file.replace('.', '_').lower()
+            # Search through materials to find any starting with the main material name
+            paint_material_file = None
+            for mat in bpy.data.materials:
+                if mat.name.lower().startswith(main_material_name):
+                    if 'original_filename' in mat:
+                        paint_material_file = mat['original_filename']
+                        break
+                    if 'filename' in mat:
+                        paint_material_file = mat['filename']
+                        break
+            if not paint_material_file:
+                if globals_and_threading.debug: print("DEBUG: No paint material file found, cannot change paint material")
+                return None
+            if globals_and_threading.debug: print(f"DEBUG: Using paint material file from main material: {paint_material_file}")
+   
         # add the extract_dir to path
         paint_material_file = __class__.extract_dir / paint_material_file
 
@@ -1424,22 +1445,44 @@ class SCOrg_tools_import():
         main_material_name = main_material_file.replace('.', '_').lower()
 
         # Get the list of materials indexed by the position of the main material file
+        original_materials = __class__.get_material_names_from_file(main_material_file)
         # Get the list of materials indexed by the position of the paint material file
-
-        # Loop through all materials with the main material file name
-        for mat in bpy.data.materials:
-            # check if the material name starts with the main material name
-            if mat.name.lower().startswith(main_material_name):
-                if globals_and_threading.debug: print(f"DEBUG: Found material {mat.name} matching main material file {main_material_file}")
-                if 'filename' in mat:
-                    if 'original_filename' not in mat:
-                        # Store the original filename as a custom property if not already present
-                        mat['original_filename'] = mat['filename']
-                    if 'original_name' not in mat:
-                        # Store the original name as a custom property if not already present
-                        mat['original_name'] = mat.name
-                    # remove the filename custom property to allow it to be re-imported
-                    del mat['filename']
+        paint_materials = __class__.get_material_names_from_file(paint_material_file.name)
+        if globals_and_threading.debug: print(f"DEBUG: original_materials: {original_materials}")
+        if globals_and_threading.debug: print(f"DEBUG: paint_materials: {paint_materials}")
+        
+        # Loop through all materials with the main material file name and get the index
+        for i, original_matname in enumerate(original_materials):
+            matname = main_material_name + '_' + original_matname
+            # Get the material object by name
+            mat = bpy.data.materials.get(matname)
+            if not mat:
+                if globals_and_threading.debug: print(f"DEBUG: Material {matname} not found in Blender data, searching...")
+                for m in bpy.data.materials:
+                    if m.name.lower().startswith(main_material_name.lower()) and 'original_name' in m and m['original_name'] == matname:
+                        mat = m
+                        if globals_and_threading.debug: print(f"DEBUG: Search found material {mat.name} matching main material file {main_material_file}, renaming to {matname}")
+                        mat.name = matname
+                        break                
+                # If we still don't have a material after searching, skip this iteration
+                if not mat:
+                    if globals_and_threading.debug: print(f"DEBUG: Material {matname} not found even after search, skipping")
+                    continue
+            
+            if globals_and_threading.debug: print(f"DEBUG: Found material {mat.name} matching main material file {main_material_file}")
+            if 'filename' in mat:
+                if 'original_filename' not in mat:
+                    # Store the original filename as a custom property if not already present
+                    mat['original_filename'] = mat['filename']
+                # remove the filename custom property to allow it to be re-imported
+                del mat['filename']
+            if 'original_name' not in mat:
+                # Store the original name as a custom property if not already present
+                mat['original_name'] = mat.name
+            if original_materials[i] != paint_materials[i]:
+                # If the material name in the paint material file is different, change it so it matches the paint material file
+                mat.name = main_material_name + '_' + paint_materials[i]
+                if globals_and_threading.debug: print(f"DEBUG: Changed material name from {original_matname} to {paint_materials[i]}")
         # Create a tmp directory if it doesn't exist, return an error if it fails
         tmp_dir = Path(__class__.extract_dir).parent / "material_tmp"
         if not tmp_dir.exists():
