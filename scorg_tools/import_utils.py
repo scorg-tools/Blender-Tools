@@ -25,6 +25,7 @@ class SCOrg_tools_import():
     imported_guid_objects = {}
     skip_imported_files = {}
     INCLUDE_HARDPOINTS = [] # all
+    _cached_mtl_files = None  # Cache for p4k.search results
 
     @staticmethod
     def init():
@@ -38,6 +39,13 @@ class SCOrg_tools_import():
         __class__.item_guid = None
         __class__.tint_palette_node_group_name = None
         __class__.default_tint_guid = None
+        __class__._cached_mtl_files = None  # Clear cache on init
+
+    @staticmethod
+    def clear_mtl_cache():
+        """Clear the cached MTL files search results."""
+        __class__._cached_mtl_files = None
+        if globals_and_threading.debug: print("DEBUG: Cleared MTL files cache")
 
     @staticmethod
     def get_record(id):
@@ -909,35 +917,11 @@ class SCOrg_tools_import():
             return None
 
         # Search for all .mtl files at once to build a lookup dictionary
-        if globals_and_threading.debug: print("DEBUG: Searching p4k for all .mtl files...")
+        if globals_and_threading.debug: print("DEBUG: Building MTL lookup dictionary...")
         try:
-            mtl_files = p4k.search(file_filters=".mtl", ignore_case=True, mode='endswith')
-            if globals_and_threading.debug: print(f"DEBUG: Found {len(mtl_files)} .mtl files in p4k")
-            
-            # Build lookup dictionary: lowercase filename -> full_path or list of paths
-            mtl_lookup = {}
-            for match in mtl_files:
-                if hasattr(match, 'filename'):
-                    full_path = match.filename
-                else:
-                    continue
-                
-                filename = Path(full_path).name.lower()
-                clean_path = full_path.removeprefix("Data/")
-                
-                # Handle multiple files with same filename
-                if filename in mtl_lookup:
-                    # Convert to list if not already
-                    if isinstance(mtl_lookup[filename], str):
-                        mtl_lookup[filename] = [mtl_lookup[filename]]
-                    # Add new path to list
-                    mtl_lookup[filename].append(clean_path)
-                else:
-                    # First occurrence, store as string
-                    mtl_lookup[filename] = clean_path
-            if globals_and_threading.debug: print(f"DEBUG: Built lookup for {len(mtl_lookup)} .mtl files")
+            mtl_lookup = __class__.build_mtl_lookup()
         except Exception as e:
-            if globals_and_threading.debug: print(f"DEBUG: Error searching for .mtl files: {e}")
+            if globals_and_threading.debug: print(f"DEBUG: Error building MTL lookup: {e}")
             mtl_lookup = {}
 
         file_cache = {}
@@ -995,38 +979,42 @@ class SCOrg_tools_import():
                                     if globals_and_threading.debug: print(f"DEBUG: Checking file: Data/{clean_path}")
                                     filepath = __class__.extract_dir / clean_path
                                     if filepath.exists():
-                                        # Read and parse the MTL file to check if it contains our material
+                                        # Use get_material_names_from_file to get all materials in this file
                                         try:
-                                            xml_content = __class__.read_file_from_p4k(f"Data/{clean_path}")
+                                            # Get the filename from the clean_path
+                                            file_name = Path(clean_path).name
+                                            material_names_in_file = __class__.get_material_names_from_file(file_name)
+                                            
+                                            # Check if our target material is in this file
                                             is_primary_material = False
                                             if material_name_in_xml.lower() == "primary":
                                                 is_primary_material = True
-
                                             # if the material name has no underscores it might be a primary material
-                                            if "_" not in material_name_in_xml:
+                                            elif "_" not in material_name_in_xml:
                                                 # check to see if the material name is part of the file name, e.g. exterior_medium_frequnecy_panels_wear_mtl_Wear
                                                 if f'_{material_name_in_xml.lower()}' in clean_path.lower():
                                                     is_primary_material = True
 
                                             if is_primary_material:
-                                                # check to see if there are any material names in the file 
-                                                if 'Name=' in xml_content:
-                                                    # This cannot be a primary material, so skip it
-                                                    if globals_and_threading.debug: print(f"DEBUG: Material '{material_name_in_xml}' is not a primary material, skipping {clean_path}")
-                                                    continue
-                                                else:
-                                                    # We have to accept the first material found that doesn't have name attributes
+                                                # For primary materials, check if the file contains only primary materials (filename stem should be in the list)
+                                                primary_name = Path(file_name).stem
+                                                if primary_name in material_names_in_file and len(material_names_in_file) == 1:
+                                                    # This is a primary material file
                                                     found_filepath = filepath
+                                                    if globals_and_threading.debug: print(f"DEBUG: Found primary material '{material_name_in_xml}' as '{primary_name}' in {clean_path}")
                                                     break
-                                            
-                                            if xml_content and f'Name="{material_name_in_xml}"' in xml_content:
-                                                if globals_and_threading.debug: print(f"DEBUG: Found material '{material_name_in_xml}' in {clean_path}")
+                                                elif globals_and_threading.debug:
+                                                    print(f"DEBUG: File contains named materials, not a primary material file, skipping {clean_path}")
+                                                    continue
+                                            elif material_name_in_xml in material_names_in_file:
+                                                # Found the named material in this file
                                                 found_filepath = filepath
+                                                if globals_and_threading.debug: print(f"DEBUG: Found material '{material_name_in_xml}' in {clean_path}")
                                                 break
                                             elif globals_and_threading.debug:
-                                                print(f"DEBUG: Material '{material_name_in_xml}' not found in {clean_path}")
+                                                print(f"DEBUG: Material '{material_name_in_xml}' not found in {clean_path} (contains: {material_names_in_file})")
                                         except Exception as e:
-                                            if globals_and_threading.debug: print(f"DEBUG: Error reading {clean_path}: {e}")
+                                            if globals_and_threading.debug: print(f"DEBUG: Error checking materials in {clean_path}: {e}")
                                             continue
                                     else:
                                         if globals_and_threading.debug: print(f"DEBUG: File NOT found on disk: {filepath}")
@@ -1502,3 +1490,164 @@ class SCOrg_tools_import():
                     text_content=sorted_missing_files,
                     header_text="The following files were missing, please extract them with StarFab, under Data -> Data.p4k:"
                 )
+
+    @staticmethod
+    def get_material_names_from_file(filename):
+        """
+        Get a list of material names from a material file (.mtl).
+        
+        Args:
+            filename: Name of the material file (without path), e.g. "some_material.mtl"
+        
+        Returns:
+            List of material names found in the file, or empty list if file not found/error
+        """
+        if __class__.extract_dir is None:
+            __class__.init()
+        if not __class__.extract_dir:
+            if globals_and_threading.debug: print("ERROR: extract_dir is not set. Please set it in the addon preferences.")
+            return []
+
+        p4k = globals_and_threading.p4k
+        if not p4k:
+            if globals_and_threading.debug: print("ERROR: Please load Data.p4k first")
+            return []
+
+        # Search for the specific .mtl file
+        filename_lower = filename.lower()
+        if globals_and_threading.debug: print(f"DEBUG: Looking for material file: {filename}")
+        
+        try:
+            # Use the MTL lookup helper to find matching files
+            mtl_lookup = __class__.build_mtl_lookup()
+            
+            # Find files that match our filename
+            matching_files = []
+            if filename_lower in mtl_lookup:
+                paths_to_check = mtl_lookup[filename_lower]
+                
+                # Handle both single string and list of paths
+                if isinstance(paths_to_check, str):
+                    matching_files.append(paths_to_check)
+                else:
+                    matching_files.extend(paths_to_check)
+            
+            if not matching_files:
+                if globals_and_threading.debug: print(f"DEBUG: No files found matching {filename}")
+                return []
+            
+            if globals_and_threading.debug: print(f"DEBUG: Found {len(matching_files)} file(s) matching {filename}")
+            
+            # Process each matching file to extract material names
+            all_material_names = []
+            
+            for clean_path in matching_files:
+                if globals_and_threading.debug: print(f"DEBUG: Processing file: Data/{clean_path}")
+                filepath = __class__.extract_dir / clean_path
+                
+                if not filepath.exists():
+                    if globals_and_threading.debug: print(f"DEBUG: File NOT found on disk: {filepath}")
+                    continue
+                
+                try:
+                    # Read and parse the MTL file
+                    xml_content = __class__.read_file_from_p4k(f"Data/{clean_path}")
+                    if not xml_content:
+                        if globals_and_threading.debug: print(f"DEBUG: Could not read content from {clean_path}")
+                        continue
+                    
+                    # Convert to string if it's bytes
+                    if isinstance(xml_content, bytes):
+                        try:
+                            xml_content = xml_content.decode('utf-8')
+                        except UnicodeDecodeError:
+                            if globals_and_threading.debug: print(f"DEBUG: Could not decode content from {clean_path}")
+                            continue
+                    
+                    # Ensure we have a string
+                    if not isinstance(xml_content, str):
+                        if globals_and_threading.debug: print(f"DEBUG: Content is not a string for {clean_path}")
+                        continue
+                    
+                    # Extract material names from the XML content
+                    material_names = []
+                    
+                    # Check if this is a primary material (no Name attributes)
+                    if 'Name=' not in xml_content:
+                        # Primary material - use filename without extension as material name
+                        primary_name = Path(filename).stem
+                        material_names.append(primary_name)
+                        if globals_and_threading.debug: print(f"DEBUG: Found primary material: {primary_name}")
+                    else:
+                        # Named materials - extract all Name="..." patterns
+                        import re
+                        name_pattern = r'Name="([^"]+)"'
+                        matches = re.findall(name_pattern, xml_content)
+                        
+                        for match in matches:
+                            if match not in material_names:  # Avoid duplicates
+                                material_names.append(match)
+                                if globals_and_threading.debug: print(f"DEBUG: Found named material: {match}")
+                    
+                    # Add materials from this file to the overall list
+                    for mat_name in material_names:
+                        if mat_name not in all_material_names:
+                            all_material_names.append(mat_name)
+                            
+                except Exception as e:
+                    if globals_and_threading.debug: print(f"DEBUG: Error reading {clean_path}: {e}")
+                    continue
+            
+            if globals_and_threading.debug: print(f"DEBUG: Total unique materials found: {len(all_material_names)}")
+            return all_material_names
+            
+        except Exception as e:
+            if globals_and_threading.debug: print(f"DEBUG: Error searching for .mtl files: {e}")
+            return []
+    
+    @staticmethod
+    def build_mtl_lookup():
+        """
+        Build a lookup dictionary for MTL files using cached search results.
+        Returns a dictionary: lowercase filename -> full_path or list of paths
+        """
+        p4k = globals_and_threading.p4k
+        if not p4k:
+            return {}
+            
+        # Use cached MTL files if available
+        if __class__._cached_mtl_files is None:
+            if globals_and_threading.debug: print("DEBUG: No cached MTL files found, performing search...")
+            __class__._cached_mtl_files = p4k.search(file_filters=".mtl", ignore_case=True, mode='endswith')  # type: ignore
+            if globals_and_threading.debug: print(f"DEBUG: Cached {len(__class__._cached_mtl_files) if __class__._cached_mtl_files else 0} MTL files")
+        else:
+            if globals_and_threading.debug: print("DEBUG: Using cached MTL files search results for lookup")
+        
+        mtl_files = __class__._cached_mtl_files
+        if globals_and_threading.debug: print(f"DEBUG: Building lookup from {len(mtl_files) if mtl_files else 0} .mtl files")
+        
+        # Build lookup dictionary: lowercase filename -> full_path or list of paths
+        mtl_lookup = {}
+        if mtl_files:  # Check if mtl_files is not None
+            for match in mtl_files:  # type: ignore
+                if hasattr(match, 'filename'):
+                    full_path = match.filename
+                else:
+                    continue
+                
+                filename = Path(full_path).name.lower()
+                clean_path = full_path.removeprefix("Data/")
+                
+                # Handle multiple files with same filename
+                if filename in mtl_lookup:
+                    # Convert to list if not already
+                    if isinstance(mtl_lookup[filename], str):
+                        mtl_lookup[filename] = [mtl_lookup[filename]]
+                    # Add new path to list
+                    mtl_lookup[filename].append(clean_path)
+                else:
+                    # First occurrence, store as string
+                    mtl_lookup[filename] = clean_path
+        
+        if globals_and_threading.debug: print(f"DEBUG: Built lookup for {len(mtl_lookup)} unique .mtl filenames")
+        return mtl_lookup
