@@ -158,6 +158,12 @@ class SCOrg_tools_AddonPreferences(bpy.types.AddonPreferences):
         default=True
     )
 
+    ignore_paint_warnings: BoolProperty(
+        name="Ignore Paint Warnings",
+        description="Skip the warning dialog when applying paints/tints",
+        default=False
+    )
+
     def draw(self, context):
         layout = self.layout
         layout.label(text="SCOrg.tools Settings")
@@ -204,6 +210,7 @@ class SCOrg_tools_AddonPreferences(bpy.types.AddonPreferences):
         col.separator()
         col.label(text="Misc settings:", icon='SETTINGS')
         col.prop(self, "enable_tidyup")
+        col.prop(self, "ignore_paint_warnings")
 
 
 class SCOrg_tools_OT_SelectP4K(bpy.types.Operator, ExportHelper):

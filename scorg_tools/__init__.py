@@ -96,6 +96,7 @@ for module_name in ['starfab_addon', 'scdt_addon']:
 # Classes to register (EXCLUDE panels.VIEW3D_PT_scorg_tools_panel from here)
 # This panel will be registered exclusively by the delayed_panel_registration timer.
 classes = (
+    operators.VIEW3D_OT_paint_warning_popup,
     operators.VIEW3D_OT_dynamic_button,
     operators.VIEW3D_OT_load_p4k_button,
     operators.VIEW3D_OT_refresh_button,

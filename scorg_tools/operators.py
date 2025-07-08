@@ -8,6 +8,51 @@ from . import import_utils
 from . import blender_utils
 from pathlib import Path
 
+class VIEW3D_OT_paint_warning_popup(bpy.types.Operator):
+    bl_idname = "view3d.paint_warning_popup"
+    bl_label = "Paint Warning"
+    bl_description = "Warning popup for paint application"
+    bl_options = {'REGISTER', 'INTERNAL'}
+
+    button_index: bpy.props.IntProperty()
+    ignore_future: bpy.props.BoolProperty(
+        name="Ignore warning in future",
+        description="Don't show this warning again",
+        default=False
+    )
+
+    def execute(self, context):
+        # If user checked "ignore future", update the preference
+        if self.ignore_future:
+            prefs = bpy.context.preferences.addons[__package__].preferences
+            prefs.ignore_paint_warnings = True
+        
+        # Apply the paint/tint
+        tint_utils.SCOrg_tools_tint.on_button_pressed(self.button_index)
+        # Invalidate the tint cache so the UI updates immediately
+        from . import panels
+        panels.VIEW3D_PT_scorg_tools_panel.invalidate_tint_cache()
+        return {'FINISHED'}
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self, width=400)
+
+    def draw(self, context):
+        layout = self.layout
+        layout.label(text="WARNING:", icon='ERROR')
+        layout.separator()
+        
+        # Split the warning text into multiple lines for better readability
+        col = layout.column(align=True)
+        col.label(text="Changing paints will overwrite any changes to the base ship materials.")
+        col.label(text="Your changes will be lost.")
+        
+        layout.separator()
+        layout.prop(self, "ignore_future")
+
+    def cancel(self, context):
+        return {'CANCELLED'}
+
 class VIEW3D_OT_dynamic_button(bpy.types.Operator):
     bl_idname = "view3d.dynamic_button"
     bl_label = "Dynamic Button"
@@ -16,6 +61,14 @@ class VIEW3D_OT_dynamic_button(bpy.types.Operator):
     button_index: bpy.props.IntProperty()
 
     def execute(self, context):
+        # Check if we should show the warning
+        prefs = bpy.context.preferences.addons[__package__].preferences
+        if not prefs.ignore_paint_warnings:
+            # Show the warning popup instead of applying directly
+            bpy.ops.view3d.paint_warning_popup('INVOKE_DEFAULT', button_index=self.button_index)
+            return {'FINISHED'}
+        
+        # If warnings are ignored, apply directly
         tint_utils.SCOrg_tools_tint.on_button_pressed(self.button_index)
         # Invalidate the tint cache so the UI updates immediately
         from . import panels
