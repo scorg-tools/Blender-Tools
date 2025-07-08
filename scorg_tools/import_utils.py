@@ -1,4 +1,5 @@
-import stat
+from ast import main
+import glob
 import bpy
 from pathlib import Path
 import os
@@ -131,6 +132,8 @@ class SCOrg_tools_import():
         #Load item by GUID
         record = __class__.get_record(guid)
 
+        globals_and_threading.imported_record = record
+
         if not record:
             misc_utils.SCOrg_tools_misc.error(f"⚠️ Could not find record for GUID: {guid} - are you using the correct Data.p4k?")
             return False
@@ -139,7 +142,7 @@ class SCOrg_tools_import():
         __class__.item_guid = guid
         tint_utils.SCOrg_tools_tint.update_tints(record)  # Update tints for the item
         
-        geometry_path = __class__.get_geometry_path_by_guid(guid)
+        geometry_path = __class__.get_geometry_path(guid = guid)
         process_bones_file = False
         # if the geometry path is an array, it means we have a CDF XML file that points to the real geometry
         if isinstance(geometry_path, list):
@@ -364,17 +367,23 @@ class SCOrg_tools_import():
         return empty_hardpoints
     
     @staticmethod
-    def get_geometry_path_by_guid(guid):
+    def get_geometry_path(guid = None, record = None, original_path = False):
         if __class__.extract_dir is None:
             __class__.init()
-        dcb = globals_and_threading.dcb
-
-        if not dcb:
-            misc_utils.SCOrg_tools_misc.error(f"⚠️ Please load Data.p4k first")
+        if not guid and not record:
+            misc_utils.SCOrg_tools_misc.error("⚠️ GUID or record must be provided to get geometry path")
             return None
 
-        # Load item
-        record = __class__.get_record(guid)
+        # if there's no record, try to get it by guid
+        if record is None:
+            dcb = globals_and_threading.dcb
+
+            if not dcb:
+                misc_utils.SCOrg_tools_misc.error(f"⚠️ Please load Data.p4k first")
+                return None
+
+            # Load item
+            record = __class__.get_record(guid)
 
         if not record:
             misc_utils.SCOrg_tools_misc.error(f"Could not find record for GUID: {guid} - are you using the correct Data.p4k?")
@@ -391,6 +400,8 @@ class SCOrg_tools_import():
                                 path = comp.properties.Geometry.properties.Geometry.properties.Geometry.properties.path
                                 if path:
                                     path = path.removeprefix("Data/") # Rare objects have this prefix and they shouldn't see b8f6e23e-8a06-47e4-81c9-3f22c34b99e9
+                                    if original_path:
+                                        return path  # Return the original path without modification
                                     file_path = __class__.extract_dir / Path(path)
                                     if file_path.suffix.lower() == '.cdf':
                                         file_array = [__class__.extract_dir / file_path.with_suffix('.dae')] # add the base armature dae file to the array
@@ -615,7 +626,7 @@ class SCOrg_tools_import():
                     if globals_and_threading.debug: print(f"Duplicated hierarchy for '{item_port_name}' from GUID {guid_str}")
                 else:
                     # The item was not imported yet, so we need to import it
-                    geometry_path = __class__.get_geometry_path_by_guid(guid_str)
+                    geometry_path = __class__.get_geometry_path(guid = guid_str)
                     if geometry_path is None:
                         if globals_and_threading.debug: print(f"ERROR: No geometry for GUID {guid_str}: {geometry_path}")
                         continue
@@ -784,6 +795,8 @@ class SCOrg_tools_import():
         misc_utils.SCOrg_tools_misc.select_base_collection() # Ensure the base collection is active before importing
         record = misc_utils.SCOrg_tools_misc.get_ship_record()
         
+        globals_and_threading.imported_record = record
+
         # Check if record is None before trying to access its properties
         if record is None:
             misc_utils.SCOrg_tools_misc.error("Could not get ship record. Please import a StarFab Blueprint first.")
@@ -1050,7 +1063,7 @@ class SCOrg_tools_import():
             
         if record:
             if globals_and_threading.debug: print(f"DEBUG: Attempting to load tint palette for: {record.name} - tint: {tint_number}")
-            tints = tint_utils.SCOrg_tools_tint.get_tint_pallet_list(record)
+            tints, tint_materials = tint_utils.SCOrg_tools_tint.get_tint_pallet_list(record)
             # get the nth tint palette GUID from the dict's keys
             if tints and len(tints) > tint_number:
                 tint_guid = list(tints.keys())[tint_number]
@@ -1072,6 +1085,18 @@ class SCOrg_tools_import():
                     except Exception as e:
                         if globals_and_threading.debug: 
                             print(f"DEBUG: Error applying tint GUID to base object: {e}")
+                    
+                    if globals_and_threading.debug:
+                        print(f"DEBUG: materials: {tint_materials}")
+
+                    # Check if the tint has a custom material
+                    if tint_guid in tint_materials and tint_materials[tint_guid]:
+                        # Get the material name
+                        material_name = tint_materials[tint_guid]
+                        if globals_and_threading.debug: 
+                            print(f"DEBUG: Tint {tint_number} ({tint_guid}) has custom material: {material_name}")
+                        # import the custom material:
+                        __class__.change_paint_material(material_name)
             else:
                 if globals_and_threading.debug: 
                     if not tints:
@@ -1328,3 +1353,152 @@ class SCOrg_tools_import():
             if globals_and_threading.debug: print(f"❌ ERROR: Failed to import DAE for: {geometry_path}")
             return False
         return True
+
+    @staticmethod
+    def get_main_material_file():
+        """
+        Find an object with 'body' in the name and specific source_file custom property,
+        then return the name of the material in slot 1 (index 0).
+        """
+        # Iterate through objects in the scene from the top level downwards
+        if globals_and_threading.debug: print("DEBUG: Searching for main material file...")
+
+        # get the getometry path for the current ship
+        geometry_path = __class__.get_geometry_path(record = globals_and_threading.imported_record, original_path = True)
+        geometry_path = geometry_path.lower()
+
+        if not geometry_path:
+            if globals_and_threading.debug: print("DEBUG: No geometry path found for the current ship")
+            return None
+        if globals_and_threading.debug: print(f"DEBUG: Geometry path for current ship: {geometry_path}")
+        
+        for obj in bpy.data.objects:
+            # Check if object has 'body' in the name (case-insensitive), and if it has the custom property 'source_file' with the geometry path set
+            if 'body' in obj.name.lower() and 'source_file' in obj:
+                # Check if object has the custom property 'source_file'
+                if 'source_file' in obj and globals_and_threading.debug: print(f"DEBUG: Found object with 'body' in name: {obj.name}, source_file: {obj['source_file']}")
+                if 'source_file' in obj and obj['source_file'].lower() == str(geometry_path).lower():
+                    # Check if object has material slots
+                    if obj.material_slots and len(obj.material_slots) > 0:
+                        # Get the first material slot (slot 1)
+                        material = obj.material_slots[0].material
+                        if material:
+                            print(f"Found object: {obj.name}")
+                            print(f"Material in slot 1: {material.name}")
+                            if 'original_filename' in material:
+                                # return just the filenaame, as the original_filename is the full path
+                                return Path(material['original_filename']).name
+                            else:
+                                if 'filename' in material:
+                                    # Store the original filename as a custom property if not already present
+                                    material['original_filename'] = material['filename']
+                                    return Path(material['filename']).name
+                                else:
+                                    # last resort, use the material name to get the filename
+                                    return __class__.get_material_filename(material.name)
+                        else:
+                            print(f"Found object: {obj.name} but slot 1 has no material")
+                            return None
+                    else:
+                        print(f"Found object: {obj.name} but it has no material slots")
+                        return None
+        
+        print("No matching object found")
+        return None
+    
+    @staticmethod
+    def change_paint_material(paint_material_file = None):
+        if __class__.extract_dir is None:
+            __class__.init()
+        # Get material file from paint
+        if paint_material_file is None:
+            if globals_and_threading.debug: print("DEBUG: No paint material file provided, not changing paint material")
+            return None
+        
+        # add the extract_dir to path
+        paint_material_file = __class__.extract_dir / paint_material_file
+
+        # Check the node group name is set
+        if not __class__.tint_palette_node_group_name:
+            if globals_and_threading.debug: print("DEBUG: No tint palette node group name set, cannot change paint material")
+            return None
+        # check if the paint material file exists
+        if not paint_material_file.is_file():
+            if globals_and_threading.debug: print(f"Error: Paint material file {paint_material_file} does not exist, please extract the file from the P4K archive")
+            return None
+        
+        # Get main material file
+        main_material_file = __class__.get_main_material_file()
+        if not main_material_file:
+            if globals_and_threading.debug: print("DEBUG: No main material file found, cannot change paint material")
+            return None
+        # replace the . with an _ in the file name
+        main_material_name = main_material_file.replace('.', '_').lower()
+
+        # Get the list of materials indexed by the position of the main material file
+        # Get the list of materials indexed by the position of the paint material file
+
+        # Loop through all materials with the main material file name
+        for mat in bpy.data.materials:
+            # check if the material name starts with the main material name
+            if mat.name.lower().startswith(main_material_name):
+                if globals_and_threading.debug: print(f"DEBUG: Found material {mat.name} matching main material file {main_material_file}")
+                if 'filename' in mat:
+                    if 'original_filename' not in mat:
+                        # Store the original filename as a custom property if not already present
+                        mat['original_filename'] = mat['filename']
+                    if 'original_name' not in mat:
+                        # Store the original name as a custom property if not already present
+                        mat['original_name'] = mat.name
+                    # remove the filename custom property to allow it to be re-imported
+                    del mat['filename']
+        # Create a tmp directory if it doesn't exist, return an error if it fails
+        tmp_dir = Path(__class__.extract_dir).parent / "material_tmp"
+        if not tmp_dir.exists():
+            try:
+                tmp_dir.mkdir(parents=True, exist_ok=True)
+            except Exception as e:
+                if globals_and_threading.debug: print(f"Error creating tmp directory: {e}")
+                return None
+        # Copy the paint material file to the tmp directory with the main material file name
+        tmp_paint_material_file = tmp_dir / main_material_file
+        try:
+            # Copy the paint material file to the tmp directory
+            import shutil
+            shutil.copy(paint_material_file, tmp_paint_material_file)
+            if globals_and_threading.debug: print(f"DEBUG: Copied paint material file to {tmp_paint_material_file}")
+        except Exception as e:
+            if globals_and_threading.debug: print(f"Error copying paint material file: {e}")
+            return None
+        
+        # reset any missing files
+        __class__.missing_files = []
+        # Ensure translation for new data preference is set to off
+        __class__.set_translation_new_data_preference()
+        # import the new material
+        if globals_and_threading.debug: print(f"DEBUG: Importing new material ({paint_material_file}), tint_palette_node_group: {__class__.tint_palette_node_group_name}")
+        from scdatatools.blender import materials
+        # get the tint palette node group from the name
+        node_group = bpy.data.node_groups.get(__class__.tint_palette_node_group_name)
+        if not node_group:
+            # Report an error if the node group is not found
+            if globals_and_threading.debug: print(f"ERROR: Tint palette node group '{__class__.tint_palette_node_group_name}' not found")
+            return None
+        # Use misc_utils to capture console output
+        _, captured_stdout, captured_stderr = misc_utils.SCOrg_tools_misc.capture_console_output(
+            materials.load_materials, 
+            [tmp_paint_material_file], 
+            data_dir=__class__.extract_dir, 
+            tint_palette_node_group=node_group
+        )
+        # Reset the translation preference to its original state
+        __class__.set_translation_new_data_preference(reset=True)
+        # Extract missing texture paths from captured output
+        __class__.extract_missing_textures_from_output(captured_stdout, captured_stderr)
+        # display any missing textures
+        if len(__class__.missing_files) > 0:
+                sorted_missing_files = sorted(__class__.missing_files, key=str.lower)
+                misc_utils.SCOrg_tools_misc.show_text_popup(
+                    text_content=sorted_missing_files,
+                    header_text="The following files were missing, please extract them with StarFab, under Data -> Data.p4k:"
+                )

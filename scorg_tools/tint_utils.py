@@ -3,6 +3,7 @@ import re
 # Import globals
 from . import globals_and_threading
 from . import misc_utils
+from . import blender_utils
 
 class SCOrg_tools_tint():
     paint_records = None
@@ -10,6 +11,7 @@ class SCOrg_tools_tint():
     def get_tint_pallet_list(record):
         __class__.get_paint_records()  # Ensure paint records are loaded
         tints = {}
+        tint_materials = {}
         if hasattr(record, 'properties') and hasattr(record.properties, 'Components'):
             for i, comp in enumerate(record.properties.Components):
                 if comp.name == 'SGeometryResourceParams':
@@ -20,6 +22,7 @@ class SCOrg_tools_tint():
                             if globals_and_threading.debug:
                                 print(f"DEBUG: Found default tint GUID {guid} in component {i} for item {record.name}")
                             tints[guid] = record.name.replace('_', ' ').title()
+                            tint_materials[guid] = None
                         else:
                             name = record.name.lower() # e.g. "misc_starlancer_max"
                             # get the manufacturer name from the first part of the name
@@ -36,6 +39,7 @@ class SCOrg_tools_tint():
                                     tint_name = results[0].name
                                     if globals_and_threading.debug: print(f"DEBUG: Found default paint record for {name}: {guid} ({tint_name})")
                                     tints[tint_guid] = tint_name.replace('_', ' ').title()
+                                    tint_materials[guid] = None
                                     break
                                 # Remove the last part of the name and try again, e.g. "misc_starlancer_default"
                                 name = '_'.join(name.split('_')[:-1])
@@ -52,6 +56,12 @@ class SCOrg_tools_tint():
                                     # check to see if the record for the guid exists before adding it to the list
                                     if globals_and_threading.dcb.records_by_guid.get(guid):
                                         tints[guid] = __class__.get_paint_name_by_tag(tags) if tags else f"Tint {len(tints) + 1}"
+                                        # check to see if thre is a custom material for this tint/paint
+                                        if hasattr(subgeo.properties.Geometry.properties, 'Material') and hasattr(subgeo.properties.Geometry.properties.Material.properties, 'path'):
+                                            mat_path = str(subgeo.properties.Geometry.properties.Material.properties.path)
+                                            tint_materials[guid] = mat_path
+                                        else:
+                                            tint_materials[guid] = None
                                     else:
                                         if globals_and_threading.debug:
                                             print(f"DEBUG: tint with GUID {guid} not found in records, skipping.")
@@ -59,7 +69,7 @@ class SCOrg_tools_tint():
                                     print(f"⚠️ Empty tint GUID found item {record.name}, skipping.")
                     except AttributeError as e:
                         print(f"⚠️ Missing attribute accessing geometry tint pallet in component {i}: {e}")
-        return tints
+        return tints, tint_materials
 
     # Function to call when a button is pressed
     def on_button_pressed(index):
@@ -69,6 +79,7 @@ class SCOrg_tools_tint():
         import_utils.SCOrg_tools_import.import_missing_materials(tint_number=index)
         # Clear progress when done
         misc_utils.SCOrg_tools_misc.clear_progress()
+        blender_utils.SCOrg_tools_blender.fix_modifiers(material_only=True)
 
     def update_tints(record):
         if not record:
@@ -76,7 +87,7 @@ class SCOrg_tools_tint():
             return False
         print(f"DEBUG: Updating tints for record: {record.name}")
         # Get tints for loaded item
-        tints = __class__.get_tint_pallet_list(record)
+        tints, tint_materials = __class__.get_tint_pallet_list(record)
         if globals_and_threading.debug:
             print(f"DEBUG: Found {len(tints)} tints for item {record.name}: {tints}")
         
@@ -172,7 +183,7 @@ class SCOrg_tools_tint():
             from . import misc_utils
             record = misc_utils.SCOrg_tools_misc.get_ship_record(skip_error=True)
             if record:
-                tints = __class__.get_tint_pallet_list(record)
+                tints, tint_materials = __class__.get_tint_pallet_list(record)
                 # Get list of tint GUIDs in the same order as button labels
                 tint_guids = list(tints.keys()) if isinstance(tints, dict) else []
                 

@@ -199,7 +199,7 @@ class SCOrg_tools_blender():
                     #print(f"Removed duplicate Displace modifier '{mod_name}' from '{obj.name'.")
                     
     @staticmethod
-    def fix_modifiers(displacement_strength=0.005):
+    def fix_modifiers(displacement_strength=0.005, material_only = False):
         # Get addon preferences
         prefs = bpy.context.preferences.addons["scorg_tools"].preferences
 
@@ -214,27 +214,27 @@ class SCOrg_tools_blender():
                 bpy.ops.object.mode_set(mode='OBJECT')
             # If still no objects available, we'll proceed without setting mode
         
-        if prefs.enable_weld_weighted_normal:
+        if prefs.enable_weld_weighted_normal and not material_only:
             __class__.add_weld_and_weighted_normal_modifiers()
             __class__.update_viewport_with_timer(redraw_now=True)
         
-        if prefs.enable_displace_decals:
+        if prefs.enable_displace_decals and not material_only:
             __class__.add_displace_modifiers_for_decal(displacement_strength)
             __class__.update_viewport_with_timer(redraw_now=True)
         
-        if prefs.enable_remove_duplicate_displace:
+        if prefs.enable_remove_duplicate_displace and not material_only:
             __class__.remove_duplicate_displace_modifiers()
             __class__.update_viewport_with_timer(redraw_now=True)
         
-        if prefs.enable_remove_proxy_geometry:
+        if prefs.enable_remove_proxy_geometry and not material_only:
             __class__.remove_proxy_material_geometry()
             __class__.update_viewport_with_timer(redraw_now=True)
         
-        if prefs.enable_remap_material_users:
+        if prefs.enable_remap_material_users and not material_only:
             __class__.remap_material_users()
             __class__.update_viewport_with_timer(redraw_now=True)
         
-        if prefs.enable_import_missing_materials:
+        if prefs.enable_import_missing_materials and not material_only:
             import_utils.SCOrg_tools_import.import_missing_materials()
             __class__.update_viewport_with_timer(redraw_now=True)
         
@@ -591,18 +591,22 @@ class SCOrg_tools_blender():
         
         if existing_group:
             if globals_and_threading.debug: print(f"Tint group '{expected_group_name}' already exists, reusing")
+            import_utils.SCOrg_tools_import.tint_palette_node_group_name = existing_group.name
             return existing_group
         else :
             existing_group = bpy.data.node_groups.get(double_hashed_group_name)
             if existing_group:
                 if globals_and_threading.debug: print(f"Tint group '{double_hashed_group_name}' already exists, renaming to '{expected_group_name}'")
                 existing_group.name = expected_group_name
+                import_utils.SCOrg_tools_import.tint_palette_node_group_name = expected_group_name
                 return existing_group
             else:
                 if globals_and_threading.debug: print(f"Could not find tint group '{expected_group_name}'")
         
         from scdatatools import blender
         node_group = blender.materials.utils.tint_palette_node_group_for_entity(entity_name)
+        if globals_and_threading.debug: print(f"Created new tint group: {node_group.name}")
+        import_utils.SCOrg_tools_import.tint_palette_node_group_name = node_group.name
         return node_group
     
     @staticmethod
@@ -888,6 +892,13 @@ class SCOrg_tools_blender():
         # Group objects by their mesh data to identify originals vs linked duplicates
         mesh_to_objects = {}
         
+        # Make sure all objects are real (not instances) for exporting to 3DS MAX
+        bpy.ops.object.select_all(action='SELECT')
+        bpy.ops.object.duplicates_make_real()
+        for obj in bpy.context.selected_objects:
+            if obj.type == 'MESH':
+                obj.data = obj.data.copy()
+
         # get a list of all mesh objects in the scene that don't have "_scorg_decals" in their name
         objects_list = [obj for obj in bpy.data.objects if obj.type == 'MESH' and "_scorg_decals" not in obj.name]
         
@@ -1305,11 +1316,25 @@ class SCOrg_tools_blender():
 
             # Check if the material has the custom property 'StringGenMask' and is a POM
             if 'StringGenMask' in mat and ("%PARALLAX_OCCLUSION_MAPPING" in str(mat['StringGenMask']) or "_tire" in mat.name.lower() or "_tyre" in mat.name.lower()):
+                # Store custom properties for later use
                 custom_properties = {}
                 for key in mat.keys():
                     if key != "cycles":
                         print(f"{key} = {mat.get(key)}")
-                        custom_properties[key] = mat.get(key)
+                        try:
+                            # Handle different types of custom properties
+                            value = mat.get(key)
+                            if hasattr(value, '__iter__') and not isinstance(value, (str, bytes)):
+                                # It's an iterable (like a list or array), convert to list
+                                custom_properties[key] = list(value)
+                            else:
+                                # It's a simple value, store directly
+                                custom_properties[key] = value
+                        except Exception as e:
+                            if globals_and_threading.debug:
+                                print(f"Warning: Could not copy custom property '{key}': {e}")
+                            # Skip this property if it can't be copied
+                            continue
             else:
                 # skip this material as it's not a POM material
                 continue
@@ -1401,7 +1426,12 @@ class SCOrg_tools_blender():
 
                 # Copy the custom properties from the old material to the new one
                 for key, value in custom_properties.items():
-                    new_material[key] = value
+                    try:
+                        new_material[key] = value
+                    except Exception as e:
+                        if globals_and_threading.debug:
+                            print(f"Warning: Could not set custom property '{key}' on new material: {e}")
+                        continue
                 
                 # Now assign the detected images to the appropriate texture nodes
                 for suffix, image_path in images.items():
@@ -1514,7 +1544,7 @@ class SCOrg_tools_blender():
                             node.outputs['Value'].default_value = 5.0
                         elif node.type == 'BSDF_PRINCIPLED':
                             # Set the Base Color to black for tyre materials
-                            node.inputs['Base Color'].default_value = [0.0, 0.0, 0.0, 1.0]
+                            node.inputs['Base Color'].default_value = [0.005, 0.005, 0.005, 1.0]
 
                 if globals_and_threading.debug: print(f"Successfully replaced material {old_mat_name} with scorg_pom material")
         

@@ -72,6 +72,7 @@ class VIEW3D_OT_refresh_button(bpy.types.Operator):
 
         #Load the record for the ship
         record = misc_utils.SCOrg_tools_misc.get_ship_record()
+        globals_and_threading.imported_record = record  # Store the record globally for later use
         
         if record is None:
             misc_utils.SCOrg_tools_misc.error("Could not find ship record. Ensure a 'base' empty object exists.")
@@ -80,6 +81,9 @@ class VIEW3D_OT_refresh_button(bpy.types.Operator):
             misc_utils.SCOrg_tools_misc.force_ui_update()
             return {'CANCELLED'}
 
+        # Make sure the tint node group is initialised, pass the item_name
+        blender_utils.SCOrg_tools_blender.init_tint_group(record.name)
+        
         tint_utils.SCOrg_tools_tint.update_tints(record)
         # Invalidate the tint cache since tint data may have changed
         from . import panels
