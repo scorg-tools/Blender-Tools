@@ -16,6 +16,7 @@ p4k = None
 button_labels = []
 ship_loaded = None
 item_loaded = None
+imported_record = None
 sc = None
 localizer = None
 _loading_thread = None # Global to hold the loading thread instance

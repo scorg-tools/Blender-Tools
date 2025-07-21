@@ -13,8 +13,6 @@ from .spinners import SPINNER_LIBRARY  # Import the spinner library
 class SCOrg_tools_misc():
     _last_progress_update_time = 0  # Class variable to track last progress update
     _spinner_counter = 0  # Class variable to track spinner animation
-    _current_progress_line = ""  # Class variable to track current progress line
-    _progress_active = False  # Class variable to track if progress is currently active
     
     # Default spinner type - change this to use different spinners
     spinner_type = "clock"
@@ -23,11 +21,7 @@ class SCOrg_tools_misc():
     def update_progress(message="", current=0, total=100, hide_message=False, hide_progress=False, update_interval=1.0, force_update=False, spinner=True, spinner_type=None):
         """
         Update the progress bar and status message in the UI with timer-based throttling.
-        
-        Note: When progress is active, use SCOrg_tools_misc.debug_print() instead of print() 
-        to avoid interfering with the progress bar display.
-        
-        Args:
+                Args:
             message (str): Status message to display
             current (int/float): Current progress value
             total (int/float): Total/maximum progress value
@@ -95,10 +89,8 @@ class SCOrg_tools_misc():
     def clear_progress():
         """Clear both the progress bar and status message."""
         SCOrg_tools_misc.update_progress(hide_message=True, hide_progress=True, force_update=True)
-        # Clear the console line and reset progress state
+        # Clear the console line
         print("\n", end="", flush=True)  # Print a newline to clear the console line
-        SCOrg_tools_misc._progress_active = False
-        SCOrg_tools_misc._current_progress_line = ""
     
     @staticmethod
     def _display_console_progress(message="", current=0, total=100):
@@ -131,18 +123,16 @@ class SCOrg_tools_misc():
                 
                 # Calculate space needed for other elements
                 percentage_text = f" {progress_percentage:.1f}% ({current}/{total})"
-                brackets_space = 2  # "[]"
+                brackets_and_separator = 3  # "[] " 
+                reserved_space = len(percentage_text) + brackets_and_separator
                 
-                # Calculate total reserved space
-                reserved_space = len(percentage_text) + brackets_space
-                
-                # Add space for message and separator if present
+                # Reserve space for message if present
                 if display_message:
                     reserved_space += len(display_message) + 3  # " | "
                 
                 # Calculate available space for the actual progress bar
                 available_width = max(10, terminal_width - reserved_space)  # Minimum 10 chars for bar
-                bar_length = available_width  # Use full available width
+                bar_length = min(available_width, 60)  # Cap at 60 for very wide terminals
                 
                 filled_length = int(bar_length * current / total)
                 bar = '█' * filled_length + '-' * (bar_length - filled_length)
@@ -160,9 +150,6 @@ class SCOrg_tools_misc():
             # Print to console with carriage return for updating the same line
             if console_output:
                 print(f"\r{console_output}", end="", flush=True)
-                # Track the current progress state
-                SCOrg_tools_misc._current_progress_line = console_output
-                SCOrg_tools_misc._progress_active = True
             
         except Exception as e:
             print(f"Error displaying console progress: {e}")
@@ -452,18 +439,3 @@ class SCOrg_tools_misc():
         combined_stderr = stderr_buffer.getvalue()
         
         return function_result, combined_stdout, combined_stderr
-    
-    @staticmethod
-    def debug_print(message):
-        """
-        Print debug message that respects the progress bar.
-        If progress is active, moves to a new line first, then reprints the progress bar.
-        """
-        if SCOrg_tools_misc._progress_active:
-            # Move to a new line, print the debug message, then restore the progress bar
-            print(f"\n{message}")
-            if SCOrg_tools_misc._current_progress_line:
-                print(f"\r{SCOrg_tools_misc._current_progress_line}", end="", flush=True)
-        else:
-            # Normal print when no progress is active
-            print(message)
