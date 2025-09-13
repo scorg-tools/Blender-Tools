@@ -678,6 +678,7 @@ class SCOrg_tools_blender():
         Args:
             mtl_file_path (str): The path to the .mtl file containing the correct material names.
         """
+        if globals_and_threading.debug: print(f"Fixing unmapped materials using .mtl file: {mtl_file_path}")
 
         mtl_names = __class__.parse_mtl_names(mtl_file_path)
         if not mtl_names:
@@ -686,7 +687,16 @@ class SCOrg_tools_blender():
 
         # Get a list of material names instead of material objects
         material_names = list(bpy.data.materials.keys())
+
+        # Extract the expected prefix from the MTL file name
+        mtl_file_name = os.path.basename(mtl_file_path)  # Get just the filename
+        expected_prefix = os.path.splitext(mtl_file_name)[0] + "_mtl"  # Remove .mtl extension and add _mtl
         
+        if globals_and_threading.debug: 
+            print(f"Found {len(material_names)} materials in the scene to check.")
+            print(f"Expected material prefix for this MTL file: '{expected_prefix}' (case-insensitive)")
+        
+        processed_count = 0
         for i, mat_name in enumerate(material_names):
             #misc_utils.SCOrg_tools_misc.update_progress("Fixing unmapped materials", i, len(material_names), spinner_type="arc")
             # Get fresh reference to the material
@@ -695,9 +705,14 @@ class SCOrg_tools_blender():
                 continue
                 
             prefix, material_type, number = __class__.parse_unmapped_material_string(mat.name)
-
-            if prefix and material_type and number:
-                # Material name matches the pattern
+            
+            # Only process materials that match this specific MTL file (case-insensitive)
+            if prefix and material_type and number and prefix.lower() == expected_prefix.lower():
+                processed_count += 1
+                if globals_and_threading.debug: 
+                    print(f"Processing material '{mat.name}' -> prefix: '{prefix}', type: '{material_type}', number: '{number}'")
+                
+                # Material name matches the pattern and belongs to this MTL file
                 if number in mtl_names:
                     correct_name = f"{prefix}_{mtl_names[number]}"
 
@@ -712,6 +727,19 @@ class SCOrg_tools_blender():
                         # No material with the same name exists, rename the material
                         if globals_and_threading.debug: print(f"Renaming material '{mat.name}' to '{correct_name}'")
                         mat.name = correct_name
+                else:
+                    if globals_and_threading.debug: 
+                        print(f"Material number {number} not found in MTL file for material '{mat.name}'. Available numbers: {list(mtl_names.keys())}")
+            elif prefix and material_type and number:
+                # Material matches pattern but not this MTL file - skip silently
+                if globals_and_threading.debug: 
+                    print(f"Skipping material '{mat.name}' (prefix '{prefix}' doesn't match expected '{expected_prefix}')")
+            elif prefix or material_type or number:
+                if globals_and_threading.debug: 
+                    print(f"Material '{mat.name}' partially matches pattern but parsing failed: prefix={prefix}, type={material_type}, number={number}")
+        
+        if globals_and_threading.debug: 
+            print(f"Processed {processed_count} materials for MTL file '{mtl_file_name}'")
 
     @staticmethod
     def remap_material(from_mat_name, to_mat_name, delete_old=False):
