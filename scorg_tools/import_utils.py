@@ -121,6 +121,9 @@ class SCOrg_tools_import():
     @staticmethod
     def import_by_id(id):
         os.system('cls')
+        print("=" * 80)
+        print("NEW CODE IS RUNNING - import_by_id() was updated!")
+        print("=" * 80)
         if globals_and_threading.debug: print(f"Received ID: {id}")
         if __class__.is_guid(id):
             guid = str(id)
@@ -134,7 +137,8 @@ class SCOrg_tools_import():
         __class__.imported_guid_objects = {}
         __class__.skip_imported_files = {}
         __class__.INCLUDE_HARDPOINTS = [] # all
-        __class__.missing_files = []
+        # DON'T clear missing_files here - it's cleared in run_import() at the top level
+        # Clearing here wipes out DAE files collected during recursive hardpoint imports
         __class__.set_translation_new_data_preference()
                 
         #Load item by GUID
@@ -161,18 +165,21 @@ class SCOrg_tools_import():
         # load the main .dae
         if geometry_path:
             if globals_and_threading.debug: print(f"Loading geo: {geometry_path}")
-            if not geometry_path.is_file():
+            if not geometry_path.exists():
                 print(f"Error: .DAE file not found at: {geometry_path}")
-                if globals_and_threading.debug: print(f"DEBUG: Attempted DAE import path: {geometry_path}, but file was missing")
-                if str(geometry_path) not in __class__.missing_files:
-                    __class__.missing_files.append(str(geometry_path))
+                if globals_and_threading.debug:
+                    print(f"DEBUG: Attempted DAE import path: {geometry_path}, but file was missing")
+                # Normalize path and add to missing_files list
+                missing_path = str(geometry_path).replace('\\', '/')
+                if not missing_path.lower().startswith('data/'):
+                    # Ensure it starts with Data/
+                    missing_path = 'Data/' + missing_path.split('Data/', 1)[-1] if 'Data/' in missing_path else 'Data/' + missing_path
+                if missing_path not in __class__.missing_files and not missing_path.startswith('$') and 'ddna.glossmap' not in missing_path.lower():
+                    __class__.missing_files.append(missing_path)
+                    if globals_and_threading.debug:
+                        print(f"Added to missing_files (dae): {missing_path}")
                 print(f"⚠️ ERROR: Failed to import DAE for {guid}: {geometry_path} - file missing")
-                if len(__class__.missing_files) > 0:
-                    sorted_missing_files = sorted(__class__.missing_files, key=str.lower)
-                    misc_utils.SCOrg_tools_misc.show_text_popup(
-                        text_content = sorted_missing_files,
-                        header_text = "The following files were missing, please extract them with StarFab, under Data -> Data.p4k:"
-                    )
+                # Removed popup here - will show at end of import process
                 return None
             
             # Get a set of all objects before import
@@ -224,7 +231,14 @@ class SCOrg_tools_import():
                     if not file.is_file():
                         if globals_and_threading.debug: print(f"⚠️ ERROR: Bones file missing: {file}")
                         if str(file) not in __class__.missing_files:
-                            __class__.missing_files.append(str(file))
+                            try:
+                                rel_path = str(file.relative_to(__class__.extract_dir)).replace("\\", "/")
+                            except ValueError:
+                                rel_path = str(file).replace("\\", "/")
+                            if rel_path not in __class__.missing_files and not rel_path.startswith('$') and 'ddna.glossmap' not in rel_path.lower():
+                                if not rel_path.lower().startswith("data/"):
+                                    rel_path = "Data/" + rel_path
+                                __class__.missing_files.append(rel_path)
                         continue
                     if globals_and_threading.debug: print(f"Processing bones file: {file}")
                     __class__.import_file(file, root_object_name)
@@ -247,12 +261,7 @@ class SCOrg_tools_import():
             # add modifiers
             blender_utils.SCOrg_tools_blender.fix_modifiers(displacement_strength);
             globals_and_threading.item_loaded = True
-            if len(__class__.missing_files) > 0:
-                sorted_missing_files = sorted(__class__.missing_files, key=str.lower)
-                misc_utils.SCOrg_tools_misc.show_text_popup(
-                    text_content=sorted_missing_files,
-                    header_text="The following files were missing, please extract them with StarFab, under Data -> Data.p4k:"
-                )
+            # Removed popup here - will show at end of import process
             __class__.set_translation_new_data_preference(reset=True)
     
     @staticmethod
@@ -650,7 +659,15 @@ class SCOrg_tools_import():
                         print(f"Error: .DAE file not found at: {geometry_path}")
                         if globals_and_threading.debug: print(f"DEBUG: Attempted DAE import path: {geometry_path}, but file was missing")
                         if str(geometry_path) not in __class__.missing_files:
-                            __class__.missing_files.append(str(geometry_path));
+                            try:
+                                rel_path = str(geometry_path.relative_to(__class__.extract_dir)).replace("\\", "/")
+                            except ValueError:
+                                rel_path = str(geometry_path).replace("\\", "/")
+                            if rel_path not in __class__.missing_files and not rel_path.startswith('$') and 'ddna.glossmap' not in rel_path.lower():
+                                if not rel_path.lower().startswith("data/"):
+                                    rel_path = "Data/" + rel_path
+                                __class__.missing_files.append(rel_path);
+                                print(f"Added to missing_files (loc 2): {rel_path}")
                         continue
 
                     # Get a set of all objects before import
@@ -694,7 +711,14 @@ class SCOrg_tools_import():
                             if not file.is_file():
                                 if globals_and_threading.debug: print(f"⚠️ ERROR: Bones file missing: {file}")
                                 if str(file) not in __class__.missing_files:
-                                    __class__.missing_files.append(str(file))
+                                    try:
+                                        rel_path = str(file.relative_to(__class__.extract_dir))
+                                    except ValueError:
+                                        rel_path = str(file)
+                                    if rel_path not in __class__.missing_files and not rel_path.startswith('$') and 'ddna.glossmap' not in rel_path.lower():
+                                        if not rel_path.lower().startswith("data/"):
+                                            rel_path = "Data/" + rel_path
+                                        __class__.missing_files.append(rel_path)
                                 continue
                             if globals_and_threading.debug: print(f"Processing bones file: {file}")
                             __class__.import_file(file, root_obj_name)
@@ -759,8 +783,15 @@ class SCOrg_tools_import():
         if not geometry_path.exists():
             print(f"Error: .DAE file not found at: {geometry_path}")
             if globals_and_threading.debug: print(f"DEBUG: Attempted DAE import path: {geometry_path}, but file was missing")
-            if str(geometry_path) not in __class__.missing_files:
-                __class__.missing_files.append(str(geometry_path));
+            try:
+                rel_path = str(geometry_path.relative_to(__class__.extract_dir)).replace("\\", "/")
+            except ValueError:
+                rel_path = str(geometry_path).replace("\\", "/")
+            if rel_path not in __class__.missing_files and not rel_path.startswith('$') and 'ddna.glossmap' not in rel_path.lower():
+                if not rel_path.lower().startswith("data/"):
+                    rel_path = "Data/" + rel_path
+                __class__.missing_files.append(rel_path)
+                print(f"Added to missing_files (loc 3): {rel_path}")
             return
 
         # Get a set of all objects before import
@@ -829,11 +860,13 @@ class SCOrg_tools_import():
         
         blender_utils.SCOrg_tools_blender.fix_modifiers(displacement_strength)
         
+        print(f"Total missing files: {len(__class__.missing_files)}")
         if len(__class__.missing_files) > 0:
             sorted_missing_files = sorted(__class__.missing_files, key=str.lower)
             misc_utils.SCOrg_tools_misc.show_text_popup(
                 text_content=sorted_missing_files,
-                header_text="The following files were missing, please extract them with StarFab, under Data -> Data.p4k:"
+                header_text="The following files were missing, please extract them with StarFab, under Data -> Data.p4k:",
+                is_extraction_popup=True
             )
         __class__.set_translation_new_data_preference(reset=True)
 
@@ -887,15 +920,26 @@ class SCOrg_tools_import():
         missing_texture_paths = []
         if missing_textures:
             for material_name, texture_path in missing_textures:
-                # Convert relative path to full path
-                #full_path = __class__.extract_dir / texture_path
-                #missing_texture_paths.append(str(full_path))
-                missing_texture_paths.append(texture_path)
+                tex_path = Path(texture_path)
+                try:
+                    rel_tex = str(tex_path.relative_to(__class__.extract_dir)).replace("\\", "/")
+                except ValueError:
+                    rel_tex = str(tex_path).replace("\\", "/")
+                if Path(rel_tex).is_absolute():
+                    extract_str = str(__class__.extract_dir)
+                    if rel_tex.startswith(extract_str):
+                        rel_tex = rel_tex[len(extract_str):].lstrip('/').lstrip('\\')
+                        if not rel_tex.lower().startswith("data/"):
+                            rel_tex = "Data/" + rel_tex
+                missing_texture_paths.append(rel_tex)
             
             # Make unique list and add to missing_files
             unique_missing = list(set(missing_texture_paths))
             for missing_path in unique_missing:
-                if missing_path not in __class__.missing_files:
+                # Skip ddna.glossmap files
+                if 'ddna.glossmap' in missing_path.lower():
+                    continue
+                if missing_path not in __class__.missing_files and not missing_path.startswith('$'):
                     __class__.missing_files.append(missing_path)
             
             if globals_and_threading.debug:
@@ -906,7 +950,10 @@ class SCOrg_tools_import():
     @staticmethod
     def import_missing_materials(tint_number = 0):
         if __class__.extract_dir is None:
-            __class__.init()
+            # Only initialize extract_dir, don't call init() which would clear missing_files!
+            prefs = bpy.context.preferences.addons["scorg_tools"].preferences
+            extract_dir = getattr(prefs, 'extract_dir', None)
+            __class__.extract_dir = Path(extract_dir) if extract_dir else None
         if not __class__.extract_dir:
             if globals_and_threading.debug: print("ERROR: extract_dir is not set. Please set it in the addon preferences.")
             return None
@@ -963,7 +1010,7 @@ class SCOrg_tools_import():
                                     blender_utils.SCOrg_tools_blender.fix_unmapped_materials(str(filepath))
                                 else:
                                     if globals_and_threading.debug: print(f"DEBUG: File NOT found on disk: {filepath}")
-                                    if str(filepath) not in __class__.missing_files:
+                                    if str(filepath) not in __class__.missing_files and not str(filepath).startswith('$') and 'ddna.glossmap' not in str(filepath).lower():
                                         __class__.missing_files.append(str(filepath))
                                     missing_checked.append(filename)
                             else:
@@ -1018,7 +1065,7 @@ class SCOrg_tools_import():
                                             continue
                                     else:
                                         if globals_and_threading.debug: print(f"DEBUG: File NOT found on disk: {filepath}")
-                                        if str(filepath) not in __class__.missing_files:
+                                        if str(filepath) not in __class__.missing_files and not str(filepath).startswith('$') and 'ddna.glossmap' not in str(filepath).lower():
                                             __class__.missing_files.append(str(filepath))
                                 
                                 if not found_filepath:
@@ -1113,7 +1160,9 @@ class SCOrg_tools_import():
             )
             
             # Extract missing texture paths from captured output
+            print(f"DEBUG: Before texture extraction, missing_files has {len(__class__.missing_files)} items")
             __class__.extract_missing_textures_from_output(captured_stdout, captured_stderr)
+            print(f"DEBUG: After texture extraction, missing_files has {len(__class__.missing_files)} items")
         
         # Clear progress when done
         misc_utils.SCOrg_tools_misc.clear_progress()
@@ -1502,8 +1551,6 @@ class SCOrg_tools_import():
             if globals_and_threading.debug: print(f"Error copying paint material file: {e}")
             return None
         
-        # reset any missing files
-        __class__.missing_files = []
         # Ensure translation for new data preference is set to off
         __class__.set_translation_new_data_preference()
         # import the new material
@@ -1526,13 +1573,7 @@ class SCOrg_tools_import():
         __class__.set_translation_new_data_preference(reset=True)
         # Extract missing texture paths from captured output
         __class__.extract_missing_textures_from_output(captured_stdout, captured_stderr)
-        # display any missing textures
-        if len(__class__.missing_files) > 0:
-                sorted_missing_files = sorted(__class__.missing_files, key=str.lower)
-                misc_utils.SCOrg_tools_misc.show_text_popup(
-                    text_content=sorted_missing_files,
-                    header_text="The following files were missing, please extract them with StarFab, under Data -> Data.p4k:"
-                )
+        # Removed popup here - will show at end of import process
         # remove the temporary material file
         if tmp_paint_material_file.exists():
             try:
@@ -1701,3 +1742,382 @@ class SCOrg_tools_import():
         
         if globals_and_threading.debug: print(f"DEBUG: Built lookup for {len(mtl_lookup)} unique .mtl filenames")
         return mtl_lookup
+
+    @staticmethod
+    def extract_missing_files(file_list_text, prefs):
+        """
+        Extract missing files from Data.p4k archive.
+        
+        Args:
+            file_list_text (str): Newline-separated list of files to extract
+            prefs: Addon preferences object
+            
+        Returns:
+            tuple: (success_count, fail_count, report_lines)
+        """
+        import os
+        import shutil
+        import subprocess
+        from pathlib import Path
+        
+        cgf_converter = prefs.cgf_converter_path
+        extract_dir = Path(prefs.extract_dir)
+        
+        if not cgf_converter or not os.path.exists(cgf_converter):
+            raise ValueError("cgf-converter.exe path not set or invalid in preferences.")
+
+        if not extract_dir or not extract_dir.exists():
+            raise ValueError("Extract directory not set or invalid.")
+
+        # Get sc instance
+        sc = globals_and_threading.sc
+        if not sc or not sc.p4k:
+            raise ValueError("Data.p4k not loaded. Please load it first.")
+
+        
+        # Get files from the list passed by the popup
+        files_to_process = [f.strip() for f in file_list_text.split('\n') if f.strip()]
+            
+        if not files_to_process:
+            return 0, 0, []
+
+        # Filter out comments or empty lines
+        files_to_process = [f for f in files_to_process if not f.startswith('#')]
+        
+        # Skip .ddna.glossmap* files
+        files_to_process = [f for f in files_to_process if '.ddna.glossmap' not in f.lower()]
+        
+        conversion_exts = ['.cga', '.cgf', '.chr', '.skin']
+        texture_exts = ['.tif', '.png', '.jpg', '.jpeg', '.tga', '.bmp']
+        supported_exts = conversion_exts + ['.mtl'] + texture_exts
+        
+        success_count = 0
+        fail_count = 0
+        extracted_files = []
+        report_lines = []
+        
+        # Start progress using the same system as other functions
+        misc_utils.SCOrg_tools_misc.update_progress("Starting extraction...", 0, len(files_to_process), force_update=True, spinner_type="arc")
+        
+        try:
+            for i, file_path_str in enumerate(files_to_process):
+                misc_utils.SCOrg_tools_misc.update_progress(f"Extracting {Path(file_path_str).name}", i, len(files_to_process), spinner_type="arc")
+                
+                # Normalize path for P4K search
+                search_path = file_path_str.replace("\\", "/")
+                # Ensure it starts with Data/
+                if not search_path.lower().startswith("data/"):
+                    search_path = "Data/" + search_path
+                
+                # Fix for absolute paths that got prefixed incorrectly
+                if search_path.startswith("Data/") and ":" in search_path:
+                    path_part = search_path[5:]
+                    extract_str = str(extract_dir).replace("\\", "/")
+                    if path_part.startswith(extract_str):
+                        relative_part = path_part[len(extract_str):].lstrip('/').lstrip('\\')
+                        if not relative_part.lower().startswith("data/"):
+                            relative_part = "Data/" + relative_part
+                        search_path = relative_part
+                
+                # Determine candidate paths to search
+                candidate_paths = []
+                path_obj = Path(search_path)
+                suffix = path_obj.suffix.lower()
+                
+                if suffix == '.dae':
+                    # Try to find the source file by replacing extension
+                    # Only map to geometry formats, not .mtl
+                    for ext in conversion_exts:
+                        candidate_paths.append(path_obj.with_suffix(ext).as_posix())
+                elif suffix in texture_exts:
+                    # Map texture request to .dds source
+                    candidate_paths.append(path_obj.with_suffix('.dds').as_posix())
+                elif suffix in supported_exts:
+                    candidate_paths.append(search_path)
+                
+                matches = []
+                found_source_path = None
+                
+                for candidate in candidate_paths:
+                    try:
+                        # Check if file exists in P4K
+                        results = sc.p4k.search(candidate)
+                        if results:
+                            matches = results
+                            found_source_path = candidate
+                            break # Found a match, stop searching extensions
+                    except Exception as e:
+                        print(f"Error searching P4K for {candidate}: {e}")
+                        continue
+
+                if not matches:
+                    msg = f"File not found in P4K: {search_path}"
+                    print(msg)
+                    report_lines.append(f"❌ {msg}")
+                    fail_count += 1
+                    continue
+                
+                # Use the first match
+                p4k_file = matches[0]
+                
+                try:
+                    # Extract file manually to control the path
+                    # p4k_file is a P4KInfo object
+                    
+                    # Get the internal filename (e.g. Data/Objects/...)
+                    internal_path = p4k_file.filename
+                    
+                    # Strip "Data/" prefix if present to avoid Data/Data/ structure
+                    # The extract_dir usually points to the game-data/Data folder
+                    relative_path = internal_path
+                    if relative_path.lower().startswith("data/"):
+                        relative_path = relative_path[5:] # Remove "Data/"
+                    elif relative_path.lower().startswith("data\\"):
+                         relative_path = relative_path[5:]
+                    
+                    # Construct the full destination path
+                    final_path = extract_dir / relative_path
+                    
+                    # Ensure parent directory exists
+                    final_path.parent.mkdir(parents=True, exist_ok=True)
+                    
+                    # Copy file content
+                    with sc.p4k.open(p4k_file) as src, open(final_path, 'wb') as dst:
+                        shutil.copyfileobj(src, dst)
+                    
+                    extracted_path = final_path
+                    
+                    if not extracted_path.exists():
+                        msg = f"Warning: Extracted file not found at expected path: {extracted_path}"
+                        print(msg)
+                        report_lines.append(f"⚠️ {msg}")
+                        fail_count += 1
+                        continue
+                        
+                    extracted_files.append(extracted_path)
+                    
+                    # Convert if it's a geometry file
+                    if extracted_path.suffix.lower() in conversion_exts:
+                        # Extract companion files needed for conversion
+                        companion_exts = ['.cgam', '.chrparams', '.meshsetup']
+                        companion_files = []
+                        
+                        for comp_ext in companion_exts:
+                            companion_path_in_p4k = Path(internal_path).with_suffix(comp_ext).as_posix()
+                            
+                            try:
+                                comp_matches = sc.p4k.search(companion_path_in_p4k)
+                                if comp_matches:
+                                    comp_p4k_file = comp_matches[0]
+                                    comp_internal_path = comp_p4k_file.filename
+                                    
+                                    # Strip "Data/" prefix
+                                    comp_relative_path = comp_internal_path
+                                    if comp_relative_path.lower().startswith("data/"):
+                                        comp_relative_path = comp_relative_path[5:]
+                                    elif comp_relative_path.lower().startswith("data\\"):
+                                        comp_relative_path = comp_relative_path[5:]
+                                    
+                                    # Extract companion file
+                                    comp_final_path = extract_dir / comp_relative_path
+                                    comp_final_path.parent.mkdir(parents=True, exist_ok=True)
+                                    
+                                    with sc.p4k.open(comp_p4k_file) as src, open(comp_final_path, 'wb') as dst:
+                                        shutil.copyfileobj(src, dst)
+                                    
+                                    if comp_final_path.exists():
+                                        companion_files.append(comp_final_path)
+                            except Exception as e:
+                                # Companion file not found or error - this is OK, not all files have all companions
+                                pass
+                        
+                         # Run cgf-converter
+                        if not cgf_converter or not os.path.exists(cgf_converter):
+                            msg = f"Extracted {extracted_path.name} but cgf-converter not found."
+                            print(msg)
+                            report_lines.append(f"⚠️ {msg}")
+                        else:
+                            # Run converter
+                            # cgf-converter.exe "path/to/file"
+                            # It usually outputs .dae in the same folder
+                            try:
+                                # Suppress window on Windows
+                                startupinfo = None
+                                if os.name == 'nt':
+                                    startupinfo = subprocess.STARTUPINFO()
+                                    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                                
+                                result = subprocess.run(
+                                    [cgf_converter, str(extracted_path)],
+                                    capture_output=True,
+                                    text=True,
+                                    startupinfo=startupinfo
+                                )
+                                
+                                if result.returncode == 0:
+                                    # Delete the original file and all companion files
+                                    files_to_delete = [extracted_path] + companion_files
+                                    deleted_count = 0
+                                    
+                                    for file_to_del in files_to_delete:
+                                        try:
+                                            file_to_del.unlink()
+                                            deleted_count += 1
+                                        except Exception as e:
+                                            print(f"Failed to delete {file_to_del.name}: {e}")
+                                    
+                                    msg = f"Extracted, Converted & Cleaned: {extracted_path.name}"
+                                    print(msg)
+                                    report_lines.append(f"✅ {msg}")
+                                    success_count += 1
+                                else:
+                                    msg = f"Extracted {extracted_path.name} but conversion failed: {result.stderr}"
+                                    print(msg)
+                                    report_lines.append(f"⚠️ {msg}")
+                                    # Still count as success for extraction? Maybe.
+                                    success_count += 1 
+                            except Exception as e:
+                                msg = f"Extracted {extracted_path.name} but converter error: {e}"
+                                print(msg)
+                                report_lines.append(f"⚠️ {msg}")
+                                success_count += 1
+                    elif extracted_path.suffix.lower() == '.dds':
+                        # This is a texture file - extract split parts and convert with texconv
+                        texconv_path = prefs.texconv_path
+                        
+                        if not texconv_path or not os.path.exists(texconv_path):
+                            msg = f"Extracted {extracted_path.name} but texconv not found."
+                            print(msg)
+                            report_lines.append(f"⚠️ {msg}")
+                            success_count += 1
+                        else:
+                            # Extract all split parts (.dds.1, .dds.2, etc.)
+                            split_parts = []
+                            part_num = 1
+                            
+                            while True:
+                                split_part_path_in_p4k = f"{internal_path}.{part_num}"
+                                
+                                try:
+                                    split_matches = sc.p4k.search(split_part_path_in_p4k)
+                                    if split_matches:
+                                        split_p4k_file = split_matches[0]
+                                        split_internal_path = split_p4k_file.filename
+                                        
+                                        # Strip "Data/" prefix
+                                        split_relative_path = split_internal_path
+                                        if split_relative_path.lower().startswith("data/"):
+                                            split_relative_path = split_relative_path[5:]
+                                        elif split_relative_path.lower().startswith("data\\"):
+                                            split_relative_path = split_relative_path[5:]
+                                        
+                                        # Extract split part
+                                        split_final_path = extract_dir / split_relative_path
+                                        split_final_path.parent.mkdir(parents=True, exist_ok=True)
+                                        
+                                        with sc.p4k.open(split_p4k_file) as src, open(split_final_path, 'wb') as dst:
+                                            shutil.copyfileobj(src, dst)
+                                        
+                                        if split_final_path.exists():
+                                            split_parts.append(split_final_path)
+                                        
+                                        part_num += 1
+                                    else:
+                                        # No more parts found
+                                        break
+                                except Exception:
+                                    # Part not found or error - stop looking
+                                    break
+                            
+                            # Combine split parts into the base file if any
+                            if split_parts:
+                                split_parts.sort(key=lambda p: int(p.suffix[1:]))  # Sort by .1, .2, etc.
+                                with open(extracted_path, 'ab') as base_file:
+                                    for part in split_parts:
+                                        with open(part, 'rb') as part_file:
+                                            shutil.copyfileobj(part_file, base_file)
+                                        part.unlink()  # Delete the part after appending
+                                split_parts = []  # Clear the list since deleted
+                            
+                            # Determine output format from original request
+                            original_suffix = Path(file_path_str).suffix.lower()
+                            if original_suffix in texture_exts:
+                                output_format = original_suffix[1:]  # Remove the dot
+                            else:
+                                output_format = 'tif'  # Default to tif
+                            
+                            # Check if the DDS is BC5_SNORM, and if so, skip conversion to match StarFab behavior
+                            is_bc5 = False
+                            try:
+                                info_result = subprocess.run([texconv_path, '-nologo', '-fileinfo', str(extracted_path)], capture_output=True, text=True, timeout=10)
+                                if 'BC5_SNORM' in info_result.stdout:
+                                    is_bc5 = True
+                            except Exception:
+                                pass  # If info fails, proceed with conversion
+                            
+                            if is_bc5:
+                                # Convert BC5_SNORM with R8G8B8A8_UNORM format to allow conversion to requested format
+                                extra_args = ['-f', 'R8G8B8A8_UNORM']
+                            else:
+                                extra_args = []
+                            
+                            # Run texconv
+                            try:
+                                startupinfo = None
+                                if os.name == 'nt':
+                                    startupinfo = subprocess.STARTUPINFO()
+                                    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                                
+                                # texconv [extra_args] -ft <format> <input.dds> -o <output_dir>
+                                cmd = [texconv_path, '-y'] + extra_args + ['-ft', output_format, str(extracted_path), '-o', str(extracted_path.parent)]
+                                result = subprocess.run(
+                                    cmd,
+                                    capture_output=True,
+                                    text=True,
+                                    startupinfo=startupinfo
+                                )
+                                
+                                if result.returncode == 0:
+                                        # Delete all DDS files (base + split parts)
+                                        files_to_delete = [extracted_path] + split_parts
+                                        deleted_count = 0
+                                        
+                                        for file_to_del in files_to_delete:
+                                            try:
+                                                file_to_del.unlink()
+                                                deleted_count += 1
+                                            except Exception as e:
+                                                print(f"Failed to delete {file_to_del.name}: {e}")
+                                        
+                                        msg = f"Extracted, Converted & Cleaned: {extracted_path.name}"
+                                        print(msg)
+                                        report_lines.append(f"✅ {msg}")
+                                        success_count += 1
+                                else:
+                                    msg = f"Extracted {extracted_path.name} but conversion failed: stdout={result.stdout}, stderr={result.stderr}"
+                                    print(msg)
+                                    report_lines.append(f"⚠️ {msg}")
+                                    success_count += 1
+                            except Exception as e:
+                                msg = f"Extracted {extracted_path.name} but texconv error: {e}"
+                                print(msg)
+                                report_lines.append(f"⚠️ {msg}")
+                                success_count += 1
+                    else:
+                        #Non-convertible file (e.g. .mtl)
+                        msg = f"Extracted: {extracted_path.name}"
+                        print(msg)
+                        report_lines.append(f"✅ {msg}")
+                        success_count += 1
+                        
+                except Exception as e:
+                    msg = f"Error processing {file_path_str}: {e}"
+                    print(msg)
+                    report_lines.append(f"❌ {msg}")
+                    fail_count += 1
+                    continue
+        finally:
+            # Clear progress
+            misc_utils.SCOrg_tools_misc.update_progress(hide_message=True, hide_progress=True, force_update=True)
+        
+        return success_count, fail_count, report_lines

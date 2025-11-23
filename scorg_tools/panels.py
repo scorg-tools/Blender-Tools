@@ -1,9 +1,12 @@
 # panels.py
 import bpy
 from pathlib import Path # ADDED: Ensure Path is imported
+import os
 # Import globals
 from . import globals_and_threading
+from . import globals_and_threading
 from . import misc_utils
+from . import import_utils
 
 # Define the parent panel ID here, as it's used by the panel's poll method
 PARENT_PANEL_BL_IDNAME = 'VIEW3D_PT_BlenderLink_Panel'
@@ -126,6 +129,9 @@ class VIEW3D_PT_scorg_tools_panel(bpy.types.Panel):
             # --- Sections that should always be visible (unless in StarFab scene) ---
             layout.separator() # Separator for visual clarity
             
+            # Export Missing button and debug info (always visible)
+            # MOVED: Now inside p4k check below
+
             # Check extract directory preference (always visible)
             extract_dir = prefs.extract_dir
             dir_path = Path(extract_dir)
@@ -133,8 +139,35 @@ class VIEW3D_PT_scorg_tools_panel(bpy.types.Panel):
                 __class__.draw_wrapped_text(layout, message="Please set the Data Extract Directory in the addon preferences.", icon='ERROR')
                 return
 
+            # Check converter paths if extraction is enabled
+            if prefs.extract_missing_files:
+                cgf_path = prefs.cgf_converter_path
+                tex_path = prefs.texconv_path
+                
+                missing_converters = []
+                if not cgf_path or not Path(cgf_path).is_file() or not cgf_path.lower().endswith(".exe"):
+                    missing_converters.append("CGF Converter")
+                
+                if not tex_path or not Path(tex_path).is_file() or not tex_path.lower().endswith(".exe"):
+                    missing_converters.append("TexConv")
+                
+                if missing_converters:
+                    msg = f"Warning: {', '.join(missing_converters)} required for extraction. Please set in preferences."
+                    __class__.draw_wrapped_text(layout, message=msg, icon='ERROR')
+
             # Utilities section (always visible)
             layout.label(text="Utilities")
+
+            # Show Missing Files Button (if any)
+            if import_utils.SCOrg_tools_import.missing_files:
+                # Sort the files for display
+                sorted_files = sorted(import_utils.SCOrg_tools_import.missing_files, key=str.lower)
+                
+                op = layout.operator("scorg.text_popup", text="Show Missing Files", icon='ERROR')
+                op.text_content = "\n".join(sorted_files)
+                op.header_text = "The following files were missing, please extract them with StarFab, under Data -> Data.p4k:"
+                op.is_extraction_popup = True
+                layout.separator()
 
             # --- Sections dependent on P4K being loaded ---
             if globals_and_threading.p4k:

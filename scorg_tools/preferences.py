@@ -45,6 +45,26 @@ class SCOrg_tools_AddonPreferences(bpy.types.AddonPreferences):
         description="Directory where StarFab extracts game data (e.g., C:\\StarFab\\extracted_data\\Data)"
     )
 
+    extract_missing_files: BoolProperty(
+        name="Extract and convert missing files",
+        description="If enabled, missing files will be extracted when clicking OK on the missing files popup",
+        default=True
+    )
+
+    cgf_converter_path: StringProperty(
+        name="CGF Converter Path",
+        subtype='FILE_PATH',
+        description="Optional path to cgf-converter.exe for converting CryEngine geometry files",
+        default=""
+    )
+
+    texconv_path: StringProperty(
+        name="TexConv Path",
+        subtype='FILE_PATH',
+        description="Optional path to texconv.exe for converting DDS texture files",
+        default=""
+    )
+
     # Properties for displaying P4K load progress and messages
     p4k_load_progress: FloatProperty(
         name="P4K Load Progress",
@@ -184,6 +204,32 @@ class SCOrg_tools_AddonPreferences(bpy.types.AddonPreferences):
             objects_dir = path.join(abs_chosen_dir, "Objects")
             if not path.isdir(objects_dir):
                 layout.label(text=f"Directory '{objects_dir}' not found. This doesn't appear to be the correct folder.", icon='ERROR')
+        
+        layout.prop(self, "extract_missing_files")
+        
+        layout.separator()
+        layout.label(text="CGF Converter:")
+        layout.prop(self, "cgf_converter_path")
+        
+        from os import path
+        if self.cgf_converter_path:
+            if not path.isfile(bpy.path.abspath(self.cgf_converter_path)):
+                layout.label(text="Warning: File not found", icon='ERROR')
+            elif not self.cgf_converter_path.lower().endswith(".exe"):
+                layout.label(text="Warning: Not an .exe file", icon='ERROR')
+        elif self.extract_missing_files:
+            layout.label(text="Warning: CGF Converter required for extraction", icon='ERROR')
+        
+        layout.separator()
+        layout.label(text="TexConv:")
+        layout.prop(self, "texconv_path")
+        if self.texconv_path:
+            if not path.isfile(bpy.path.abspath(self.texconv_path)):
+                layout.label(text="Warning: File not found", icon='ERROR')
+            elif not self.texconv_path.lower().endswith(".exe"):
+                layout.label(text="Warning: Not an .exe file", icon='ERROR')
+        elif self.extract_missing_files:
+            layout.label(text="Warning: TexConv required for extraction", icon='ERROR')
         
         col = layout.column()        
         # Displacement settings

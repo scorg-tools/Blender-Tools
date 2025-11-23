@@ -330,13 +330,15 @@ class SCOrg_tools_misc():
             scorg_tools.register()
 
     @staticmethod
-    def show_text_popup(text_content: Union[str, list[str]] = "", header_text: str = ""):
+    def show_text_popup(text_content: Union[str, list[str]] = "", header_text: str = "", show_buttons: bool = True, is_extraction_popup: bool = False):
         """
         Show a popup with multi-line text and copy functionality
         
         Args:
             text_content (str | list[str]): Text content to display, can be a string or list of strings
             header_text (str): Header text for the popup
+            show_buttons (bool): Whether to show action buttons
+            is_extraction_popup (bool): Whether this popup triggers extraction on OK
         """
         # Convert list to string if needed
         if isinstance(text_content, list):
@@ -345,7 +347,9 @@ class SCOrg_tools_misc():
         # Use the persistent operator instead of a temporary one
         bpy.ops.scorg.text_popup('INVOKE_DEFAULT', 
                                  text_content=text_content, 
-                                 header_text=header_text)
+                                 header_text=header_text,
+                                 show_buttons=show_buttons,
+                                 is_extraction_popup=is_extraction_popup)
     
     @staticmethod
     def get_addon_version():

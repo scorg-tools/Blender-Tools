@@ -7,6 +7,9 @@ from . import tint_utils
 from . import import_utils
 from . import blender_utils
 from pathlib import Path
+import subprocess
+import os
+import shutil
 
 class VIEW3D_OT_paint_warning_popup(bpy.types.Operator):
     bl_idname = "view3d.paint_warning_popup"
@@ -235,7 +238,56 @@ class SCORG_OT_text_popup(bpy.types.Operator):
         default=""
     )
     
+    show_buttons: bpy.props.BoolProperty(
+        name="Show Buttons",
+        description="Whether to show action buttons",
+        default=True
+    )
+    
+    is_extraction_popup: bpy.props.BoolProperty(
+        name="Is Extraction Popup",
+        default=False
+    )
+
     def execute(self, context):
+        if self.is_extraction_popup:
+            prefs = bpy.context.preferences.addons[__package__].preferences
+            
+            # Only extract if the preference is enabled
+            if prefs.extract_missing_files:
+                # Set flag to indicate extraction has started
+                globals_and_threading.extraction_started = True
+                
+                # Store parameters for the timer function
+                file_list = self.text_content
+                
+                # Define the extraction function to run asynchronously
+                def run_extraction():
+                    try:
+                        success_count, fail_count, report_lines = import_utils.SCOrg_tools_import.extract_missing_files(file_list, prefs)
+                    except ValueError as e:
+                        # Report error on main thread
+                        def report_error():
+                            bpy.context.window_manager.popup_menu(lambda self, context: self.layout.label(text=str(e)), title="Error", icon='ERROR')
+                        bpy.app.timers.register(report_error, first_interval=0.1)
+                        return
+                    
+                    # Show completion popup on main thread
+                    def show_completion():
+                        # Clear missing files list so the warning button disappears
+                        import_utils.SCOrg_tools_import.missing_files = []
+                        
+                        header = f"Extraction Complete\nSuccess: {success_count} | Failed: {fail_count}\n\nNow the missing files have been extracted, please re-import the model again."
+                        misc_utils.SCOrg_tools_misc.show_text_popup(
+                            text_content="\n".join(report_lines),
+                            header_text=header,
+                            show_buttons=False
+                        )
+                    bpy.app.timers.register(show_completion, first_interval=0.1)
+                
+                # Register the extraction to run asynchronously
+                bpy.app.timers.register(run_extraction, first_interval=0.1)
+            
         return {'FINISHED'}
     
     def invoke(self, context, event):
@@ -245,7 +297,10 @@ class SCORG_OT_text_popup(bpy.types.Operator):
         layout = self.layout
         
         if self.header_text:
-            layout.label(text=self.header_text)
+            # Handle multiline headers
+            header_lines = self.header_text.split('\n')
+            for line in header_lines:
+                layout.label(text=line)
             layout.separator()
         
         box = layout.box()
@@ -259,15 +314,31 @@ class SCORG_OT_text_popup(bpy.types.Operator):
                 row.scale_y = 0.8
                 row.label(text=line)
         
-        layout.separator()
+        if self.show_buttons:
+            layout.separator()
+            
+            # Copy button
+            row = layout.row()
+            row.scale_y = 1.2
+            copy_op = row.operator("scorg.copy_text_to_clipboard", 
+                                  text="📋 Copy to Clipboard", 
+                                  icon='PASTEDOWN')
+            copy_op.text_to_copy = self.text_content
+
+            # Extract Missing Button
+            # Only show if there is content and p4k is loaded AND NOT in extraction mode (since OK does it)
+            if self.text_content and globals_and_threading.p4k and not self.is_extraction_popup:
+                extract_op = row.operator("view3d.export_missing", text="Extract Missing", icon='EXPORT')
+
+                extract_op.file_list = self.text_content
         
-        # Copy button
-        row = layout.row()
-        row.scale_y = 1.2
-        copy_op = row.operator("scorg.copy_text_to_clipboard", 
-                              text="📋 Copy to Clipboard", 
-                              icon='PASTEDOWN')
-        copy_op.text_to_copy = self.text_content
+        if self.is_extraction_popup:
+            prefs = bpy.context.preferences.addons[__package__].preferences
+            layout.separator()
+            if prefs.extract_missing_files:
+                layout.label(text="Click OK to Extract Missing Files", icon='INFO')
+            else:
+                layout.label(text="Click OK to Close", icon='INFO')
 
 class VIEW3D_OT_separate_decals(bpy.types.Operator):
     bl_idname = "view3d.separate_decals"
@@ -293,5 +364,66 @@ class VIEW3D_OT_open_preferences(bpy.types.Operator):
             bpy.context.preferences.active_section = 'ADDONS'
             from . import bl_info
             bpy.context.window_manager.addon_search = bl_info["name"]
+        
+        return {'FINISHED'}
+
+# Export Missing Operator
+class VIEW3D_OT_export_missing(bpy.types.Operator):
+    bl_idname = "view3d.export_missing"
+    bl_label = "Extract Missing"
+    bl_description = "Extract missing files from Data.p4k. Converts geometry files using cgf-converter.exe."
+
+
+
+    file_list: bpy.props.StringProperty(
+        name="File List",
+        description="Internal property to pass file list directly",
+        default="",
+        options={'SKIP_SAVE', 'HIDDEN'}
+    )
+
+    def invoke(self, context, event):
+        # File list is always provided from the missing files popup
+        return self.execute(context)
+
+    def draw(self, context):
+        # Not used since invoke() goes directly to execute()
+        pass
+
+    def execute(self, context):
+        # Set flag to indicate extraction has started
+        globals_and_threading.extraction_started = True
+        
+        # Store parameters for the timer function
+        file_list = self.file_list
+        
+        # Define the extraction function to run asynchronously
+        def run_extraction():
+            prefs = bpy.context.preferences.addons[__package__].preferences
+            
+            try:
+                success_count, fail_count, report_lines = import_utils.SCOrg_tools_import.extract_missing_files(file_list, prefs)
+            except ValueError as e:
+                # Report error on main thread
+                def report_error():
+                    bpy.context.window_manager.popup_menu(lambda self, context: self.layout.label(text=str(e)), title="Error", icon='ERROR')
+                bpy.app.timers.register(report_error, first_interval=0.1)
+                return
+            
+            # Calculate the number of files that were actually processed (excluding comments and glossmap files)
+            processed_files_count = len([f.strip() for f in file_list.split('\n') if f.strip() and not f.startswith('#') and '.ddna.glossmap' not in f.lower()])
+            
+            # Show completion popup on main thread
+            def show_completion():
+                header = f"Extraction Complete\nSuccess: {success_count} | Failed: {fail_count}\n\nNow the missing files have been extracted, please re-import the model again."
+                misc_utils.SCOrg_tools_misc.show_text_popup(
+                    text_content="\n".join(report_lines),
+                    header_text=header,
+                    show_buttons=False
+                )
+            bpy.app.timers.register(show_completion, first_interval=0.1)
+        
+        # Register the extraction to run asynchronously
+        bpy.app.timers.register(run_extraction, first_interval=0.1)
         
         return {'FINISHED'}
