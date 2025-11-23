@@ -169,18 +169,42 @@ class SCOrg_tools_import():
                 print(f"Error: .DAE file not found at: {geometry_path}")
                 if globals_and_threading.debug:
                     print(f"DEBUG: Attempted DAE import path: {geometry_path}, but file was missing")
+                
                 # Normalize path and add to missing_files list
                 missing_path = str(geometry_path).replace('\\', '/')
                 if not missing_path.lower().startswith('data/'):
                     # Ensure it starts with Data/
                     missing_path = 'Data/' + missing_path.split('Data/', 1)[-1] if 'Data/' in missing_path else 'Data/' + missing_path
+                
                 if missing_path not in __class__.missing_files and not missing_path.startswith('$') and 'ddna.glossmap' not in missing_path.lower():
                     __class__.missing_files.append(missing_path)
                     if globals_and_threading.debug:
                         print(f"Added to missing_files (dae): {missing_path}")
-                print(f"⚠️ ERROR: Failed to import DAE for {guid}: {geometry_path} - file missing")
-                # Removed popup here - will show at end of import process
-                return None
+
+                # Check if we should auto-extract
+                prefs = bpy.context.preferences.addons["scorg_tools"].preferences
+                if prefs.extract_missing_files:
+                    print(f"Attempting to auto-extract missing base file: {missing_path}")
+                    success, fail, report = __class__.extract_missing_files(missing_path, prefs)
+                    if success > 0 and geometry_path.exists():
+                        print(f"Successfully extracted {geometry_path.name}. Retrying import...")
+                        # Remove from missing files since we fixed it
+                        if missing_path in __class__.missing_files:
+                            __class__.missing_files.remove(missing_path)
+                    else:
+                        print(f"Failed to auto-extract {geometry_path.name}")
+                        return None
+                else:
+                    print(f"⚠️ ERROR: Failed to import DAE for {guid}: {geometry_path} - file missing")
+                    # Show popup for missing base file if we didn't try to extract
+                    if len(__class__.missing_files) > 0:
+                        sorted_missing_files = sorted(__class__.missing_files, key=str.lower)
+                        misc_utils.SCOrg_tools_misc.show_text_popup(
+                            text_content=sorted_missing_files,
+                            header_text="The following files were missing, please extract them with StarFab, under Data -> Data.p4k:",
+                            is_extraction_popup=True
+                        )
+                    return None
             
             # Get a set of all objects before import
             before = set(bpy.data.objects)
@@ -261,7 +285,17 @@ class SCOrg_tools_import():
             # add modifiers
             blender_utils.SCOrg_tools_blender.fix_modifiers(displacement_strength);
             globals_and_threading.item_loaded = True
-            # Removed popup here - will show at end of import process
+            
+            # Show missing files popup if there are any left (e.g. from hardpoints)
+            if len(__class__.missing_files) > 0:
+                print(f"Total missing files: {len(__class__.missing_files)}")
+                sorted_missing_files = sorted(__class__.missing_files, key=str.lower)
+                misc_utils.SCOrg_tools_misc.show_text_popup(
+                    text_content=sorted_missing_files,
+                    header_text="The following files were missing, please extract them with StarFab, under Data -> Data.p4k:",
+                    is_extraction_popup=True
+                )
+            
             __class__.set_translation_new_data_preference(reset=True)
     
     @staticmethod
