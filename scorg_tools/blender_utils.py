@@ -648,24 +648,39 @@ class SCOrg_tools_blender():
         """
         material_names = {}
         try:
+            import xml.etree.ElementTree as ET
             with open(file_path, 'rb') as f:
                 content_bytes = f.read()
             
             if content_bytes.startswith(b'CryXmlB'):
-                if globals_and_threading.debug:
-                    print(f"DEBUG: Detected CryXMLB binary format in {file_path}, converting to XML")
-                from scdatatools.cryxml import etree_from_cryxml_string
-                xml_string = etree_from_cryxml_string(content_bytes)
-                # Save the converted XML back to the file
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    f.write(xml_string)
-                if globals_and_threading.debug:
-                    print(f"DEBUG: Converted CryXMLB file saved as XML to {file_path}")
-                root = ET.fromstring(xml_string)
+                try:
+                    if globals_and_threading.debug:
+                        print(f"DEBUG: Detected CryXMLB binary format in {file_path}, converting to XML")
+                    from scdatatools.engine.cryxml import etree_from_cryxml_string
+                    root = etree_from_cryxml_string(content_bytes)
+                    if root is None:
+                        print(f"Error: Failed to convert CryXmlB for {file_path}")
+                        return {}
+                    xml_string = ET.tostring(root, encoding='unicode')
+                    if not xml_string.strip():
+                        print(f"Error: Converted XML is empty for {file_path}")
+                        return {}
+                    # Save the converted XML back to the file
+                    with open(file_path, 'w', encoding='utf-8') as f:
+                        f.write(xml_string)
+                    if globals_and_threading.debug:
+                        print(f"DEBUG: Converted CryXMLB file saved as XML to {file_path}")
+                except Exception as e:
+                    print(f"Error: Exception during CryXmlB conversion for {file_path}: {e}")
+                    return {}
             else:
                 # Assume it's XML, parse normally
-                tree = ET.parse(file_path)
-                root = tree.getroot()
+                try:
+                    tree = ET.parse(file_path)
+                    root = tree.getroot()
+                except ET.ParseError as e:
+                    print(f"Error: Failed to parse XML file {file_path}: {e}")
+                    return {}
             
             sub_materials = root.find('SubMaterials')
             if sub_materials is not None:
