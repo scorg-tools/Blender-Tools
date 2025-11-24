@@ -648,9 +648,25 @@ class SCOrg_tools_blender():
         """
         material_names = {}
         try:
-            tree = ET.parse(file_path)
-            root = tree.getroot()
-
+            with open(file_path, 'rb') as f:
+                content_bytes = f.read()
+            
+            if content_bytes.startswith(b'CryXmlB'):
+                if globals_and_threading.debug:
+                    print(f"DEBUG: Detected CryXMLB binary format in {file_path}, converting to XML")
+                from scdatatools.cryxml import etree_from_cryxml_string
+                xml_string = etree_from_cryxml_string(content_bytes)
+                # Save the converted XML back to the file
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(xml_string)
+                if globals_and_threading.debug:
+                    print(f"DEBUG: Converted CryXMLB file saved as XML to {file_path}")
+                root = ET.fromstring(xml_string)
+            else:
+                # Assume it's XML, parse normally
+                tree = ET.parse(file_path)
+                root = tree.getroot()
+            
             sub_materials = root.find('SubMaterials')
             if sub_materials is not None:
                 for index, material in enumerate(sub_materials, start=0):
@@ -663,8 +679,8 @@ class SCOrg_tools_blender():
         except FileNotFoundError:
             print(f"Error: File not found at {file_path}")
             return {}
-        except ET.ParseError:
-            print(f"Error: Could not parse XML file at {file_path}")
+        except Exception as e:
+            print(f"Error: Could not parse file at {file_path}: {e}")
             return {}
         return material_names
     
