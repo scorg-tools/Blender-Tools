@@ -661,7 +661,14 @@ class SCOrg_tools_blender():
                     if root is None:
                         print(f"Error: Failed to convert CryXmlB for {file_path}")
                         return {}
+                    # Replace spaces with underscores in material names
+                    for material in root.findall('.//Material'):
+                        name = material.get('Name')
+                        if name:
+                            material.set('Name', name.replace(' ', '_'))
                     xml_string = ET.tostring(root, encoding='unicode')
+                    from xml.dom import minidom
+                    xml_string = minidom.parseString(xml_string).toprettyxml(indent="  ")
                     if not xml_string.strip():
                         print(f"Error: Converted XML is empty for {file_path}")
                         return {}
@@ -678,6 +685,19 @@ class SCOrg_tools_blender():
                 try:
                     tree = ET.parse(file_path)
                     root = tree.getroot()
+                    # Replace spaces with underscores in material names
+                    for material in root.findall('.//Material'):
+                        name = material.get('Name')
+                        if name:
+                            material.set('Name', name.replace(' ', '_'))
+                    # Save the updated XML back to the file
+                    xml_string = ET.tostring(root, encoding='unicode')
+                    from xml.dom import minidom
+                    xml_string = minidom.parseString(xml_string).toprettyxml(indent="  ")
+                    with open(file_path, 'w', encoding='utf-8') as f:
+                        f.write(xml_string)
+                    if globals_and_threading.debug:
+                        print(f"DEBUG: Updated XML file with underscores saved to {file_path}")
                 except ET.ParseError as e:
                     print(f"Error: Failed to parse XML file {file_path}: {e}")
                     return {}
