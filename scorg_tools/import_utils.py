@@ -162,6 +162,33 @@ class SCOrg_tools_import():
             process_bones_file = geometry_path
             geometry_path = process_bones_file.pop(0)  # Get the first file in the array, which is the base armature DAE file (or sometimes the base geometry)
 
+        # Handle case where geometry path is None but we have missing files (likely a missing CDF)
+        if geometry_path is None and len(__class__.missing_files) > 0:
+            prefs = bpy.context.preferences.addons["scorg_tools"].preferences
+            if prefs.extract_missing_files:
+                if globals_and_threading.debug: print("Attempting to extract missing base files (CDF)...")
+                
+                # We need to extract the files that were just added to missing_files
+                # Since we can't easily isolate just the new ones without tracking, 
+                # we'll just pass the whole list (extract_missing_files handles duplicates)
+                
+                # Convert list to newline-separated string
+                missing_files_str = "\n".join(__class__.missing_files)
+                
+                # Extract synchronously
+                success, fail, report = __class__.extract_missing_files(missing_files_str, prefs)
+                
+                if success > 0:
+                    print(f"Successfully extracted {success} missing base files. Retrying import...")
+                    # Retry getting geometry path
+                    geometry_path = __class__.get_geometry_path(guid = guid)
+                    
+                    # Check if it's a list again (CDF)
+                    if isinstance(geometry_path, list):
+                        if globals_and_threading.debug: print(f"DEBUG: CDF XML file found after retry with references to: {geometry_path}")
+                        process_bones_file = geometry_path
+                        geometry_path = process_bones_file.pop(0)
+
         # load the main .dae
         if geometry_path:
             if globals_and_threading.debug: print(f"Loading geo: {geometry_path}")
@@ -480,6 +507,17 @@ class SCOrg_tools_import():
                                             return file_array
                                         else:
                                             print(f"⚠️ CDF XML file not found: {file_path}. Please extract it with StarFab, under Data -> Data.p4k")
+                                            # Add to missing files
+                                            try:
+                                                missing_path = str(file_path.relative_to(__class__.extract_dir)).replace('\\', '/')
+                                            except ValueError:
+                                                missing_path = str(file_path).replace('\\', '/')
+                                                
+                                            if not missing_path.lower().startswith('data/'):
+                                                missing_path = 'Data/' + missing_path.split('Data/', 1)[-1] if 'Data/' in missing_path else 'Data/' + missing_path
+                                            
+                                            if missing_path not in __class__.missing_files:
+                                                __class__.missing_files.append(missing_path)
                                             return None
                                     dae_path = file_path.with_suffix('.dae')
                                     if globals_and_threading.debug: print(f'Found geometry: {dae_path}')
@@ -1868,9 +1906,9 @@ class SCOrg_tools_import():
         # Skip .ddna.glossmap* files
         files_to_process = [f for f in files_to_process if '.ddna.glossmap' not in f.lower()]
         
-        conversion_exts = ['.cga', '.cgf', '.chr', '.skin', '.skinm', '.cds', '.chr', '.chrparams']
+        conversion_exts = ['.chr', '.cga', '.cgf', '.skin']
         texture_exts = ['.tif', '.png', '.tga']
-        supported_exts = conversion_exts + ['.mtl'] + texture_exts
+        supported_exts = conversion_exts + ['.mtl', '.chrparams', '.skinm', '.cdf'] + texture_exts
         
         success_count = 0
         fail_count = 0
@@ -1910,6 +1948,11 @@ class SCOrg_tools_import():
                     # Only map to geometry formats, not .mtl
                     for ext in conversion_exts:
                         candidate_paths.append(path_obj.with_suffix(ext).as_posix())
+                        # Handle _CHR.chr and _SKIN.skin naming convention
+                        if ext == '.chr':
+                            candidate_paths.append(path_obj.with_name(path_obj.stem + "_CHR" + ext).as_posix())
+                        elif ext == '.skin':
+                            candidate_paths.append(path_obj.with_name(path_obj.stem + "_SKIN" + ext).as_posix())
                 elif suffix in texture_exts:
                     # Map texture request to .dds source
                     candidate_paths.append(path_obj.with_suffix('.dds').as_posix())
@@ -1980,7 +2023,7 @@ class SCOrg_tools_import():
                     # Convert if it's a geometry file
                     if extracted_path.suffix.lower() in conversion_exts:
                         # Extract companion files needed for conversion
-                        companion_exts = ['.cgam', '.chrparams', '.meshsetup']
+                        companion_exts = ['.cgam', '.chrparams', '.meshsetup', '.skinm']
                         companion_files = []
                         
                         for comp_ext in companion_exts:
@@ -2037,7 +2080,9 @@ class SCOrg_tools_import():
                                 
                                 if result.returncode == 0:
                                     # Delete the original file and all companion files
-                                    files_to_delete = [extracted_path] + companion_files
+                                    # But keep .chr, .skinm and .cdf files as requested
+                                    files_to_delete = [f for f in [extracted_path] + companion_files 
+                                                       if f.suffix.lower() not in ['.chr', '.skinm', '.cdf']]
                                     deleted_count = 0
                                     
                                     for file_to_del in files_to_delete:
@@ -2047,7 +2092,22 @@ class SCOrg_tools_import():
                                         except Exception as e:
                                             print(f"Failed to delete {file_to_del.name}: {e}")
                                     
-                                    msg = f"Extracted, Converted & Cleaned: {extracted_path.name}"
+                                    # Check if we need to rename the result
+                                    # If we extracted X_CHR.chr, we got X_CHR.dae
+                                    # But if we wanted X.dae (and X != X_CHR), we should rename it
+                                    # But if we wanted X.dae (and X != X_CHR), we should rename it
+                                    converted_dae = extracted_path.with_suffix('.dae')
+                                    # target_dae should be in the same directory as extracted_path, but with the name requested in search_path
+                                    target_dae = extracted_path.with_name(Path(search_path).name)
+                                    
+                                    if converted_dae.exists() and not target_dae.exists() and converted_dae.name != target_dae.name:
+                                        try:
+                                            converted_dae.rename(target_dae)
+                                            msg = f"Extracted, Converted & Renamed: {target_dae.name}"
+                                        except Exception as e:
+                                            msg = f"Extracted & Converted: {extracted_path.name} (Rename failed: {e})"
+                                    else:
+                                        msg = f"Extracted, Converted & Cleaned: {extracted_path.name}"
                                     print(msg)
                                     report_lines.append(f"✅ {msg}")
                                     success_count += 1
