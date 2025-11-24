@@ -198,7 +198,9 @@ class SCOrg_tools_import():
                     print(f"⚠️ ERROR: Failed to import DAE for {guid}: {geometry_path} - file missing")
                     # Show popup for missing base file if we didn't try to extract
                     if len(__class__.missing_files) > 0:
-                        sorted_missing_files = sorted(__class__.missing_files, key=str.lower)
+                        # De-duplicate the list
+                        unique_missing_files = list(set(__class__.missing_files))
+                        sorted_missing_files = sorted(unique_missing_files, key=str.lower)
                         misc_utils.SCOrg_tools_misc.show_text_popup(
                             text_content=sorted_missing_files,
                             header_text="The following files were missing, please extract them with StarFab, under Data -> Data.p4k:",
@@ -289,7 +291,9 @@ class SCOrg_tools_import():
             # Show missing files popup if there are any left (e.g. from hardpoints)
             if len(__class__.missing_files) > 0:
                 print(f"Total missing files: {len(__class__.missing_files)}")
-                sorted_missing_files = sorted(__class__.missing_files, key=str.lower)
+                # De-duplicate the list
+                unique_missing_files = list(set(__class__.missing_files))
+                sorted_missing_files = sorted(unique_missing_files, key=str.lower)
                 misc_utils.SCOrg_tools_misc.show_text_popup(
                     text_content=sorted_missing_files,
                     header_text="The following files were missing, please extract them with StarFab, under Data -> Data.p4k:",
@@ -896,7 +900,9 @@ class SCOrg_tools_import():
         
         print(f"Total missing files: {len(__class__.missing_files)}")
         if len(__class__.missing_files) > 0:
-            sorted_missing_files = sorted(__class__.missing_files, key=str.lower)
+            # De-duplicate the list
+            unique_missing_files = list(set(__class__.missing_files))
+            sorted_missing_files = sorted(unique_missing_files, key=str.lower)
             misc_utils.SCOrg_tools_misc.show_text_popup(
                 text_content=sorted_missing_files,
                 header_text="The following files were missing, please extract them with StarFab, under Data -> Data.p4k:",
@@ -949,9 +955,15 @@ class SCOrg_tools_import():
         # Updated regex pattern to match the actual scdatatools warning format
         missing_texture_pattern = r'missing texture for mat ([^:]+): (.+?)(?:\n|$)'
         missing_textures = re.findall(missing_texture_pattern, captured_output)
-                
+        
+        # Regex for missing sub-materials
+        missing_submat_pattern = r'could not find sub-material file "(.+?)"'
+        missing_submats = re.findall(missing_submat_pattern, captured_output)
+
         # Convert to full paths and add to missing files
         missing_texture_paths = []
+        
+        # Process textures
         if missing_textures:
             for material_name, texture_path in missing_textures:
                 tex_path = Path(texture_path)
@@ -966,19 +978,54 @@ class SCOrg_tools_import():
                         if not rel_tex.lower().startswith("data/"):
                             rel_tex = "Data/" + rel_tex
                 missing_texture_paths.append(rel_tex)
+
+        # Process sub-materials
+        if missing_submats:
+            for submat_path in missing_submats:
+                mat_path = Path(submat_path)
+                try:
+                    rel_mat = str(mat_path.relative_to(__class__.extract_dir)).replace("\\", "/")
+                except ValueError:
+                    rel_mat = str(mat_path).replace("\\", "/")
+                
+                # Handle absolute paths that might include the extract dir
+                if Path(rel_mat).is_absolute():
+                    extract_str = str(__class__.extract_dir)
+                    # Check if the absolute path starts with the extract dir
+                    # Normalize separators for comparison
+                    norm_extract_str = extract_str.replace("\\", "/")
+                    norm_rel_mat = rel_mat.replace("\\", "/")
+                    
+                    if norm_rel_mat.lower().startswith(norm_extract_str.lower()):
+                        rel_mat = norm_rel_mat[len(norm_extract_str):].lstrip('/').lstrip('\\')
+                    else:
+                        # If it's an absolute path but not in extract dir, try to find "Data/" part
+                        # e.g. D:/Data/materials/... -> Data/materials/...
+                        parts = norm_rel_mat.split('/')
+                        if 'Data' in parts:
+                            data_index = parts.index('Data')
+                            rel_mat = '/'.join(parts[data_index:])
+                        elif 'data' in parts:
+                             data_index = parts.index('data')
+                             rel_mat = '/'.join(parts[data_index:])
+
+                if not rel_mat.lower().startswith("data/"):
+                    rel_mat = "Data/" + rel_mat
+                
+                missing_texture_paths.append(rel_mat)
             
-            # Make unique list and add to missing_files
-            unique_missing = list(set(missing_texture_paths))
-            for missing_path in unique_missing:
-                # Skip ddna.glossmap files
-                if 'ddna.glossmap' in missing_path.lower():
-                    continue
-                if missing_path not in __class__.missing_files and not missing_path.startswith('$'):
-                    __class__.missing_files.append(missing_path)
-            
-            if globals_and_threading.debug:
-                print(f"DEBUG: Found {len(unique_missing)} unique missing texture paths")
+        # Make unique list and add to missing_files
+        unique_missing = list(set(missing_texture_paths))
+        for missing_path in unique_missing:
+            # Skip ddna.glossmap files
+            if 'ddna.glossmap' in missing_path.lower():
+                continue
+            if missing_path not in __class__.missing_files and not missing_path.startswith('$'):
+                __class__.missing_files.append(missing_path)
         
+        if globals_and_threading.debug:
+            print(f"DEBUG: Found {len(unique_missing)} unique missing texture/material paths")
+    
         return missing_texture_paths
 
     @staticmethod
