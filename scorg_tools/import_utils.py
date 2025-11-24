@@ -1868,8 +1868,8 @@ class SCOrg_tools_import():
         # Skip .ddna.glossmap* files
         files_to_process = [f for f in files_to_process if '.ddna.glossmap' not in f.lower()]
         
-        conversion_exts = ['.cga', '.cgf', '.chr', '.skin']
-        texture_exts = ['.tif', '.png', '.jpg', '.jpeg', '.tga', '.bmp']
+        conversion_exts = ['.cga', '.cgf', '.chr', '.skin', '.skinm', '.cds', '.chr', '.chrparams']
+        texture_exts = ['.tif', '.png', '.tga']
         supported_exts = conversion_exts + ['.mtl'] + texture_exts
         
         success_count = 0
