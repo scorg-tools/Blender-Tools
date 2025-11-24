@@ -51,6 +51,14 @@ class SCOrg_tools_AddonPreferences(bpy.types.AddonPreferences):
         default=True
     )
 
+    max_extraction_threads: bpy.props.IntProperty(
+        name="Max Extraction Threads",
+        description="Maximum number of threads to use for file extraction and conversion",
+        default=4,
+        min=1,
+        max=32
+    )
+
     cgf_converter_path: StringProperty(
         name="CGF Converter Path",
         subtype='FILE_PATH',
@@ -206,6 +214,8 @@ class SCOrg_tools_AddonPreferences(bpy.types.AddonPreferences):
                 layout.label(text=f"Directory '{objects_dir}' not found. This doesn't appear to be the correct folder.", icon='ERROR')
         
         layout.prop(self, "extract_missing_files")
+        if self.extract_missing_files:
+            layout.prop(self, "max_extraction_threads")
         
         layout.separator()
         layout.label(text="CGF Converter:")

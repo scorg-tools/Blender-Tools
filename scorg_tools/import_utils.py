@@ -979,6 +979,64 @@ class SCOrg_tools_import():
         return bool(re.match(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", str(s)))
     
     @staticmethod
+    def case_insensitive_path_exists(base_path, relative_path):
+        """
+        Check if a file exists, case-insensitively.
+        
+        Args:
+            base_path: Base directory path (Path object or string)
+            relative_path: Relative path to check (string)
+        
+        Returns:
+            bool: True if file exists (with any casing), False otherwise
+        """
+        from pathlib import Path
+        
+        base_path = Path(base_path)
+        
+        # Strip "Data/" or "data/" prefix to match extraction behavior
+        # Files are extracted WITHOUT the Data/ prefix
+        check_path = relative_path
+        if check_path.lower().startswith("data/"):
+            check_path = check_path[5:]
+        elif check_path.lower().startswith("data\\"):
+            check_path = check_path[5:]
+        
+        full_path = base_path / check_path
+        
+        # Quick check first - if it exists with exact casing, return True
+        if full_path.exists():
+            return True
+        
+        # Try to find the file with different casing
+        try:
+            # Normalize the path
+            parts = Path(check_path).parts
+            current = base_path
+            
+            for part in parts:
+                # Check if current path exists and is a directory
+                if not current.exists() or not current.is_dir():
+                    return False
+                
+                # Find case-insensitive match
+                found = False
+                for item in current.iterdir():
+                    if item.name.lower() == part.lower():
+                        current = item
+                        found = True
+                        break
+                
+                if not found:
+                    return False
+            
+            return current.exists()
+        except Exception as e:
+            if globals_and_threading.debug:
+                print(f"DEBUG: Error in case_insensitive_path_exists: {e}")
+            return False
+
+    @staticmethod
     def extract_missing_textures_from_output(captured_stdout, captured_stderr):
         """
         Extract missing texture paths from captured console output.
@@ -1015,7 +1073,12 @@ class SCOrg_tools_import():
                         rel_tex = rel_tex[len(extract_str):].lstrip('/').lstrip('\\')
                         if not rel_tex.lower().startswith("data/"):
                             rel_tex = "Data/" + rel_tex
-                missing_texture_paths.append(rel_tex)
+                
+                # Only add if file doesn't exist (case-insensitively)
+                if not __class__.case_insensitive_path_exists(__class__.extract_dir, rel_tex):
+                    missing_texture_paths.append(rel_tex)
+                elif globals_and_threading.debug:
+                    print(f"DEBUG: Texture file exists with different casing, not adding to missing: {rel_tex}")
 
         # Process sub-materials
         if missing_submats:
@@ -1047,10 +1110,15 @@ class SCOrg_tools_import():
                              data_index = parts.index('data')
                              rel_mat = '/'.join(parts[data_index:])
 
-                if not rel_mat.lower().startswith("data/"):
+                # Only add Data/ prefix if the path is truly relative (not absolute)
+                if not rel_mat.lower().startswith("data/") and not Path(rel_mat).is_absolute():
                     rel_mat = "Data/" + rel_mat
                 
-                missing_texture_paths.append(rel_mat)
+                # Only add if file doesn't exist (case-insensitively)
+                if not __class__.case_insensitive_path_exists(__class__.extract_dir, rel_mat):
+                    missing_texture_paths.append(rel_mat)
+                elif globals_and_threading.debug:
+                    print(f"DEBUG: Sub-material file exists with different casing, not adding to missing: {rel_mat}")
             
         # Make unique list and add to missing_files
         unique_missing = list(set(missing_texture_paths))
@@ -1129,9 +1197,18 @@ class SCOrg_tools_import():
                                     blender_utils.SCOrg_tools_blender.fix_unmapped_materials(str(filepath))
                                 else:
                                     if globals_and_threading.debug: print(f"DEBUG: File NOT found on disk: {filepath}")
-                                    if str(filepath) not in __class__.missing_files and not str(filepath).startswith('$') and 'ddna.glossmap' not in str(filepath).lower():
-                                        __class__.missing_files.append(str(filepath))
-                                    missing_checked.append(filename)
+                                    # Normalize path
+                                    try:
+                                        missing_path = str(filepath.relative_to(__class__.extract_dir)).replace('\\', '/')
+                                    except ValueError:
+                                        missing_path = str(filepath).replace('\\', '/')
+                                    
+                                    if not missing_path.lower().startswith('data/'):
+                                        missing_path = 'Data/' + missing_path.split('Data/', 1)[-1] if 'Data/' in missing_path else 'Data/' + missing_path
+                                        
+                                    if missing_path not in __class__.missing_files and not missing_path.startswith('$') and 'ddna.glossmap' not in missing_path.lower():
+                                        __class__.missing_files.append(missing_path)
+                                        missing_checked.append(filename)
                             else:
                                 # Multiple files with same name, need to search for the correct material
                                 # Extract the material name from the Blender material name
@@ -1184,8 +1261,17 @@ class SCOrg_tools_import():
                                             continue
                                     else:
                                         if globals_and_threading.debug: print(f"DEBUG: File NOT found on disk: {filepath}")
-                                        if str(filepath) not in __class__.missing_files and not str(filepath).startswith('$') and 'ddna.glossmap' not in str(filepath).lower():
-                                            __class__.missing_files.append(str(filepath))
+                                        # Normalize path
+                                        try:
+                                            missing_path = str(filepath.relative_to(__class__.extract_dir)).replace('\\', '/')
+                                        except ValueError:
+                                            missing_path = str(filepath).replace('\\', '/')
+                                        
+                                        if not missing_path.lower().startswith('data/'):
+                                            missing_path = 'Data/' + missing_path.split('Data/', 1)[-1] if 'Data/' in missing_path else 'Data/' + missing_path
+                                            
+                                        if missing_path not in __class__.missing_files and not missing_path.startswith('$') and 'ddna.glossmap' not in missing_path.lower():
+                                            __class__.missing_files.append(missing_path)
                                 
                                 if not found_filepath:
                                     # If we didn't find the material in any of the files, assume it's the first one
@@ -1265,16 +1351,43 @@ class SCOrg_tools_import():
             from scdatatools.blender import materials
             __class__.tint_palette_node_group_name = tint_node_group.name
             if globals_and_threading.debug: print("Importing materials from files")
-            values = list(file_cache.values())
+            
+            # Convert absolute paths to paths relative to the Data directory
+            # scdatatools expects paths relative to the data_dir we pass it
+            values_relative = []
+            for abs_path in file_cache.values():
+                try:
+                    # Convert to relative path from extract_dir (the Data folder)
+                    rel_path = abs_path.relative_to(__class__.extract_dir)
+                    rel_path_str = str(rel_path)
+                    
+                    # Use forward slashes
+                    rel_path_clean = rel_path_str.replace(chr(92), '/')
+                    
+                    values_relative.append(rel_path_clean)
+                    if globals_and_threading.debug:
+                        print(f"DEBUG: Converted {abs_path} to relative path: {rel_path_clean}")
+                except ValueError:
+                    # If path is not relative to extract_dir, use absolute
+                    values_relative.append(str(abs_path))
+                    if globals_and_threading.debug:
+                        print(f"DEBUG: Could not make relative, using absolute: {abs_path}")
+            
             if globals_and_threading.debug:
-                print(f"DEBUG: Importing {len(values)} materials from files:")
-                pprint(values)
+                print(f"DEBUG: Importing {len(values_relative)} materials with data_dir={__class__.extract_dir}")
+                print(f"DEBUG: Sample relative paths:")
+                for path in values_relative[:3]:
+                    print(f"  {path}")
+                # Show all paths to verify none start with Data/
+                print(f"DEBUG: All {len(values_relative)} relative paths:")
+                for path in values_relative:
+                    print(f"  {path}")
             
             # Use misc_utils to capture console output
             _, captured_stdout, captured_stderr = misc_utils.SCOrg_tools_misc.capture_console_output(
                 materials.load_materials, 
-                values, 
-                data_dir='', 
+                values_relative, 
+                data_dir=__class__.extract_dir, 
                 tint_palette_node_group=tint_node_group
             )
             
@@ -1846,7 +1959,13 @@ class SCOrg_tools_import():
                     continue
                 
                 filename = Path(full_path).name.lower()
-                clean_path = full_path.removeprefix("Data/")
+                
+                # Robustly strip "Data/" prefix (case-insensitive, handles backslashes)
+                clean_path = full_path
+                if clean_path.lower().startswith("data/"):
+                    clean_path = clean_path[5:]
+                elif clean_path.lower().startswith("data\\"):
+                    clean_path = clean_path[5:]
                 
                 # Handle multiple files with same filename
                 if filename in mtl_lookup:
@@ -1918,347 +2037,347 @@ class SCOrg_tools_import():
         # Start progress using the same system as other functions
         misc_utils.SCOrg_tools_misc.update_progress("Starting extraction...", 0, len(files_to_process), force_update=True, spinner_type="arc")
         
-        try:
-            for i, file_path_str in enumerate(files_to_process):
-                misc_utils.SCOrg_tools_misc.update_progress(f"Extracting {Path(file_path_str).name}", i, len(files_to_process), spinner_type="arc")
+        import concurrent.futures
+        
+        # Helper function for processing a single file (Worker Thread)
+        def process_single_file(task_data):
+            # Unpack task data
+            search_path = task_data['search_path']
+            p4k_file = task_data['p4k_file']
+            extract_dir = task_data['extract_dir']
+            conversion_exts = task_data['conversion_exts']
+            cgf_converter = task_data['cgf_converter']
+            texconv_path = task_data['texconv_path']
+            texture_exts = task_data['texture_exts']
+            
+            try:
+                # Extract file manually to control the path
+                # p4k_file is a P4KInfo object
                 
-                # Normalize path for P4K search
-                search_path = file_path_str.replace("\\", "/")
-                # Ensure it starts with Data/
-                if not search_path.lower().startswith("data/"):
-                    search_path = "Data/" + search_path
+                # Get the internal filename (e.g. Data/Objects/...)
+                internal_path = p4k_file.filename
                 
-                # Fix for absolute paths that got prefixed incorrectly
-                if search_path.startswith("Data/") and ":" in search_path:
-                    path_part = search_path[5:]
-                    extract_str = str(extract_dir).replace("\\", "/")
-                    if path_part.startswith(extract_str):
-                        relative_part = path_part[len(extract_str):].lstrip('/').lstrip('\\')
-                        if not relative_part.lower().startswith("data/"):
-                            relative_part = "Data/" + relative_part
-                        search_path = relative_part
+                # Strip "Data/" prefix if present to avoid Data/Data/ structure
+                relative_path = internal_path
+                if relative_path.lower().startswith("data/"):
+                    relative_path = relative_path[5:] # Remove "Data/"
+                elif relative_path.lower().startswith("data\\"):
+                        relative_path = relative_path[5:]
                 
-                # Determine candidate paths to search
-                candidate_paths = []
-                path_obj = Path(search_path)
-                suffix = path_obj.suffix.lower()
+                # Construct the full destination path
+                final_path = extract_dir / relative_path
                 
-                if suffix == '.dae':
-                    # Try to find the source file by replacing extension
-                    # Only map to geometry formats, not .mtl
-                    for ext in conversion_exts:
-                        candidate_paths.append(path_obj.with_suffix(ext).as_posix())
-                        # Handle _CHR.chr and _SKIN.skin naming convention
-                        if ext == '.chr':
-                            candidate_paths.append(path_obj.with_name(path_obj.stem + "_CHR" + ext).as_posix())
-                        elif ext == '.skin':
-                            candidate_paths.append(path_obj.with_name(path_obj.stem + "_SKIN" + ext).as_posix())
-                elif suffix in texture_exts:
-                    # Map texture request to .dds source
-                    candidate_paths.append(path_obj.with_suffix('.dds').as_posix())
-                elif suffix in supported_exts:
-                    candidate_paths.append(search_path)
+                # Ensure parent directory exists
+                final_path.parent.mkdir(parents=True, exist_ok=True)
                 
-                matches = []
-                found_source_path = None
+                # Copy file content
+                with sc.p4k.open(p4k_file) as src, open(final_path, 'wb') as dst:
+                    shutil.copyfileobj(src, dst)
                 
-                for candidate in candidate_paths:
-                    try:
-                        # Check if file exists in P4K
-                        results = sc.p4k.search(candidate)
-                        if results:
-                            matches = results
-                            found_source_path = candidate
-                            break # Found a match, stop searching extensions
-                    except Exception as e:
-                        print(f"Error searching P4K for {candidate}: {e}")
-                        continue
-
-                if not matches:
-                    msg = f"File not found in P4K: {search_path}"
-                    print(msg)
-                    report_lines.append(f"❌ {msg}")
-                    fail_count += 1
-                    continue
+                extracted_path = final_path
                 
-                # Use the first match
-                p4k_file = matches[0]
-                
-                try:
-                    # Extract file manually to control the path
-                    # p4k_file is a P4KInfo object
+                if not extracted_path.exists():
+                    msg = f"Warning: Extracted file not found at expected path: {extracted_path}"
+                    if globals_and_threading.debug: print(msg)
+                    return (False, f"⚠️ {msg}", None)
                     
-                    # Get the internal filename (e.g. Data/Objects/...)
-                    internal_path = p4k_file.filename
+                # Convert if it's a geometry file
+                if extracted_path.suffix.lower() in conversion_exts:
+                    # Extract companion files needed for conversion
+                    companion_exts = ['.cgam', '.chrparams', '.meshsetup', '.skinm']
+                    companion_files = []
                     
-                    # Strip "Data/" prefix if present to avoid Data/Data/ structure
-                    # The extract_dir usually points to the game-data/Data folder
-                    relative_path = internal_path
-                    if relative_path.lower().startswith("data/"):
-                        relative_path = relative_path[5:] # Remove "Data/"
-                    elif relative_path.lower().startswith("data\\"):
-                         relative_path = relative_path[5:]
-                    
-                    # Construct the full destination path
-                    final_path = extract_dir / relative_path
-                    
-                    # Ensure parent directory exists
-                    final_path.parent.mkdir(parents=True, exist_ok=True)
-                    
-                    # Copy file content
-                    with sc.p4k.open(p4k_file) as src, open(final_path, 'wb') as dst:
-                        shutil.copyfileobj(src, dst)
-                    
-                    extracted_path = final_path
-                    
-                    if not extracted_path.exists():
-                        msg = f"Warning: Extracted file not found at expected path: {extracted_path}"
-                        print(msg)
-                        report_lines.append(f"⚠️ {msg}")
-                        fail_count += 1
-                        continue
+                    for comp_ext in companion_exts:
+                        companion_path_in_p4k = Path(internal_path).with_suffix(comp_ext).as_posix()
                         
-                    extracted_files.append(extracted_path)
+                        try:
+                            comp_matches = sc.p4k.search(companion_path_in_p4k)
+                            if comp_matches:
+                                comp_p4k_file = comp_matches[0]
+                                comp_internal_path = comp_p4k_file.filename
+                                
+                                # Strip "Data/" prefix
+                                comp_relative_path = comp_internal_path
+                                if comp_relative_path.lower().startswith("data/"):
+                                    comp_relative_path = comp_relative_path[5:]
+                                elif comp_relative_path.lower().startswith("data\\"):
+                                    comp_relative_path = comp_relative_path[5:]
+                                
+                                # Extract companion file
+                                comp_final_path = extract_dir / comp_relative_path
+                                comp_final_path.parent.mkdir(parents=True, exist_ok=True)
+                                
+                                with sc.p4k.open(comp_p4k_file) as src, open(comp_final_path, 'wb') as dst:
+                                    shutil.copyfileobj(src, dst)
+                                
+                                if comp_final_path.exists():
+                                    companion_files.append(comp_final_path)
+                        except Exception:
+                            pass
                     
-                    # Convert if it's a geometry file
-                    if extracted_path.suffix.lower() in conversion_exts:
-                        # Extract companion files needed for conversion
-                        companion_exts = ['.cgam', '.chrparams', '.meshsetup', '.skinm']
-                        companion_files = []
-                        
-                        for comp_ext in companion_exts:
-                            companion_path_in_p4k = Path(internal_path).with_suffix(comp_ext).as_posix()
+                    # Run cgf-converter
+                    if not cgf_converter or not os.path.exists(cgf_converter):
+                        msg = f"Extracted {extracted_path.name} but cgf-converter not found."
+                        if globals_and_threading.debug: print(msg)
+                        return (True, f"⚠️ {msg}", extracted_path)
+                    else:
+                        try:
+                            startupinfo = None
+                            if os.name == 'nt':
+                                startupinfo = subprocess.STARTUPINFO()
+                                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
                             
+                            result = subprocess.run(
+                                [cgf_converter, str(extracted_path)],
+                                capture_output=True,
+                                text=True,
+                                startupinfo=startupinfo
+                            )
+                            
+                            if result.returncode == 0:
+                                # Delete the original file and all companion files
+                                files_to_delete = [f for f in [extracted_path] + companion_files 
+                                                    if f.suffix.lower() not in ['.chr', '.skinm', '.cdf']]
+                                
+                                for file_to_del in files_to_delete:
+                                    try:
+                                        file_to_del.unlink()
+                                    except Exception:
+                                        pass
+                                
+                                # Check if we need to rename the result
+                                converted_dae = extracted_path.with_suffix('.dae')
+                                target_dae = extracted_path.with_name(Path(search_path).name)
+                                
+                                if converted_dae.exists() and not target_dae.exists() and converted_dae.name != target_dae.name:
+                                    try:
+                                        converted_dae.rename(target_dae)
+                                        msg = f"Extracted, Converted & Renamed: {target_dae.name}"
+                                    except Exception as e:
+                                        msg = f"Extracted & Converted: {extracted_path.name} (Rename failed: {e})"
+                                else:
+                                    msg = f"Extracted, Converted & Cleaned: {extracted_path.name}"
+                                if globals_and_threading.debug: print(msg)
+                                return (True, f"✅ {msg}", extracted_path)
+                            else:
+                                msg = f"Extracted {extracted_path.name} but conversion failed: {result.stderr}"
+                                if globals_and_threading.debug: print(msg)
+                                return (True, f"⚠️ {msg}", extracted_path)
+                        except Exception as e:
+                            msg = f"Extracted {extracted_path.name} but converter error: {e}"
+                            if globals_and_threading.debug: print(msg)
+                            return (True, f"⚠️ {msg}", extracted_path)
+                elif extracted_path.suffix.lower() == '.dds':
+                    # This is a texture file - extract split parts and convert with texconv
+                    if not texconv_path or not os.path.exists(texconv_path):
+                        msg = f"Extracted {extracted_path.name} but texconv not found."
+                        if globals_and_threading.debug: print(msg)
+                        return (True, f"⚠️ {msg}", extracted_path)
+                    else:
+                        # Extract all split parts (.dds.1, .dds.2, etc.)
+                        split_parts = []
+                        part_num = 1
+                        
+                        while True:
+                            split_part_path_in_p4k = f"{internal_path}.{part_num}"
                             try:
-                                comp_matches = sc.p4k.search(companion_path_in_p4k)
-                                if comp_matches:
-                                    comp_p4k_file = comp_matches[0]
-                                    comp_internal_path = comp_p4k_file.filename
+                                split_matches = sc.p4k.search(split_part_path_in_p4k)
+                                if split_matches:
+                                    split_p4k_file = split_matches[0]
+                                    split_internal_path = split_p4k_file.filename
                                     
-                                    # Strip "Data/" prefix
-                                    comp_relative_path = comp_internal_path
-                                    if comp_relative_path.lower().startswith("data/"):
-                                        comp_relative_path = comp_relative_path[5:]
-                                    elif comp_relative_path.lower().startswith("data\\"):
-                                        comp_relative_path = comp_relative_path[5:]
+                                    split_relative_path = split_internal_path
+                                    if split_relative_path.lower().startswith("data/"):
+                                        split_relative_path = split_relative_path[5:]
+                                    elif split_relative_path.lower().startswith("data\\"):
+                                        split_relative_path = split_relative_path[5:]
                                     
-                                    # Extract companion file
-                                    comp_final_path = extract_dir / comp_relative_path
-                                    comp_final_path.parent.mkdir(parents=True, exist_ok=True)
+                                    split_final_path = extract_dir / split_relative_path
+                                    split_final_path.parent.mkdir(parents=True, exist_ok=True)
                                     
-                                    with sc.p4k.open(comp_p4k_file) as src, open(comp_final_path, 'wb') as dst:
+                                    with sc.p4k.open(split_p4k_file) as src, open(split_final_path, 'wb') as dst:
                                         shutil.copyfileobj(src, dst)
                                     
-                                    if comp_final_path.exists():
-                                        companion_files.append(comp_final_path)
-                            except Exception as e:
-                                # Companion file not found or error - this is OK, not all files have all companions
-                                pass
-                        
-                         # Run cgf-converter
-                        if not cgf_converter or not os.path.exists(cgf_converter):
-                            msg = f"Extracted {extracted_path.name} but cgf-converter not found."
-                            print(msg)
-                            report_lines.append(f"⚠️ {msg}")
-                        else:
-                            # Run converter
-                            # cgf-converter.exe "path/to/file"
-                            # It usually outputs .dae in the same folder
-                            try:
-                                # Suppress window on Windows
-                                startupinfo = None
-                                if os.name == 'nt':
-                                    startupinfo = subprocess.STARTUPINFO()
-                                    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                                
-                                result = subprocess.run(
-                                    [cgf_converter, str(extracted_path)],
-                                    capture_output=True,
-                                    text=True,
-                                    startupinfo=startupinfo
-                                )
-                                
-                                if result.returncode == 0:
-                                    # Delete the original file and all companion files
-                                    # But keep .chr, .skinm and .cdf files as requested
-                                    files_to_delete = [f for f in [extracted_path] + companion_files 
-                                                       if f.suffix.lower() not in ['.chr', '.skinm', '.cdf']]
-                                    deleted_count = 0
+                                    if split_final_path.exists():
+                                        split_parts.append(split_final_path)
                                     
-                                    for file_to_del in files_to_delete:
-                                        try:
-                                            file_to_del.unlink()
-                                            deleted_count += 1
-                                        except Exception as e:
-                                            print(f"Failed to delete {file_to_del.name}: {e}")
-                                    
-                                    # Check if we need to rename the result
-                                    # If we extracted X_CHR.chr, we got X_CHR.dae
-                                    # But if we wanted X.dae (and X != X_CHR), we should rename it
-                                    # But if we wanted X.dae (and X != X_CHR), we should rename it
-                                    converted_dae = extracted_path.with_suffix('.dae')
-                                    # target_dae should be in the same directory as extracted_path, but with the name requested in search_path
-                                    target_dae = extracted_path.with_name(Path(search_path).name)
-                                    
-                                    if converted_dae.exists() and not target_dae.exists() and converted_dae.name != target_dae.name:
-                                        try:
-                                            converted_dae.rename(target_dae)
-                                            msg = f"Extracted, Converted & Renamed: {target_dae.name}"
-                                        except Exception as e:
-                                            msg = f"Extracted & Converted: {extracted_path.name} (Rename failed: {e})"
-                                    else:
-                                        msg = f"Extracted, Converted & Cleaned: {extracted_path.name}"
-                                    print(msg)
-                                    report_lines.append(f"✅ {msg}")
-                                    success_count += 1
+                                    part_num += 1
                                 else:
-                                    msg = f"Extracted {extracted_path.name} but conversion failed: {result.stderr}"
-                                    print(msg)
-                                    report_lines.append(f"⚠️ {msg}")
-                                    # Still count as success for extraction? Maybe.
-                                    success_count += 1 
-                            except Exception as e:
-                                msg = f"Extracted {extracted_path.name} but converter error: {e}"
-                                print(msg)
-                                report_lines.append(f"⚠️ {msg}")
-                                success_count += 1
-                    elif extracted_path.suffix.lower() == '.dds':
-                        # This is a texture file - extract split parts and convert with texconv
-                        texconv_path = prefs.texconv_path
-                        
-                        if not texconv_path or not os.path.exists(texconv_path):
-                            msg = f"Extracted {extracted_path.name} but texconv not found."
-                            print(msg)
-                            report_lines.append(f"⚠️ {msg}")
-                            success_count += 1
-                        else:
-                            # Extract all split parts (.dds.1, .dds.2, etc.)
-                            split_parts = []
-                            part_num = 1
-                            
-                            while True:
-                                split_part_path_in_p4k = f"{internal_path}.{part_num}"
-                                
-                                try:
-                                    split_matches = sc.p4k.search(split_part_path_in_p4k)
-                                    if split_matches:
-                                        split_p4k_file = split_matches[0]
-                                        split_internal_path = split_p4k_file.filename
-                                        
-                                        # Strip "Data/" prefix
-                                        split_relative_path = split_internal_path
-                                        if split_relative_path.lower().startswith("data/"):
-                                            split_relative_path = split_relative_path[5:]
-                                        elif split_relative_path.lower().startswith("data\\"):
-                                            split_relative_path = split_relative_path[5:]
-                                        
-                                        # Extract split part
-                                        split_final_path = extract_dir / split_relative_path
-                                        split_final_path.parent.mkdir(parents=True, exist_ok=True)
-                                        
-                                        with sc.p4k.open(split_p4k_file) as src, open(split_final_path, 'wb') as dst:
-                                            shutil.copyfileobj(src, dst)
-                                        
-                                        if split_final_path.exists():
-                                            split_parts.append(split_final_path)
-                                        
-                                        part_num += 1
-                                    else:
-                                        # No more parts found
-                                        break
-                                except Exception:
-                                    # Part not found or error - stop looking
                                     break
-                            
-                            # Combine split parts into the base file if any
-                            if split_parts:
-                                split_parts.sort(key=lambda p: int(p.suffix[1:]))  # Sort by .1, .2, etc.
-                                with open(extracted_path, 'ab') as base_file:
-                                    for part in split_parts:
-                                        with open(part, 'rb') as part_file:
-                                            shutil.copyfileobj(part_file, base_file)
-                                        part.unlink()  # Delete the part after appending
-                                split_parts = []  # Clear the list since deleted
-                            
-                            # Determine output format from original request
-                            original_suffix = Path(file_path_str).suffix.lower()
-                            if original_suffix in texture_exts:
-                                output_format = original_suffix[1:]  # Remove the dot
-                            else:
-                                output_format = 'tif'  # Default to tif
-                            
-                            # Check if the DDS is BC5_SNORM, and if so, skip conversion to match StarFab behavior
-                            is_bc5 = False
-                            try:
-                                info_result = subprocess.run([texconv_path, '-nologo', '-fileinfo', str(extracted_path)], capture_output=True, text=True, timeout=10)
-                                if 'BC5_SNORM' in info_result.stdout:
-                                    is_bc5 = True
                             except Exception:
-                                pass  # If info fails, proceed with conversion
-                            
-                            if is_bc5:
-                                # Convert BC5_SNORM with R8G8B8A8_UNORM format to allow conversion to requested format
-                                extra_args = ['-f', 'R8G8B8A8_UNORM']
-                            else:
-                                extra_args = []
-                            
-                            # Run texconv
-                            try:
-                                startupinfo = None
-                                if os.name == 'nt':
-                                    startupinfo = subprocess.STARTUPINFO()
-                                    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                                
-                                # texconv [extra_args] -ft <format> <input.dds> -o <output_dir>
-                                cmd = [texconv_path, '-y'] + extra_args + ['-ft', output_format, str(extracted_path), '-o', str(extracted_path.parent)]
-                                result = subprocess.run(
-                                    cmd,
-                                    capture_output=True,
-                                    text=True,
-                                    startupinfo=startupinfo
-                                )
-                                
-                                if result.returncode == 0:
-                                        # Delete all DDS files (base + split parts)
-                                        files_to_delete = [extracted_path] + split_parts
-                                        deleted_count = 0
-                                        
-                                        for file_to_del in files_to_delete:
-                                            try:
-                                                file_to_del.unlink()
-                                                deleted_count += 1
-                                            except Exception as e:
-                                                print(f"Failed to delete {file_to_del.name}: {e}")
-                                        
-                                        msg = f"Extracted, Converted & Cleaned: {extracted_path.name}"
-                                        print(msg)
-                                        report_lines.append(f"✅ {msg}")
-                                        success_count += 1
-                                else:
-                                    msg = f"Extracted {extracted_path.name} but conversion failed: stdout={result.stdout}, stderr={result.stderr}"
-                                    print(msg)
-                                    report_lines.append(f"⚠️ {msg}")
-                                    success_count += 1
-                            except Exception as e:
-                                msg = f"Extracted {extracted_path.name} but texconv error: {e}"
-                                print(msg)
-                                report_lines.append(f"⚠️ {msg}")
-                                success_count += 1
-                    else:
-                        #Non-convertible file (e.g. .mtl)
-                        msg = f"Extracted: {extracted_path.name}"
-                        print(msg)
-                        report_lines.append(f"✅ {msg}")
-                        success_count += 1
+                                break
                         
-                except Exception as e:
-                    msg = f"Error processing {file_path_str}: {e}"
-                    print(msg)
-                    report_lines.append(f"❌ {msg}")
-                    fail_count += 1
+                        # Combine split parts
+                        if split_parts:
+                            split_parts.sort(key=lambda p: int(p.suffix[1:]))
+                            with open(extracted_path, 'ab') as base_file:
+                                for part in split_parts:
+                                    with open(part, 'rb') as part_file:
+                                        shutil.copyfileobj(part_file, base_file)
+                                    part.unlink()
+                            split_parts = []
+                        
+                        # Determine output format
+                        original_suffix = Path(search_path).suffix.lower()
+                        if original_suffix in texture_exts:
+                            output_format = original_suffix[1:]
+                        else:
+                            output_format = 'tif'
+                        
+                        # Check BC5_SNORM
+                        is_bc5 = False
+                        try:
+                            info_result = subprocess.run([texconv_path, '-nologo', '-fileinfo', str(extracted_path)], capture_output=True, text=True, timeout=10)
+                            if 'BC5_SNORM' in info_result.stdout:
+                                is_bc5 = True
+                        except Exception:
+                            pass
+                        
+                        extra_args = ['-f', 'R8G8B8A8_UNORM'] if is_bc5 else []
+                        
+                        # Run texconv
+                        try:
+                            startupinfo = None
+                            if os.name == 'nt':
+                                startupinfo = subprocess.STARTUPINFO()
+                                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                            
+                            cmd = [texconv_path, '-y'] + extra_args + ['-ft', output_format, str(extracted_path), '-o', str(extracted_path.parent)]
+                            result = subprocess.run(
+                                cmd,
+                                capture_output=True,
+                                text=True,
+                                startupinfo=startupinfo
+                            )
+                            
+                            if result.returncode == 0:
+                                # Delete all DDS files
+                                files_to_delete = [extracted_path] + split_parts
+                                for file_to_del in files_to_delete:
+                                    try:
+                                        file_to_del.unlink()
+                                    except Exception:
+                                        pass
+                                
+                                msg = f"Extracted, Converted & Cleaned: {extracted_path.name}"
+                                if globals_and_threading.debug: print(msg)
+                                return (True, f"✅ {msg}", extracted_path)
+                            else:
+                                msg = f"Extracted {extracted_path.name} but conversion failed: {result.stderr}"
+                                if globals_and_threading.debug: print(msg)
+                                return (True, f"⚠️ {msg}", extracted_path)
+                        except Exception as e:
+                            msg = f"Extracted {extracted_path.name} but converter error: {e}"
+                            if globals_and_threading.debug: print(msg)
+                            return (True, f"⚠️ {msg}", extracted_path)
+                else:
+                    msg = f"Extracted: {extracted_path.name}"
+                    if globals_and_threading.debug: print(msg)
+                    return (True, f"✅ {msg}", extracted_path)
+                
+            except Exception as e:
+                msg = f"Failed to extract {search_path}: {e}"
+                print(msg)
+                return (False, f"❌ {msg}", None)
+
+        # Main Thread: Pre-calculate tasks
+        tasks = []
+        misc_utils.SCOrg_tools_misc.update_progress("Planning extraction...", 0, len(files_to_process), force_update=True, spinner_type="arc")
+        
+        for file_path_str in files_to_process:
+            # Normalize path
+            search_path = file_path_str.replace("\\", "/")
+            if not search_path.lower().startswith("data/"):
+                search_path = "Data/" + search_path
+            
+            if search_path.startswith("Data/") and ":" in search_path:
+                path_part = search_path[5:]
+                extract_str = str(extract_dir).replace("\\", "/")
+                if path_part.startswith(extract_str):
+                    relative_part = path_part[len(extract_str):].lstrip('/').lstrip('\\')
+                    if not relative_part.lower().startswith("data/"):
+                        relative_part = "Data/" + relative_part
+                    search_path = relative_part
+            
+            # Determine candidate paths
+            candidate_paths = []
+            path_obj = Path(search_path)
+            suffix = path_obj.suffix.lower()
+            
+            if suffix == '.dae':
+                for ext in conversion_exts:
+                    candidate_paths.append(path_obj.with_suffix(ext).as_posix())
+                    if ext == '.chr':
+                        candidate_paths.append(path_obj.with_name(path_obj.stem + "_CHR" + ext).as_posix())
+                    elif ext == '.skin':
+                        candidate_paths.append(path_obj.with_name(path_obj.stem + "_SKIN" + ext).as_posix())
+            elif suffix in texture_exts:
+                candidate_paths.append(path_obj.with_suffix('.dds').as_posix())
+            elif suffix in supported_exts:
+                candidate_paths.append(search_path)
+            
+            # Search P4K (Fast, in-memory)
+            found_p4k_file = None
+            for candidate in candidate_paths:
+                try:
+                    results = sc.p4k.search(candidate)
+                    if results:
+                        found_p4k_file = results[0]
+                        break
+                except Exception:
                     continue
-        finally:
-            # Clear progress
-            misc_utils.SCOrg_tools_misc.update_progress(hide_message=True, hide_progress=True, force_update=True)
+            
+            if found_p4k_file:
+                tasks.append({
+                    'search_path': search_path,
+                    'p4k_file': found_p4k_file,
+                    'extract_dir': extract_dir,
+                    'conversion_exts': conversion_exts,
+                    'cgf_converter': cgf_converter,
+                    'texconv_path': prefs.texconv_path,
+                    'texture_exts': texture_exts
+                })
+            else:
+                msg = f"File not found in P4K: {search_path}"
+                if globals_and_threading.debug: print(msg)
+                report_lines.append(f"❌ {msg}")
+                fail_count += 1
+
+        # Use ThreadPoolExecutor for parallel processing
+        max_workers = getattr(prefs, 'max_extraction_threads', 4)
+        if globals_and_threading.debug: print(f"DEBUG: Starting extraction of {len(tasks)} files with {max_workers} workers")
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit tasks
+            future_to_task = {executor.submit(process_single_file, task): task for task in tasks}
+            
+            completed_count = 0
+            total_tasks = len(tasks)
+            
+            for future in concurrent.futures.as_completed(future_to_task):
+                completed_count += 1
+                try:
+                    success, msg, extracted_path = future.result()
+                    if success:
+                        success_count += 1
+                        if extracted_path:
+                            extracted_files.append(extracted_path)
+                    else:
+                        fail_count += 1
+                    if msg:
+                        report_lines.append(msg)
+                except Exception as exc:
+                    print(f'Task generated an exception: {exc}')
+                    fail_count += 1
+                    report_lines.append(f"❌ Exception: {exc}")
+                
+                # Throttle progress updates (every 5% or at least every 10 items)
+                if total_tasks > 0:
+                    should_update = (completed_count % max(1, int(total_tasks * 0.05)) == 0) or (completed_count == total_tasks)
+                    if should_update:
+                        misc_utils.SCOrg_tools_misc.update_progress(f"Processed {completed_count}/{total_tasks}", completed_count, total_tasks, spinner_type="arc")
+        
+        # Clear progress
+        misc_utils.SCOrg_tools_misc.update_progress(hide_message=True, hide_progress=True, force_update=True)
         
         return success_count, fail_count, report_lines

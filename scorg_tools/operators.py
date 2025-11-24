@@ -220,6 +220,18 @@ class SCORG_OT_copy_text_to_clipboard(bpy.types.Operator):
         context.window_manager.clipboard = self.text_to_copy
         return {'FINISHED'}
 
+
+
+class SCORG_OT_cancel(bpy.types.Operator):
+    """Cancel and close the popup"""
+    bl_idname = "scorg.cancel"
+    bl_label = "Cancel"
+    bl_description = "Close the popup without taking action"
+    bl_options = {'REGISTER', 'INTERNAL'}
+    
+    def execute(self, context):
+        return {'CANCELLED'}
+
 class SCORG_OT_text_popup(bpy.types.Operator):
     """Display text in a popup dialog"""
     bl_idname = "scorg.text_popup"
@@ -291,7 +303,7 @@ class SCORG_OT_text_popup(bpy.types.Operator):
         return {'FINISHED'}
     
     def invoke(self, context, event):
-        return context.window_manager.invoke_props_dialog(self, width=600)
+        return context.window_manager.invoke_popup(self, width=600)
     
     def draw(self, context):
         layout = self.layout
@@ -314,31 +326,42 @@ class SCORG_OT_text_popup(bpy.types.Operator):
                 row.scale_y = 0.8
                 row.label(text=line)
         
-        if self.show_buttons:
-            layout.separator()
-            
-            # Copy button
-            row = layout.row()
-            row.scale_y = 1.2
-            copy_op = row.operator("scorg.copy_text_to_clipboard", 
-                                  text="📋 Copy to Clipboard", 
-                                  icon='PASTEDOWN')
-            copy_op.text_to_copy = self.text_content
+        layout.separator()
+        
+        # Copy button
+        row = layout.row()
+        row.scale_y = 1.2
+        copy_op = row.operator("scorg.copy_text_to_clipboard", 
+                              text="📋 Copy to Clipboard", 
+                              icon='PASTEDOWN')
+        copy_op.text_to_copy = self.text_content
 
-            # Extract Missing Button
-            # Only show if there is content and p4k is loaded AND NOT in extraction mode (since OK does it)
-            if self.text_content and globals_and_threading.p4k and not self.is_extraction_popup:
-                extract_op = row.operator("view3d.export_missing", text="Extract Missing", icon='EXPORT')
-
-                extract_op.file_list = self.text_content
+        layout.separator()
+        
+        # Action Buttons
+        row = layout.row()
+        row.scale_y = 1.2
         
         if self.is_extraction_popup:
             prefs = bpy.context.preferences.addons[__package__].preferences
-            layout.separator()
             if prefs.extract_missing_files:
-                layout.label(text="Click OK to Extract Missing Files", icon='INFO')
+                # Instructions
+                layout.label(text="Click 'Extract' to continue or hit Esc to cancel extracting missing files", icon='INFO')
+                
+                # Extract Button
+                extract_op = row.operator("view3d.export_missing", text="Extract Missing", icon='EXPORT')
+                extract_op.file_list = self.text_content
             else:
-                layout.label(text="Click OK to Close", icon='INFO')
+                layout.label(text="Click OK or Cancel to Close", icon='INFO')
+                # Standard OK button
+                row.operator("scorg.cancel", text="OK", icon='CHECKMARK')
+        else:
+            # Standard OK button for non-extraction popups (like completion message)
+            row.operator("scorg.cancel", text="OK", icon='CHECKMARK')
+    
+    def cancel(self, context):
+        """Called when user clicks Cancel - just close the popup without doing anything"""
+        pass
 
 class VIEW3D_OT_separate_decals(bpy.types.Operator):
     bl_idname = "view3d.separate_decals"

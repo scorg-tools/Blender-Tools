@@ -1,7 +1,7 @@
 bl_info = {
     "name": "SCOrg.tools Blender Tools beta",
     "author": "Star-Destroyer@scorg.tools",
-    "version": (1, 3, 1),
+    "version": (1, 3, 2),
     "blender": (3, 6, 0),
     "location": "View3D > Sidebar > SCOrg.tools",
     "description": "Tools to supplement StarFab",
@@ -108,6 +108,7 @@ classes = (
     operators.VIEW3D_OT_separate_decals,
     operators.VIEW3D_OT_open_preferences,
     operators.SCORG_OT_copy_text_to_clipboard,
+    operators.SCORG_OT_cancel,
     operators.SCORG_OT_text_popup,
     preferences.SCOrg_tools_AddonPreferences,
     preferences.SCOrg_tools_OT_SelectP4K,
