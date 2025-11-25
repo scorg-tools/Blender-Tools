@@ -2469,4 +2469,6 @@ class SCOrg_tools_import():
         # Clear progress
         misc_utils.SCOrg_tools_misc.update_progress(hide_message=True, hide_progress=True, force_update=True)
         
+        print(f"Extraction completed: {success_count} succeeded, {fail_count} failed")
+        
         return success_count, fail_count, report_lines
