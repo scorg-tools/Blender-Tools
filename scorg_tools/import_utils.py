@@ -612,6 +612,12 @@ class SCOrg_tools_import():
 
     @staticmethod
     def duplicate_hierarchy_linked(original_obj, parent_empty):
+        if original_obj is None:
+            return None
+        try:
+            _ = original_obj.name
+        except ReferenceError:
+            return None
         new_obj = original_obj.copy()
         new_obj.data = original_obj.data  # share mesh data (linked duplicate)
         new_obj.animation_data_clear()
@@ -2096,7 +2102,7 @@ class SCOrg_tools_import():
         def process_single_file(task_data):
             # Unpack task data
             search_path = task_data['search_path']
-            p4k_file = task_data['p4k_file']
+            content = task_data['content']
             extract_dir = task_data['extract_dir']
             conversion_exts = task_data['conversion_exts']
             cgf_converter = task_data['cgf_converter']
@@ -2105,13 +2111,13 @@ class SCOrg_tools_import():
             
             try:
                 # Extract file manually to control the path
-                # p4k_file is a P4KInfo object
+                # content is the file data
                 
                 # Get the internal filename (e.g. Data/Objects/...)
-                internal_path = p4k_file.filename
+                # Since we have content, we don't need p4k_file anymore
                 
                 # Strip "Data/" prefix if present to avoid Data/Data/ structure
-                relative_path = internal_path
+                relative_path = search_path
                 if relative_path.lower().startswith("data/"):
                     relative_path = relative_path[5:] # Remove "Data/"
                 elif relative_path.lower().startswith("data\\"):
@@ -2124,8 +2130,8 @@ class SCOrg_tools_import():
                 final_path.parent.mkdir(parents=True, exist_ok=True)
                 
                 # Copy file content
-                with sc.p4k.open(p4k_file) as src, open(final_path, 'wb') as dst:
-                    shutil.copyfileobj(src, dst)
+                with open(final_path, 'wb') as dst:
+                    dst.write(content)
                 
                 extracted_path = final_path
                 
@@ -2384,15 +2390,23 @@ class SCOrg_tools_import():
                     continue
             
             if found_p4k_file:
-                tasks.append({
-                    'search_path': search_path,
-                    'p4k_file': found_p4k_file,
-                    'extract_dir': extract_dir,
-                    'conversion_exts': conversion_exts,
-                    'cgf_converter': cgf_converter,
-                    'texconv_path': prefs.texconv_path,
-                    'texture_exts': texture_exts
-                })
+                try:
+                    with sc.p4k.open(found_p4k_file) as f:
+                        content = f.read()
+                    tasks.append({
+                        'search_path': search_path,
+                        'content': content,
+                        'extract_dir': extract_dir,
+                        'conversion_exts': conversion_exts,
+                        'cgf_converter': cgf_converter,
+                        'texconv_path': prefs.texconv_path,
+                        'texture_exts': texture_exts
+                    })
+                except Exception as e:
+                    msg = f"Failed to read content for {search_path}: {e}"
+                    if globals_and_threading.debug: print(msg)
+                    report_lines.append(f"❌ {msg}")
+                    fail_count += 1
             else:
                 msg = f"File not found in P4K: {search_path}"
                 if globals_and_threading.debug: print(msg)
@@ -2427,11 +2441,9 @@ class SCOrg_tools_import():
                     fail_count += 1
                     report_lines.append(f"❌ Exception: {exc}")
                 
-                # Throttle progress updates (every 5% or at least every 10 items)
-                if total_tasks > 0:
-                    should_update = (completed_count % max(1, int(total_tasks * 0.05)) == 0) or (completed_count == total_tasks)
-                    if should_update:
-                        misc_utils.SCOrg_tools_misc.update_progress(f"Processed {completed_count}/{total_tasks}", completed_count, total_tasks, spinner_type="arc")
+                # Update progress every 5 tasks or at the end
+                if completed_count % 5 == 0 or completed_count == total_tasks:
+                    misc_utils.SCOrg_tools_misc.update_progress(f"Processed {completed_count}/{total_tasks}", completed_count, total_tasks, spinner_type="arc")
         
         # Clear progress
         misc_utils.SCOrg_tools_misc.update_progress(hide_message=True, hide_progress=True, force_update=True)
