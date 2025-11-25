@@ -2060,6 +2060,7 @@ class SCOrg_tools_import():
         from pathlib import Path
         
         cgf_converter = prefs.cgf_converter_path
+        texconv_path = prefs.texconv_path
         extract_dir = Path(prefs.extract_dir)
         
         if not cgf_converter or not os.path.exists(cgf_converter):
@@ -2355,7 +2356,7 @@ class SCOrg_tools_import():
         max_workers = getattr(prefs, 'max_extraction_threads', 4)
         
         # Helper function for planning (finding and reading file content)
-        def plan_file(file_path_str, extract_dir, conversion_exts, texture_exts, supported_exts, sc):
+        def plan_file(file_path_str, extract_dir, conversion_exts, texture_exts, supported_exts, cgf_converter, texconv_path, sc):
             # Normalize path
             search_path = file_path_str.replace("\\", "/")
             if not search_path.lower().startswith("data/"):
@@ -2419,7 +2420,7 @@ class SCOrg_tools_import():
         # Use ThreadPoolExecutor for parallel planning
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             # Submit planning tasks
-            future_to_file = {executor.submit(plan_file, file_path_str, extract_dir, conversion_exts, texture_exts, supported_exts, sc): file_path_str for file_path_str in files_to_process}
+            future_to_file = {executor.submit(plan_file, file_path_str, extract_dir, conversion_exts, texture_exts, supported_exts, cgf_converter, texconv_path, sc): file_path_str for file_path_str in files_to_process}
             
             planning_completed = 0
             for future in concurrent.futures.as_completed(future_to_file):
