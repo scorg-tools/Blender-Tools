@@ -287,7 +287,7 @@ class SCORG_OT_text_popup(bpy.types.Operator):
                     # Show completion popup on main thread
                     def show_completion():
                         # Clear missing files list so the warning button disappears
-                        import_utils.SCOrg_tools_import.missing_files = []
+                        import_utils.SCOrg_tools_import.missing_files = set()
                         
                         header = f"Extraction Complete\nSuccess: {success_count} | Failed: {fail_count}\n\nNow the missing files have been extracted, please re-import the model again."
                         misc_utils.SCOrg_tools_misc.show_text_popup(

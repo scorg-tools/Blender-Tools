@@ -960,7 +960,7 @@ class SCOrg_tools_import():
         os.system('cls')
         __class__.imported_guid_objects = {}
         __class__.INCLUDE_HARDPOINTS = [] # all
-        __class__.missing_files = []
+        __class__.missing_files = set()
         __class__.set_translation_new_data_preference()
 
         misc_utils.SCOrg_tools_misc.select_base_collection() # Ensure the base collection is active before importing
@@ -1675,7 +1675,12 @@ class SCOrg_tools_import():
             if globals_and_threading.debug: print(f"Skipping file {geometry_path.stem}: dae does not exist {geometry_path}")
             return False
 
-        result = bpy.ops.wm.collada_import(filepath=str(geometry_path), auto_connect=False)
+        try:
+            result = bpy.ops.wm.collada_import(filepath=str(geometry_path), auto_connect=False)
+        except RuntimeError as e:
+            if globals_and_threading.debug: print(f"ERROR: Collada import failed for {geometry_path}: {e}")
+            return False
+        
         if 'FINISHED' not in result:
             if globals_and_threading.debug: print(f"❌ ERROR: Failed to import DAE for: {geometry_path}")
             return False
@@ -2346,7 +2351,11 @@ class SCOrg_tools_import():
         tasks = []
         misc_utils.SCOrg_tools_misc.update_progress("Planning extraction...", 0, len(files_to_process), force_update=True, spinner_type="arc")
         
-        for file_path_str in files_to_process:
+        # Get max_workers
+        max_workers = getattr(prefs, 'max_extraction_threads', 4)
+        
+        # Helper function for planning (finding and reading file content)
+        def plan_file(file_path_str, extract_dir, conversion_exts, texture_exts, supported_exts, sc):
             # Normalize path
             search_path = file_path_str.replace("\\", "/")
             if not search_path.lower().startswith("data/"):
@@ -2393,28 +2402,39 @@ class SCOrg_tools_import():
                 try:
                     with sc.p4k.open(found_p4k_file) as f:
                         content = f.read()
-                    tasks.append({
+                    return {
                         'search_path': search_path,
                         'content': content,
                         'extract_dir': extract_dir,
                         'conversion_exts': conversion_exts,
                         'cgf_converter': cgf_converter,
-                        'texconv_path': prefs.texconv_path,
+                        'texconv_path': texconv_path,
                         'texture_exts': texture_exts
-                    })
+                    }
                 except Exception as e:
-                    msg = f"Failed to read content for {search_path}: {e}"
-                    if globals_and_threading.debug: print(msg)
-                    report_lines.append(f"❌ {msg}")
-                    fail_count += 1
+                    return {'error': f"Failed to read content for {search_path}: {e}"}
             else:
-                msg = f"File not found in P4K: {search_path}"
-                if globals_and_threading.debug: print(msg)
-                report_lines.append(f"❌ {msg}")
-                fail_count += 1
+                return {'error': f"File not found in P4K: {search_path}"}
+
+        # Use ThreadPoolExecutor for parallel planning
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit planning tasks
+            future_to_file = {executor.submit(plan_file, file_path_str, extract_dir, conversion_exts, texture_exts, supported_exts, sc): file_path_str for file_path_str in files_to_process}
+            
+            planning_completed = 0
+            for future in concurrent.futures.as_completed(future_to_file):
+                planning_completed += 1
+                result = future.result()
+                if 'error' in result:
+                    report_lines.append(f"❌ {result['error']}")
+                    fail_count += 1
+                else:
+                    tasks.append(result)
+                
+                # Update progress during planning
+                misc_utils.SCOrg_tools_misc.update_progress(f"Planning extraction... {planning_completed}/{len(files_to_process)}", planning_completed, len(files_to_process), spinner_type="arc")
 
         # Use ThreadPoolExecutor for parallel processing
-        max_workers = getattr(prefs, 'max_extraction_threads', 4)
         if globals_and_threading.debug: print(f"DEBUG: Starting extraction of {len(tasks)} files with {max_workers} workers")
         
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -2441,8 +2461,8 @@ class SCOrg_tools_import():
                     fail_count += 1
                     report_lines.append(f"❌ Exception: {exc}")
                 
-                # Update progress every 5 tasks or at the end
-                if completed_count % 5 == 0 or completed_count == total_tasks:
+                # Update progress every 2 tasks or at the end
+                if completed_count % 2 == 0 or completed_count == total_tasks:
                     misc_utils.SCOrg_tools_misc.update_progress(f"Processed {completed_count}/{total_tasks}", completed_count, total_tasks, spinner_type="arc")
         
         # Clear progress
