@@ -48,6 +48,58 @@ class SCOrg_tools_import():
         if globals_and_threading.debug: print("DEBUG: Cleared MTL files cache")
 
     @staticmethod
+    def convert_mtl_file(file_path):
+        """
+        Convert CryXmlB .mtl files to XML, replace spaces with underscores in material names,
+        and pretty-print the XML. Also updates existing XML files with underscores and pretty-printing.
+        
+        Args:
+            file_path (str or Path): Path to the .mtl file to convert/update.
+        """
+        import xml.etree.ElementTree as ET
+        from xml.dom import minidom
+        
+        try:
+            with open(file_path, 'rb') as f:
+                content_bytes = f.read()
+            
+            if content_bytes.startswith(b'CryXmlB'):
+                if globals_and_threading.debug:
+                    print(f"DEBUG: Detected CryXMLB binary format in {file_path}, converting to XML")
+                from scdatatools.engine.cryxml import etree_from_cryxml_string
+                root = etree_from_cryxml_string(content_bytes)
+                if root is None:
+                    print(f"Error: Failed to convert CryXmlB for {file_path}")
+                    return
+            else:
+                # Assume it's XML, parse normally
+                try:
+                    tree = ET.parse(file_path)
+                    root = tree.getroot()
+                except ET.ParseError as e:
+                    print(f"Error: Failed to parse XML file {file_path}: {e}")
+                    return
+            
+            # Replace spaces with underscores in material names
+            for material in root.findall('.//Material'):
+                name = material.get('Name')
+                if name:
+                    material.set('Name', name.replace(' ', '_'))
+            
+            # Pretty-print the XML
+            xml_string = ET.tostring(root, encoding='unicode')
+            xml_string = minidom.parseString(xml_string).toprettyxml(indent="  ")
+            
+            # Save the updated XML back to the file
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(xml_string)
+            if globals_and_threading.debug:
+                print(f"DEBUG: Converted/updated XML file saved to {file_path}")
+                
+        except Exception as e:
+            print(f"Error: Exception during MTL file conversion for {file_path}: {e}")
+
+    @staticmethod
     def get_record(id):
         """
         Get a record by GUID from the global dcb.
@@ -2271,6 +2323,9 @@ class SCOrg_tools_import():
                             if globals_and_threading.debug: print(msg)
                             return (True, f"⚠️ {msg}", extracted_path)
                 else:
+                    # Check if it's an MTL file and convert if needed
+                    if extracted_path.suffix.lower() == '.mtl':
+                        __class__.convert_mtl_file(extracted_path)
                     msg = f"Extracted: {extracted_path.name}"
                     if globals_and_threading.debug: print(msg)
                     return (True, f"✅ {msg}", extracted_path)

@@ -648,60 +648,13 @@ class SCOrg_tools_blender():
         """
         material_names = {}
         try:
+            # Ensure the MTL file is converted and updated
+            import_utils.SCOrg_tools_import.convert_mtl_file(file_path)
+            
             import xml.etree.ElementTree as ET
-            with open(file_path, 'rb') as f:
-                content_bytes = f.read()
-            
-            if content_bytes.startswith(b'CryXmlB'):
-                try:
-                    if globals_and_threading.debug:
-                        print(f"DEBUG: Detected CryXMLB binary format in {file_path}, converting to XML")
-                    from scdatatools.engine.cryxml import etree_from_cryxml_string
-                    root = etree_from_cryxml_string(content_bytes)
-                    if root is None:
-                        print(f"Error: Failed to convert CryXmlB for {file_path}")
-                        return {}
-                    # Replace spaces with underscores in material names
-                    for material in root.findall('.//Material'):
-                        name = material.get('Name')
-                        if name:
-                            material.set('Name', name.replace(' ', '_'))
-                    xml_string = ET.tostring(root, encoding='unicode')
-                    from xml.dom import minidom
-                    xml_string = minidom.parseString(xml_string).toprettyxml(indent="  ")
-                    if not xml_string.strip():
-                        print(f"Error: Converted XML is empty for {file_path}")
-                        return {}
-                    # Save the converted XML back to the file
-                    with open(file_path, 'w', encoding='utf-8') as f:
-                        f.write(xml_string)
-                    if globals_and_threading.debug:
-                        print(f"DEBUG: Converted CryXMLB file saved as XML to {file_path}")
-                except Exception as e:
-                    print(f"Error: Exception during CryXmlB conversion for {file_path}: {e}")
-                    return {}
-            else:
-                # Assume it's XML, parse normally
-                try:
-                    tree = ET.parse(file_path)
-                    root = tree.getroot()
-                    # Replace spaces with underscores in material names
-                    for material in root.findall('.//Material'):
-                        name = material.get('Name')
-                        if name:
-                            material.set('Name', name.replace(' ', '_'))
-                    # Save the updated XML back to the file
-                    xml_string = ET.tostring(root, encoding='unicode')
-                    from xml.dom import minidom
-                    xml_string = minidom.parseString(xml_string).toprettyxml(indent="  ")
-                    with open(file_path, 'w', encoding='utf-8') as f:
-                        f.write(xml_string)
-                    if globals_and_threading.debug:
-                        print(f"DEBUG: Updated XML file with underscores saved to {file_path}")
-                except ET.ParseError as e:
-                    print(f"Error: Failed to parse XML file {file_path}: {e}")
-                    return {}
-            
+            tree = ET.parse(file_path)
+            root = tree.getroot()
+
             sub_materials = root.find('SubMaterials')
             if sub_materials is not None:
                 for index, material in enumerate(sub_materials, start=0):
