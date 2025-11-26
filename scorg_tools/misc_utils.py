@@ -287,11 +287,8 @@ class SCOrg_tools_misc():
 
     @staticmethod
     def error(message="An error occurred"):
-        bpy.context.window_manager.popup_menu(
-            lambda self, context: self.layout.label(text=message),
-            title="Error",
-            icon='ERROR'
-        )
+        from . import ui_tools
+        ui_tools.Popup("SCOrg.tools Error:", message).show()
 
     @staticmethod
     def reload_addon():

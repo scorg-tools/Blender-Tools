@@ -852,14 +852,6 @@ class Popup(Widget):
     
     def show(self):
         """Show this popup (calls show_popup and returns self for chaining)."""
-        import threading
-        import bpy
-        
-        # If called from a background thread, schedule on main thread
-        if threading.current_thread() is not threading.main_thread():
-            bpy.app.timers.register(lambda: self.show())
-            return self
-            
         from .operators import show_popup
         show_popup(self)
         return self
@@ -1035,9 +1027,37 @@ class Popup(Widget):
         
         # Center popup in region
         region = context.region
-        # Use scaled dimensions for centering calculation
-        self.x = (region.width - self.scaled_width) // 2
-        self.y = (region.height - self.scaled_height) // 2
+        if region is None:
+            # Fallback when called from timer/thread - get the first available region
+            try:
+                for window in context.window_manager.windows:
+                    for area in window.screen.areas:
+                        if area.type == 'VIEW_3D':  # Prefer 3D view
+                            region = area.regions[-1]  # Use the last region (main viewport)
+                            break
+                    if region:
+                        break
+                # If no 3D view found, use any region
+                if region is None:
+                    for window in context.window_manager.windows:
+                        for area in window.screen.areas:
+                            if area.regions:
+                                region = area.regions[-1]
+                                break
+                        if region:
+                            break
+            except:
+                # Ultimate fallback - use default dimensions
+                region = None
+        
+        if region:
+            # Use scaled dimensions for centering calculation
+            self.x = (region.width - self.scaled_width) // 2
+            self.y = (region.height - self.scaled_height) // 2
+        else:
+            # Fallback to default position if no region available
+            self.x = 100
+            self.y = 100
 
     def draw(self, context):
         # Draw background

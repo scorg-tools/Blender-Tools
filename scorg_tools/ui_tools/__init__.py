@@ -51,16 +51,25 @@ def progress_bar_popup(progress_id, current, max_value, text="", title="Progress
     global _shared_progress_state
     
     from .ui_system import Popup, ProgressBar
+    import threading
     
     # 1. Create shared popup if it doesn't exist or was closed
     popup = _shared_progress_state['popup']
     is_new_popup = False
-    if popup is None or popup.finished or popup.cancelled:
-        popup = Popup(title, prevent_close=True, blocking=False)
-        is_new_popup = True
-        _shared_progress_state['popup'] = popup
-        _shared_progress_state['bars'] = {}
-        _shared_progress_state['finished_ids'] = set()
+    
+    # Only create popup if on main thread
+    if threading.current_thread() is threading.main_thread():
+        if popup is None or popup.finished or popup.cancelled:
+            popup = Popup(title, prevent_close=True, blocking=False)
+            is_new_popup = True
+            _shared_progress_state['popup'] = popup
+            _shared_progress_state['bars'] = {}
+            _shared_progress_state['finished_ids'] = set()
+    
+    # If no popup exists and we're on a background thread, return silently
+    # User must call this function from main thread first to initialize
+    if popup is None:
+        return
     
     # 2. Create or update progress bar for this ID
     bars = _shared_progress_state['bars']
@@ -76,7 +85,7 @@ def progress_bar_popup(progress_id, current, max_value, text="", title="Progress
             
         bars[progress_id] = progress_bar
         
-        # Show popup now that it has content (if new)
+        # Show popup now that it has content (if new and on main thread)
         if is_new_popup:
             popup.show()
         

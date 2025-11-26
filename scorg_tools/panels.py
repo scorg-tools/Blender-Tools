@@ -96,13 +96,6 @@ class VIEW3D_PT_scorg_tools_panel(bpy.types.Panel):
             prefs_row.operator("view3d.reload", text="", icon='FILE_REFRESH')
         prefs_row.operator("view3d.open_preferences", text="", icon='PREFERENCES')
         
-        # Always show progress/status if there's something to display
-        if prefs.p4k_load_message or prefs.p4k_load_progress > 0:
-            layout.label(text=prefs.p4k_load_message)
-            row = layout.row(align=True)
-            row.prop(prefs, "p4k_load_progress", text="", slider=True)
-            layout.separator()
-        
         # Check if StarFab scene exists
         if 'StarFab' in bpy.data.scenes:
             layout.operator("view3d.make_instance_real", text="Make Instance Real", icon='OUTLINER_OB_GROUP_INSTANCE')

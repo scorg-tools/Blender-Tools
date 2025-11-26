@@ -176,6 +176,8 @@ def delayed_panel_registration():
 
 
 def register():
+    from . import ui_tools
+    ui_tools.register()
     # Register all classes EXCEPT the main panel (which is handled by the timer)
     
     # Check version compatibility first
@@ -261,3 +263,5 @@ def unregister():
 
     # Clear global data
     globals_and_threading.clear_vars()
+    from . import ui_tools
+    ui_tools.unregister()

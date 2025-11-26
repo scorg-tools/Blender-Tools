@@ -10,6 +10,7 @@ from pathlib import Path
 import subprocess
 import os
 import shutil
+import time
 
 class VIEW3D_OT_paint_warning_popup(bpy.types.Operator):
     bl_idname = "view3d.paint_warning_popup"
@@ -91,24 +92,56 @@ class VIEW3D_OT_load_p4k_button(bpy.types.Operator):
             self.report({'INFO'}, "Data.p4k is already loading.")
             return {'CANCELLED'}
 
-        # Reset progress display at the start of loading
-        prefs.p4k_load_progress = 0.0
-        prefs.p4k_load_message = "Loading Data.p4k..."
-        globals_and_threading._last_ui_update_time = 0.0 # Reset the timer for the monitor
-
         # Clear existing data before starting new load
         if globals_and_threading.sc:
             globals_and_threading.clear_vars()
             # Ensure UI reflects cleared state immediately
             misc_utils.SCOrg_tools_misc.force_ui_update() 
 
-        # Start the loading in a separate thread
-        if globals_and_threading.debug: print("DEBUG: Starting LoadP4KThread")
-        globals_and_threading._loading_thread = globals_and_threading.LoadP4KThread(prefs.p4k_path, prefs)
-        globals_and_threading._loading_thread.start()
+        from . import ui_tools
 
-        # Register a timer to periodically check the thread's status and update UI
-        bpy.app.timers.register(globals_and_threading.check_load_status, first_interval=globals_and_threading._ui_update_interval, persistent=True)
+        popup = ui_tools.Popup("Loading Data.p4k", prevent_close=True, blocking=True)
+        
+        progress = ui_tools.ProgressBar(text="Initializing...")
+        popup.add_widget(progress)
+        
+        def on_cancel():
+            popup.cancelled = True
+            
+        cancel_btn = ui_tools.Button("Cancel", callback=on_cancel)
+        popup.add_widget(cancel_btn)
+        
+        popup.show()
+        
+        tm = ui_tools.ThreadManager()
+        tm.start()
+        
+        def background_task():
+            try:
+                success = globals_and_threading.load_p4k_with_progress(prefs.p4k_path, prefs, lambda msg, cur, tot: progress.update(cur, tot, msg))
+                
+                if popup.cancelled:
+                    return
+                    
+                if success:
+                    progress.update(100, 100, "Data.p4k Loaded!")
+                else:
+                    progress.update(0, 100, "Failed to load")
+                
+                time.sleep(0.5)
+                
+                popup.prevent_close = False
+                
+                cancel_btn.text = "Close"
+                cancel_btn.callback = lambda: setattr(popup, 'finished', True)
+                
+                progress.update(100, 100, "Done!")
+                
+            except Exception as e:
+                print(f"Error: {e}")
+                popup.prevent_close = False
+
+        tm.submit(background_task)
 
         return {'FINISHED'}
 

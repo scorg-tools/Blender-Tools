@@ -73,19 +73,6 @@ class SCOrg_tools_AddonPreferences(bpy.types.AddonPreferences):
         default=""
     )
 
-    # Properties for displaying P4K load progress and messages
-    p4k_load_progress: FloatProperty(
-        name="P4K Load Progress",
-        subtype='PERCENTAGE',
-        min=0.0,
-        max=100.0
-    )
-
-    p4k_load_message: StringProperty(
-        name="P4K Load Message",
-        default=""
-    )
-
     debug_mode: BoolProperty(
         name="Enable Debug Mode",
         description="Enable debug output to console for troubleshooting",

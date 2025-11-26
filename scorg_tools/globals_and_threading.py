@@ -129,6 +129,34 @@ def check_load_status():
             return None # Return None to unregister the timer
     return None # If context is not available, stop the timer
 
+def load_p4k_with_progress(p4k_path, addon_prefs, progress_callback):
+    global dcb, p4k, localizer, sc, debug
+    try:
+        progress_callback("Initializing...", 0, 100)
+        
+        # Set the p4k cache directory to cache in the parent of the extract directory and check if it exists
+        if addon_prefs.extract_dir and Path(addon_prefs.extract_dir).exists():
+            if debug: print(f"DEBUG: Using cache with p4k load")
+            cache_dir = Path(addon_prefs.extract_dir).parent / "p4k_cache"
+            # if the cache_dir is not none and it doesn't exist, create it
+            if cache_dir and not cache_dir.exists():
+                cache_dir.mkdir(parents=True, exist_ok=True)
+
+            # Initialize StarCitizen class with the provided path and cache directory
+            sc = StarCitizen(p4k_path, p4k_load_monitor=lambda msg, progress, total: progress_callback(msg, progress, total), cache_dir=str(cache_dir))
+        else:
+            if debug: print(f"DEBUG: Loading p4k without cache")
+            # If no extract directory is set, don't use cache
+            sc = StarCitizen(p4k_path, p4k_load_monitor=lambda msg, progress, total: progress_callback(msg, progress, total))
+        dcb = sc.datacore
+        p4k = sc.p4k
+        localizer = sc.localization
+        progress_callback("Data.p4k Loaded!", 100, 100)
+        return True
+    except Exception as e:
+        progress_callback(f"Failed to load: {str(e)}", 0, 100)
+        return False
+
 def clear_vars():
     global dcb, p4k, button_labels, ship_loaded, item_loaded, sc, localizer, _loading_thread
     dcb = None
