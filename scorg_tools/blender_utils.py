@@ -4,6 +4,7 @@ import time  # Add time import
 import os
 from . import import_utils # For import_utils.SCOrg_tools_import.import_missing_materials
 from . import misc_utils # Add this import for progress updates
+from . import ui_tools
 import xml.etree.ElementTree as ET
 from . import globals_and_threading
 
@@ -65,7 +66,7 @@ class SCOrg_tools_blender():
     @staticmethod
     def add_weld_and_weighted_normal_modifiers():
         for i, obj in enumerate(bpy.data.objects):
-            misc_utils.SCOrg_tools_misc.update_progress("Adding weld modifiers", i, len(bpy.data.objects), spinner_type="arc")
+            ui_tools.progress_bar_popup("add_weld_modifiers", i, len(bpy.data.objects), f"Adding weld modifiers to {obj.name}")
             if obj.type != 'MESH':
                 continue
 
@@ -85,6 +86,9 @@ class SCOrg_tools_blender():
                 wn.keep_sharp = True
                 wn.thresh = 0.01  # Corrected attribute name
                 #print(f"Added Weighted Normal modifier to {obj.name}")
+        
+        ui_tools.progress_bar_popup("add_weld_modifiers", len(bpy.data.objects), len(bpy.data.objects), "Adding weld modifiers complete")
+        ui_tools.close_progress_bar_popup("add_weld_modifiers")
 
     @staticmethod
     def material_matches_decals(name):
@@ -129,7 +133,7 @@ class SCOrg_tools_blender():
     def add_displace_modifiers_for_decal(displacement_strength = 0.005):
         objects_list = list(bpy.data.objects)
         for i, obj in enumerate(objects_list):
-            misc_utils.SCOrg_tools_misc.update_progress("Adding Displace modifiers for POM and Decal", i, len(objects_list), spinner_type="arc")
+            ui_tools.progress_bar_popup("add_displace_modifiers", i, len(objects_list), "Adding Displace modifiers for POM and Decal")
             if obj.type != 'MESH':
                 continue
 
@@ -159,12 +163,15 @@ class SCOrg_tools_blender():
                         mod.mid_level = 0
                         mod.vertex_group = vg.name
                         #print(f"Added Displace modifier for {obj.name} using group '{vg.name}'")
+        
+        ui_tools.progress_bar_popup("add_displace_modifiers", len(objects_list), len(objects_list), "Adding Displace modifiers for POM and Decal complete")
+        ui_tools.close_progress_bar_popup("add_displace_modifiers")
 
     @staticmethod
     def remove_duplicate_displace_modifiers():
         objects_list = list(bpy.data.objects)
         for i, obj in enumerate(objects_list):
-            misc_utils.SCOrg_tools_misc.update_progress("Removing duplicate Displace modifiers", i, len(objects_list), spinner_type="arc")
+            ui_tools.progress_bar_popup("remove_duplicate_displace", i, len(objects_list), f"Removing duplicate Displace modifiers from {obj.name}")
             if obj.type != 'MESH':
                 continue
 
@@ -198,6 +205,9 @@ class SCOrg_tools_blender():
                     obj.modifiers.remove(obj.modifiers[mod_name])
                     #print(f"Removed duplicate Displace modifier '{mod_name}' from '{obj.name'.")
                     
+        ui_tools.progress_bar_popup("remove_duplicate_displace", len(objects_list), len(objects_list), "Removing duplicate Displace modifiers complete")
+        ui_tools.close_progress_bar_popup("remove_duplicate_displace")
+    
     @staticmethod
     def fix_modifiers(displacement_strength=0.005, material_only = False):
         # Get addon preferences
@@ -261,8 +271,7 @@ class SCOrg_tools_blender():
         if prefs.enable_tidyup:
             __class__.tidyup()
         
-        # Clear progress when done
-        misc_utils.SCOrg_tools_misc.clear_progress()
+        # All operations completed
 
     @staticmethod
     def select_children(obj):
@@ -293,7 +302,7 @@ class SCOrg_tools_blender():
 
         instances_list = list(instances)
         for i, inst in enumerate(instances_list):
-            misc_utils.SCOrg_tools_misc.update_progress("Making instances real", i, len(instances_list), spinner_type="arc")
+            ui_tools.progress_bar_popup("make_instances_real", i, len(instances_list), "Making instances real")
             for obj in bpy.context.selected_objects:
                obj.select_set(False)
             inst.select_set(True)
@@ -301,7 +310,8 @@ class SCOrg_tools_blender():
                 use_base_parent=True, use_hierarchy=True
             )
         # Clear progress when done
-        misc_utils.SCOrg_tools_misc.clear_progress()
+        ui_tools.progress_bar_popup("make_instances_real", len(instances_list), len(instances_list), "Making instances real complete")
+        ui_tools.close_progress_bar_popup("make_instances_real")
         return {"FINISHED"}
         
     @staticmethod
@@ -365,7 +375,7 @@ class SCOrg_tools_blender():
     def remove_proxy_material_geometry():
         objects_list = list(bpy.data.objects)
         for i, obj in enumerate(objects_list):
-            misc_utils.SCOrg_tools_misc.update_progress("Removing proxy material geometry", i, len(objects_list), spinner_type="arc")
+            ui_tools.progress_bar_popup("remove_proxy_geometry", i, len(objects_list), "Removing proxy material geometry")
             if obj.type != 'MESH':
                 continue
             
@@ -416,6 +426,9 @@ class SCOrg_tools_blender():
                     bpy.ops.object.material_slot_remove()
                     if globals_and_threading.debug:
                         print(f"DEBUG: Removed material slot {slot_idx} from object '{obj.name}'")
+
+        ui_tools.progress_bar_popup("remove_proxy_geometry", len(objects_list), len(objects_list), "Removing proxy material geometry complete")
+        ui_tools.close_progress_bar_popup("remove_proxy_geometry")
 
     @staticmethod
     def convert_bones_to_empties(armature_obj):
@@ -541,7 +554,7 @@ class SCOrg_tools_blender():
         # Batch process material reassignments
         mapping_items = list(material_mapping.items())
         for i, (duplicate_mat, original_mat) in enumerate(mapping_items):
-            misc_utils.SCOrg_tools_misc.update_progress("Remapping .001 materials", i, len(mapping_items), spinner_type="arc")
+            ui_tools.progress_bar_popup("remap_materials", i, len(mapping_items), "Remapping .001 materials")
             
             # Only process if the duplicate material still exists
             if duplicate_mat.name not in bpy.data.materials:
@@ -562,6 +575,9 @@ class SCOrg_tools_blender():
                 if globals_and_threading.debug: 
                     print(f"Removing unused material: {mat.name}")
                 bpy.data.materials.remove(mat)
+
+        ui_tools.progress_bar_popup("remap_materials", len(mapping_items), len(mapping_items), "Remapping .001 materials complete")
+        ui_tools.close_progress_bar_popup("remap_materials")
 
     @staticmethod
     def is_material_vanilla(mat):
@@ -783,7 +799,7 @@ class SCOrg_tools_blender():
         material_names = list(bpy.data.materials.keys())
         
         for i, mat_name in enumerate(material_names):
-            misc_utils.SCOrg_tools_misc.update_progress("Fixing mat case sensitivity", i, len(material_names), spinner_type="arc")
+            ui_tools.progress_bar_popup("fix_mat_case", i, len(material_names), "Fixing mat case sensitivity")
             
             # Get fresh reference to the material
             mat = bpy.data.materials.get(mat_name)
@@ -802,6 +818,9 @@ class SCOrg_tools_blender():
                         remap = __class__.remap_material(mat.name, other_mat.name, delete_old=True)
                         break
 
+        ui_tools.progress_bar_popup("fix_mat_case", len(material_names), len(material_names), "Fixing mat case sensitivity complete")
+        ui_tools.close_progress_bar_popup("fix_mat_case")
+
     @staticmethod
     def set_glass_materials_transparent():
         """
@@ -812,7 +831,7 @@ class SCOrg_tools_blender():
         material_names = list(bpy.data.materials.keys())
         
         for i, mat_name in enumerate(material_names):
-            misc_utils.SCOrg_tools_misc.update_progress("Setting glass to transparent", i, len(material_names), spinner_type="arc")
+            ui_tools.progress_bar_popup("set_glass_transparent", i, len(material_names), "Setting glass to transparent")
             
             # Get fresh reference to the material
             material = bpy.data.materials.get(mat_name)
@@ -824,6 +843,9 @@ class SCOrg_tools_blender():
                 material.diffuse_color = (*material.diffuse_color[:3], 0.1)
                 if globals_and_threading.debug: print(f"Setting viewport transparency for glass material: {material.name}")
     
+        ui_tools.progress_bar_popup("set_glass_transparent", len(material_names), len(material_names), "Setting glass to transparent complete")
+        ui_tools.close_progress_bar_popup("set_glass_transparent")
+
     @staticmethod
     def fix_stencil_materials():
         """
@@ -833,7 +855,7 @@ class SCOrg_tools_blender():
         # Iterate through all materials in the scene
         material_list = list(bpy.data.materials)
         for i, mat in enumerate(material_list):
-            misc_utils.SCOrg_tools_misc.update_progress("Fixing stencil materials", i, len(material_list), spinner_type="arc")
+            ui_tools.progress_bar_popup("fix_stencil_materials", i, len(material_list), "Fixing stencil materials")
             # Check if material uses nodes
             if not mat.use_nodes or not mat.node_tree:
                 continue
@@ -880,7 +902,8 @@ class SCOrg_tools_blender():
                         mat.node_tree.links.new(tint_decal_converter_node.outputs['Alpha'], illum_node.inputs['diff Alpha'])
         
         # Clear progress when done
-        misc_utils.SCOrg_tools_misc.clear_progress()
+        ui_tools.progress_bar_popup("fix_stencil_materials", len(material_list), len(material_list), "Fixing stencil materials complete")
+        ui_tools.close_progress_bar_popup("fix_stencil_materials")
 
     @staticmethod
     def create_transparent_image(name="transparent", width=1, height=1):
@@ -997,7 +1020,7 @@ class SCOrg_tools_blender():
         
         # Process separations
         for i, (original_obj, all_objects_with_mesh, decal_material_indices) in enumerate(objects_to_process):
-            misc_utils.SCOrg_tools_misc.update_progress("Separating decal materials", i, len(objects_to_process), spinner_type="arc")
+            ui_tools.progress_bar_popup("separate_decal_materials", i, len(objects_to_process), "Separating decal materials")
             
             if globals_and_threading.debug:
                 face_count = sum(1 for poly in original_obj.data.polygons if poly.material_index in decal_material_indices)
@@ -1121,7 +1144,8 @@ class SCOrg_tools_blender():
                             print(f"Removed empty material slot {slot_idx} from {original_obj.name}")
 
         # Clear progress when done
-        misc_utils.SCOrg_tools_misc.clear_progress()
+        ui_tools.progress_bar_popup("separate_decal_materials", len(objects_to_process), len(objects_to_process), "Separating decal materials complete")
+        ui_tools.close_progress_bar_popup("separate_decal_materials")
     
     @staticmethod
     def append_pom_material():
@@ -1340,7 +1364,7 @@ class SCOrg_tools_blender():
         # Iterate through all materials in the scene
         material_list = list(bpy.data.materials)
         for i, mat in enumerate(material_list):
-            misc_utils.SCOrg_tools_misc.update_progress("Replacing POM materials", i, len(material_list), spinner_type="arc")
+            ui_tools.progress_bar_popup("replace_pom_materials", i, len(material_list), "Replacing POM materials")
             # Check if material uses nodes
             if not mat.use_nodes or not mat.node_tree:
                 if globals_and_threading.debug: print(f"Material {mat.name} doesn't use nodes, skipping")
@@ -1581,14 +1605,15 @@ class SCOrg_tools_blender():
                 if globals_and_threading.debug: print(f"Successfully replaced material {old_mat_name} with scorg_pom material")
         
         # Clear progress when done
-        misc_utils.SCOrg_tools_misc.clear_progress()
+        ui_tools.progress_bar_popup("replace_pom_materials", len(material_list), len(material_list), "Replacing POM materials complete")
+        ui_tools.close_progress_bar_popup("replace_pom_materials")
 
     @staticmethod
     def deduplicate_images():
         images = {}
         image_list = list(bpy.data.images)
         for i, img in enumerate(image_list):
-            misc_utils.SCOrg_tools_misc.update_progress("Deduplicating images", i, len(image_list), spinner_type="arc")
+            ui_tools.progress_bar_popup("deduplicate_images", i, len(image_list), "Deduplicating images")
             if not img.filepath in images.keys():
                 images[img.filepath] = img
             else:
@@ -1600,7 +1625,8 @@ class SCOrg_tools_blender():
                 bpy.data.images.remove(img)
         
         # Clear progress when done
-        misc_utils.SCOrg_tools_misc.clear_progress()
+        ui_tools.progress_bar_popup("deduplicate_images", len(image_list), len(image_list), "Deduplicating images complete")
+        ui_tools.close_progress_bar_popup("deduplicate_images")
     
     @staticmethod
     def tidyup():
@@ -1620,7 +1646,7 @@ class SCOrg_tools_blender():
         if globals_and_threading.debug: print("Setting engine flame materials to transparent.")
         material_list = list(bpy.data.materials)
         for i, mat in enumerate(material_list):
-            misc_utils.SCOrg_tools_misc.update_progress("Setting engine flame materials transparent", i, len(material_list), spinner_type="arc")
+            ui_tools.progress_bar_popup("set_engine_flame_transparent", i, len(material_list), "Setting engine flame materials transparent")
             if 'engine_flame' in mat.name.lower() and mat.use_nodes:
                 # Find material output node
                 for node in mat.node_tree.nodes:
@@ -1631,4 +1657,5 @@ class SCOrg_tools_blender():
                         mat.node_tree.links.new(node.inputs['Surface'], transparent_node.outputs['BSDF'])
         
         # Clear progress when done
-        misc_utils.SCOrg_tools_misc.clear_progress()
+        ui_tools.progress_bar_popup("set_engine_flame_transparent", len(material_list), len(material_list), "Setting engine flame materials transparent complete")
+        ui_tools.close_progress_bar_popup("set_engine_flame_transparent")

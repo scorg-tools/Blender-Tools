@@ -2107,7 +2107,7 @@ class SCOrg_tools_import():
         report_lines = []
         
         # Start progress using the same system as other functions
-        misc_utils.SCOrg_tools_misc.update_progress("Starting extraction...", 0, len(files_to_process), force_update=True, spinner_type="arc")
+        ui_tools.progress_bar_popup("extract_missing_files", 0, len(files_to_process), "Starting extraction...")
         
         import concurrent.futures
         
@@ -2357,7 +2357,7 @@ class SCOrg_tools_import():
 
         # Main Thread: Pre-calculate tasks
         tasks = []
-        misc_utils.SCOrg_tools_misc.update_progress("Planning extraction...", 0, len(files_to_process), force_update=True, spinner_type="arc")
+        ui_tools.progress_bar_popup("extract_missing_files", 0, len(files_to_process), "Planning extraction...")
         
         # Get max_workers
         max_workers = getattr(prefs, 'max_extraction_threads', 4)
@@ -2440,7 +2440,7 @@ class SCOrg_tools_import():
                     tasks.append(result)
                 
                 # Update progress during planning
-                misc_utils.SCOrg_tools_misc.update_progress(f"Planning extraction... {planning_completed}/{len(files_to_process)}", planning_completed, len(files_to_process), spinner_type="arc")
+                ui_tools.progress_bar_popup("extract_missing_files", planning_completed, len(files_to_process), f"Planning extraction... {planning_completed}/{len(files_to_process)}")
 
         # Use ThreadPoolExecutor for parallel processing
         if globals_and_threading.debug: print(f"DEBUG: Starting extraction of {len(tasks)} files with {max_workers} workers")
@@ -2471,10 +2471,10 @@ class SCOrg_tools_import():
                 
                 # Update progress every 2 tasks or at the end
                 if completed_count % 2 == 0 or completed_count == total_tasks:
-                    misc_utils.SCOrg_tools_misc.update_progress(f"Processed {completed_count}/{total_tasks}", completed_count, total_tasks, spinner_type="arc")
+                    ui_tools.progress_bar_popup("extract_missing_files", completed_count, total_tasks, f"Processed {completed_count}/{total_tasks}")
         
         # Clear progress
-        misc_utils.SCOrg_tools_misc.update_progress(hide_message=True, hide_progress=True, force_update=True)
+        ui_tools.close_progress_bar_popup("extract_missing_files")
         
         print(f"Extraction completed: {success_count} succeeded, {fail_count} failed")
         

@@ -100,7 +100,7 @@ class VIEW3D_OT_load_p4k_button(bpy.types.Operator):
 
         from . import ui_tools
 
-        popup = ui_tools.Popup("Loading Data.p4k", prevent_close=True, blocking=True)
+        popup = ui_tools.Popup("Loading Data.p4k", prevent_close=True, blocking=False)
         
         progress = ui_tools.ProgressBar(text="Initializing...")
         popup.add_widget(progress)
@@ -136,6 +136,9 @@ class VIEW3D_OT_load_p4k_button(bpy.types.Operator):
                 cancel_btn.callback = lambda: setattr(popup, 'finished', True)
                 
                 progress.update(100, 100, "Done!")
+                
+                time.sleep(1.0)
+                popup.finished = True
                 
             except Exception as e:
                 print(f"Error: {e}")
@@ -336,7 +339,72 @@ class SCORG_OT_text_popup(bpy.types.Operator):
         return {'FINISHED'}
     
     def invoke(self, context, event):
-        return context.window_manager.invoke_popup(self, width=600)
+        if self.is_extraction_popup or not self.show_buttons:
+            from . import ui_tools
+            
+            title = "Missing Files" if self.is_extraction_popup else "SCOrg.tools"
+            popup = ui_tools.Popup(title)
+            
+            # Add the header if present
+            if self.header_text:
+                popup.add.label(self.header_text)
+            
+            # Add the content
+            if self.text_content:
+                popup.add.label(self.text_content)
+            
+            # Add buttons
+            row = popup.add.row()
+            
+            if self.is_extraction_popup:
+                def on_close():
+                    popup.finished = True
+                
+                def on_extract():
+                    prefs = bpy.context.preferences.addons[__package__].preferences
+                    
+                    if prefs.extract_missing_files:
+                        globals_and_threading.extraction_started = True
+                        
+                        file_list = self.text_content
+                        
+                        def run_extraction():
+                            try:
+                                success_count, fail_count, report_lines = import_utils.SCOrg_tools_import.extract_missing_files(file_list, prefs)
+                            except ValueError as e:
+                                def report_error():
+                                    bpy.context.window_manager.popup_menu(lambda self, context: self.layout.label(text=str(e)), title="Error", icon='ERROR')
+                                bpy.app.timers.register(report_error, first_interval=0.1)
+                                return
+                            
+                            def show_completion():
+                                import_utils.SCOrg_tools_import.missing_files = set()
+                                
+                                header = f"Extraction Complete\nSuccess: {success_count} | Failed: {fail_count}\n\nNow the missing files have been extracted, please re-import the model again."
+                                misc_utils.SCOrg_tools_misc.show_text_popup(
+                                    text_content="\n".join(report_lines),
+                                    header_text=header,
+                                    show_buttons=False
+                                )
+                            bpy.app.timers.register(show_completion, first_interval=0.1)
+                        
+                        bpy.app.timers.register(run_extraction, first_interval=0.1)
+                    
+                    popup.finished = True
+                
+                row.add.button("Close", callback=on_close)
+                row.add.button("Extract Missing", callback=on_extract)
+            else:
+                # For completion or other popups with show_buttons=False
+                def on_close():
+                    popup.finished = True
+                
+                row.add.button("OK", callback=on_close)
+            
+            popup.show()
+            return {'FINISHED'}
+        else:
+            return context.window_manager.invoke_popup(self, width=600)
     
     def draw(self, context):
         layout = self.layout
