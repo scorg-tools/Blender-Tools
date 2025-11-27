@@ -8,6 +8,7 @@ import re
 # Import globals
 from . import globals_and_threading
 from . import misc_utils # For SCOrg_tools_misc.error, get_ship_record, select_base_collection
+from . import ui_tools
 from . import blender_utils # For SCOrg_tools_blender.fix_modifiers
 from . import tint_utils # For SCOrg_tools_tint.get_tint_pallets
 
@@ -649,13 +650,9 @@ class SCOrg_tools_import():
         
         # Only show progress at the top level
         if is_top_level:
-            misc_utils.SCOrg_tools_misc.update_progress("Importing hardpoints", 0, len(entries), force_update=True, spinner_type="arc")
+            ui_tools.progress_bar_popup("import_hardpoints", 0, len(entries), "Starting hardpoint import...")
         
         for i, entry in enumerate(entries):
-            # Only update progress at the top level
-            if is_top_level:
-                misc_utils.SCOrg_tools_misc.update_progress(f"Importing hardpoint {i+1}/{len(entries)}", i+1, len(entries), spinner_type="arc", update_interval=1)
-            
             blender_utils.SCOrg_tools_blender.update_viewport_with_timer(interval_seconds=1.0)
 
             props = getattr(entry, 'properties', entry)
@@ -664,6 +661,11 @@ class SCOrg_tools_import():
             nested_loadout = props.get('loadout')
 
             entity_class_name = getattr(props, 'entityClassName', None)
+            
+            # Only update progress at the top level
+            if is_top_level:
+                ui_tools.progress_bar_popup("import_hardpoints", i+1, len(entries), f"Importing {item_port_name}...")
+            
             if globals_and_threading.debug: print(f"DEBUG: Entry {i}: item_port_name='{item_port_name}', guid={guid}, entityClassName={entity_class_name}, has_nested_loadout={nested_loadout is not None}")
 
             if not item_port_name or (not guid and not entity_class_name):
@@ -897,7 +899,9 @@ class SCOrg_tools_import():
         # Clear progress when done with this level
         if is_top_level:
             try:
-                misc_utils.SCOrg_tools_misc.clear_progress()
+                # Ensure progress shows 100% complete
+                ui_tools.progress_bar_popup("import_hardpoints", len(entries), len(entries), "Hardpoint import complete")
+                ui_tools.close_progress_bar_popup("import_hardpoints")
                 if globals_and_threading.debug: print("DEBUG: Cleared progress on top level completion")
             except Exception as e:
                 print(f"ERROR: Failed to clear progress: {e}")
@@ -1221,7 +1225,7 @@ class SCOrg_tools_import():
         material_names = list(bpy.data.materials.keys())
         from pprint import pprint
         for i, mat_name in enumerate(material_names):
-            misc_utils.SCOrg_tools_misc.update_progress("Importing missing materials", i, len(material_names), spinner_type="arc")
+            ui_tools.progress_bar_popup("import_materials", i, len(material_names), f"Importing {mat_name}...")
             
             # Get fresh reference to the material
             mat = bpy.data.materials.get(mat_name)
@@ -1452,8 +1456,11 @@ class SCOrg_tools_import():
             __class__.extract_missing_textures_from_output(captured_stdout, captured_stderr)
             print(f"DEBUG: After texture extraction, missing_files has {len(__class__.missing_files)} items")
         
+        # Ensure progress shows 100% complete
+        ui_tools.progress_bar_popup("import_materials", len(material_names), len(material_names), "Material import complete")
+        
         # Clear progress when done
-        misc_utils.SCOrg_tools_misc.clear_progress()
+        ui_tools.close_progress_bar_popup("import_materials")
         if globals_and_threading.debug: print("DEBUG: Cleared progress after import_missing_materials")
     
     @staticmethod

@@ -75,6 +75,15 @@ def progress_bar_popup(progress_id, current, max_value, text="", title="Progress
     bars = _shared_progress_state['bars']
     
     if progress_id not in bars:
+        # Remove any existing close button since we're adding a new incomplete bar (only on main thread)
+        if threading.current_thread() is threading.main_thread():
+            from .ui_system import Button
+            popup.children = [w for w in popup.children if not (isinstance(w, Button) and w.text == "Close")]
+            popup.prevent_close = True
+        
+        # Remove from finished_ids if present (in case of restart)
+        _shared_progress_state['finished_ids'].discard(progress_id)
+        
         # Create new progress bar
         progress_bar = ProgressBar(current, max_value, text, show_percentage=show_percentage)
         popup.add_widget(progress_bar)
@@ -103,12 +112,13 @@ def progress_bar_popup(progress_id, current, max_value, text="", title="Progress
         # Check if ALL bars are finished
         all_finished = len(_shared_progress_state['finished_ids']) == len(bars)
         
-        if all_finished and auto_close:
+        if all_finished and auto_close and threading.current_thread() is threading.main_thread():
             # Enable closing and add Close button
             popup.prevent_close = False
             
-            # Check if we already added a close button
-            has_close_btn = any(w.text == "Close" for w in popup.children if hasattr(w, 'text'))
+            # Check if we already added a close button (check Button widgets only)
+            from .ui_system import Button
+            has_close_btn = any(isinstance(w, Button) and w.text == "Close" for w in popup.children)
             if not has_close_btn:
                 popup.add_close_button("Close")
 
@@ -136,7 +146,10 @@ def close_progress_bar_popup(progress_id=None):
             # Check if all finished
             if len(_shared_progress_state['finished_ids']) == len(_shared_progress_state['bars']):
                 popup.prevent_close = False
-                popup.add_close_button("Close")
+                from .ui_system import Button
+                has_close_btn = any(isinstance(w, Button) and w.text == "Close" for w in popup.children)
+                if not has_close_btn:
+                    popup.add_close_button("Close")
 
 # Lazy imports using __getattr__ (Python 3.7+)
 def __getattr__(name):

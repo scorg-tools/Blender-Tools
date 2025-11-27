@@ -139,6 +139,13 @@ def progress_bar_example(context):
     popup.show()
 ```
 
+You can also use a simple oneliner to show a progress bar:
+```python
+def progress_bar_example(context):
+    from . import ui_tools
+    ui_tools.progress_bar_popup("my_task", 50, 100, "Loading...")
+```
+
 ### Threading & Progress (Advanced)
 Run heavy tasks in the background while updating a progress bar.
 
