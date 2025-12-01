@@ -5,6 +5,7 @@ from pathlib import Path
 from scdatatools.sc import StarCitizen
 from scdatatools.sc.localization import SCLocalization
 from . import misc_utils
+from . import ui_tools
 
 # Global variables for UI update throttling
 _last_ui_update_time = 0.0
@@ -22,6 +23,7 @@ localizer = None
 _loading_thread = None # Global to hold the loading thread instance
 debug = False
 extraction_started = False
+missing_files = set() # Global set to store missing files for popup display
 
 def p4k_load_monitor(msg, progress, total):
     global _last_ui_update_time, _loading_thread
@@ -156,6 +158,47 @@ def load_p4k_with_progress(p4k_path, addon_prefs, progress_callback):
     except Exception as e:
         progress_callback(f"Failed to load: {str(e)}", 0, 100)
         return False
+
+def show_missing_files_popup():
+    """Show a popup with the list of missing files using ui_tools."""
+    global missing_files
+    if not missing_files:
+        return
+    
+    # Format the missing files as a string
+    missing_files_text = "The following files were not found:\n\n" + "\n".join(sorted(missing_files))
+    
+    # Create popup using ui_tools
+    popup = ui_tools.Popup(title="Missing Files", width=800)
+    popup.add.label(missing_files_text)
+    
+    # Add buttons in a row
+    row = popup.add.row()
+    
+    def on_ok():
+        popup.finished = True
+    
+    def on_extract():
+        # Start extraction
+        import bpy
+        bpy.ops.view3d.export_missing(file_list=missing_files_text)
+        popup.finished = True
+    
+    def on_copy():
+        # Copy to clipboard
+        import bpy
+        bpy.context.window_manager.clipboard = missing_files_text
+        # Could show a brief confirmation, but for now just close
+        popup.finished = True
+    
+    row.add.button("OK", callback=on_ok)
+    row.add.button("Extract Missing", callback=on_extract)
+    row.add.button("Copy", callback=on_copy)
+    
+    popup.show()
+    
+    # Note: missing_files are cleared when extraction completes successfully,
+    # not when the popup is shown, so the panel button remains available
 
 def clear_vars():
     global dcb, p4k, button_labels, ship_loaded, item_loaded, sc, localizer, _loading_thread

@@ -165,7 +165,7 @@ class SCOrg_tools_misc():
             if records == []:
                 records = dcb.search_filename(f'libs/foundry/records/entities/groundvehicles/*{name}.xml')
             if records == []:
-                print(f"❌ Error, could not match ship or vehicle for {name}")
+                SCOrg_tools_misc.error(f"Could not match ship or vehicle for {name}")
                 return None
             
             # Get ship name:
@@ -179,7 +179,7 @@ class SCOrg_tools_misc():
                 globals_and_threading.ship_loaded = name # Fallback
             return records[0]
         else:
-            if not skip_error: print("❌ Error, no Empty object with 'container_name' = 'base' found.")
+            if not skip_error: SCOrg_tools_misc.error("No Empty object with 'container_name' = 'base' found.")
             return None
         
     @staticmethod
@@ -222,7 +222,7 @@ class SCOrg_tools_misc():
                 break
 
         if not found_base_empty:
-            print("ERROR: Base empty object with 'container_name' == 'base' not found.")
+            SCOrg_tools_misc.error("Base empty object with 'container_name' == 'base' not found.")
             return
 
         # Determine the target bpy.data.Collection (the actual collection data block)
@@ -237,7 +237,7 @@ class SCOrg_tools_misc():
             target_data_collection = bpy.context.scene.collection
 
         if not target_data_collection:
-            print("ERROR: No suitable parent collection determined for the base empty.")
+            SCOrg_tools_misc.error("No suitable parent collection determined for the base empty.")
             return
 
         # Use recurLayerCollection to find the corresponding bpy.types.LayerCollection
@@ -250,7 +250,7 @@ class SCOrg_tools_misc():
             bpy.context.view_layer.active_layer_collection = desired_layer_collection
             print(f"SUCCESS: Collection '{desired_layer_collection.name}' is now active for new items.")
         else:
-            print(f"ERROR: Could not find LayerCollection for '{target_data_collection.name}'.")
+            SCOrg_tools_misc.error(f"Could not find LayerCollection for '{target_data_collection.name}'.")
     
     @staticmethod
     def force_ui_update():
@@ -288,7 +288,7 @@ class SCOrg_tools_misc():
     @staticmethod
     def error(message="An error occurred"):
         from . import ui_tools
-        ui_tools.Popup("SCOrg.tools Error:", message).show()
+        ui_tools.Popup("SCOrg.tools Error", message).show()
 
     @staticmethod
     def reload_addon():
@@ -326,28 +326,6 @@ class SCOrg_tools_misc():
             import scorg_tools
             scorg_tools.register()
 
-    @staticmethod
-    def show_text_popup(text_content: Union[str, list[str]] = "", header_text: str = "", show_buttons: bool = True, is_extraction_popup: bool = False):
-        """
-        Show a popup with multi-line text and copy functionality
-        
-        Args:
-            text_content (str | list[str]): Text content to display, can be a string or list of strings
-            header_text (str): Header text for the popup
-            show_buttons (bool): Whether to show action buttons
-            is_extraction_popup (bool): Whether this popup triggers extraction on OK
-        """
-        # Convert list to string if needed
-        if isinstance(text_content, list):
-            text_content = '\n'.join(text_content)
-        
-        # Use the persistent operator instead of a temporary one
-        bpy.ops.scorg.text_popup('INVOKE_DEFAULT', 
-                                 text_content=text_content, 
-                                 header_text=header_text,
-                                 show_buttons=show_buttons,
-                                 is_extraction_popup=is_extraction_popup)
-    
     @staticmethod
     def get_addon_version():
         """

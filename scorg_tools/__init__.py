@@ -85,9 +85,7 @@ try:
 except ImportError:
     # If scdatatools is not found, set the flag to False.
     dependencies_met = False
-    print("\n" * 3) # Add some blank lines for visibility
-    print("=" * 70)
-    print("SCOrg.tools ERROR: Required 'scdatatools' module not found! Please install the StarFab addon")
+    misc_utils.SCOrg_tools_misc.error("Required 'scdatatools' module not found! Please install the StarFab addon")
 
 for module_name in ['starfab_addon', 'scdt_addon']:
     if not module_name in bpy.context.preferences.addons:
@@ -107,9 +105,7 @@ classes = (
     operators.VIEW3D_OT_export_missing,
     operators.VIEW3D_OT_separate_decals,
     operators.VIEW3D_OT_open_preferences,
-    operators.SCORG_OT_copy_text_to_clipboard,
-    operators.SCORG_OT_cancel,
-    operators.SCORG_OT_text_popup,
+    operators.SCORG_OT_show_missing_files,
     preferences.SCOrg_tools_AddonPreferences,
     preferences.SCOrg_tools_OT_SelectP4K,
 )

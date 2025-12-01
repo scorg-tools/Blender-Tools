@@ -18,7 +18,6 @@ class SCOrg_tools_import():
     translation_new_data_preference = None
     prefs = None
     extract_dir = None
-    missing_files = None
     item_name = None
     item_guid = None
     tint_palette_node_group_name = None
@@ -35,7 +34,7 @@ class SCOrg_tools_import():
         __class__.prefs = bpy.context.preferences.addons["scorg_tools"].preferences
         extract_dir = getattr(__class__.prefs, 'extract_dir', None)
         __class__.extract_dir = Path(extract_dir) if extract_dir else None
-        __class__.missing_files = set()  # Set to track missing files
+        globals_and_threading.missing_files = set()  # Set to track missing files
         __class__.item_name = None
         __class__.item_guid = None
         __class__.tint_palette_node_group_name = None
@@ -216,7 +215,7 @@ class SCOrg_tools_import():
             geometry_path = process_bones_file.pop(0)  # Get the first file in the array, which is the base armature DAE file (or sometimes the base geometry)
 
         # Handle case where geometry path is None but we have missing files (likely a missing CDF)
-        if geometry_path is None and len(__class__.missing_files) > 0:
+        if geometry_path is None and len(globals_and_threading.missing_files) > 0:
             prefs = bpy.context.preferences.addons["scorg_tools"].preferences
             if prefs.extract_missing_files:
                 if globals_and_threading.debug: print("Attempting to extract missing base files (CDF)...")
@@ -226,7 +225,7 @@ class SCOrg_tools_import():
                 # we'll just pass the whole list (extract_missing_files handles duplicates)
                 
                 # Convert list to newline-separated string
-                missing_files_str = "\n".join(__class__.missing_files)
+                missing_files_str = "\n".join(globals_and_threading.missing_files)
                 
                 # Extract synchronously
                 success, fail, report = __class__.extract_missing_files(missing_files_str, prefs)
@@ -246,7 +245,7 @@ class SCOrg_tools_import():
         if geometry_path:
             if globals_and_threading.debug: print(f"Loading geo: {geometry_path}")
             if not geometry_path.exists():
-                print(f"Error: .DAE file not found at: {geometry_path}")
+                misc_utils.SCOrg_tools_misc.error(f".DAE file not found at: {geometry_path}")
                 if globals_and_threading.debug:
                     print(f"DEBUG: Attempted DAE import path: {geometry_path}, but file was missing")
                 
@@ -257,7 +256,7 @@ class SCOrg_tools_import():
                     missing_path = 'Data/' + missing_path.split('Data/', 1)[-1] if 'Data/' in missing_path else 'Data/' + missing_path
                 
                 if not missing_path.startswith('$') and 'ddna.glossmap' not in missing_path.lower():
-                    __class__.missing_files.add(missing_path)
+                    globals_and_threading.missing_files.add(missing_path)
                     if globals_and_threading.debug:
                         print(f"Added to missing_files (dae): {missing_path}")
 
@@ -269,23 +268,16 @@ class SCOrg_tools_import():
                     if success > 0 and geometry_path.exists():
                         print(f"Successfully extracted {geometry_path.name}. Retrying import...")
                         # Remove from missing files since we fixed it
-                        if missing_path in __class__.missing_files:
-                            __class__.missing_files.remove(missing_path)
+                        if missing_path in globals_and_threading.missing_files:
+                            globals_and_threading.missing_files.remove(missing_path)
                     else:
                         print(f"Failed to auto-extract {geometry_path.name}")
                         return None
                 else:
-                    print(f"⚠️ ERROR: Failed to import DAE for {guid}: {geometry_path} - file missing")
+                    misc_utils.SCOrg_tools_misc.error(f"Failed to import DAE for {guid}: {geometry_path} - file missing")
                     # Show popup for missing base file if we didn't try to extract
-                    if len(__class__.missing_files) > 0:
-                        # De-duplicate the list
-                        unique_missing_files = list(__class__.missing_files)
-                        sorted_missing_files = sorted(unique_missing_files, key=str.lower)
-                        misc_utils.SCOrg_tools_misc.show_text_popup(
-                            text_content=sorted_missing_files,
-                            header_text="The following files were missing:",
-                            is_extraction_popup=True
-                        )
+                    if len(globals_and_threading.missing_files) > 0:
+                        globals_and_threading.show_missing_files_popup()
                     return None
             
             # Get a set of all objects before import
@@ -294,7 +286,7 @@ class SCOrg_tools_import():
             bpy.ops.object.select_all(action='DESELECT')
             result = __class__.import_dae(geometry_path)
             if result != True:
-                print(f"⚠️ ERROR: Failed to import DAE for {guid}: {geometry_path}")
+                misc_utils.SCOrg_tools_misc.error(f"Failed to import DAE for {guid}: {geometry_path}")
                 return None
 
             # Get a set of all objects after import
@@ -343,7 +335,7 @@ class SCOrg_tools_import():
                         if not rel_path.startswith('$') and 'ddna.glossmap' not in rel_path.lower():
                             if not rel_path.lower().startswith("data/"):
                                 rel_path = "Data/" + rel_path
-                            __class__.missing_files.add(rel_path)
+                            globals_and_threading.missing_files.add(rel_path)
                         continue
                     if globals_and_threading.debug: print(f"Processing bones file: {file}")
                     __class__.import_file(file, root_object_name)
@@ -368,16 +360,9 @@ class SCOrg_tools_import():
             globals_and_threading.item_loaded = True
             
             # Show missing files popup if there are any left (e.g. from hardpoints)
-            if len(__class__.missing_files) > 0:
-                print(f"Total missing files: {len(__class__.missing_files)}")
-                # De-duplicate the list
-                unique_missing_files = list(__class__.missing_files)
-                sorted_missing_files = sorted(unique_missing_files, key=str.lower)
-                misc_utils.SCOrg_tools_misc.show_text_popup(
-                    text_content=sorted_missing_files,
-                    header_text="The following files were missing, please extract them with StarFab, under Data -> Data.p4k:",
-                    is_extraction_popup=True
-                )
+            if len(globals_and_threading.missing_files) > 0:
+                print(f"Total missing files: {len(globals_and_threading.missing_files)}")
+                globals_and_threading.show_missing_files_popup()
             
             __class__.set_translation_new_data_preference(reset=True)
     
@@ -568,7 +553,7 @@ class SCOrg_tools_import():
                                             if not missing_path.lower().startswith('data/'):
                                                 missing_path = 'Data/' + missing_path.split('Data/', 1)[-1] if 'Data/' in missing_path else 'Data/' + missing_path
                                             
-                                            __class__.missing_files.add(missing_path)
+                                            globals_and_threading.missing_files.add(missing_path)
                                             return None
                                     dae_path = file_path.with_suffix('.dae')
                                     if globals_and_threading.debug: print(f'Found geometry: {dae_path}')
@@ -579,7 +564,7 @@ class SCOrg_tools_import():
                                 if globals_and_threading.debug: print(f"⚠️ Missing attribute accessing geometry path in component {i}: {e}")
                                 return None
         except Exception as e:
-            print(f"❌ Error in get_geometry_path_by_guid GUID {guid}: {e}")
+            misc_utils.SCOrg_tools_misc.error(f"Error in get_geometry_path_by_guid GUID {guid}: {e}")
         return None
 
     @staticmethod
@@ -608,7 +593,7 @@ class SCOrg_tools_import():
                         if globals_and_threading.debug: print(f"⚠️ Error accessing ports in component {comp.name}: {e}")
             return None
         except Exception as e:
-            print(f"❌ Error in get_hardpoint_mapping_from_guid GUID {guid}: {e}")
+            misc_utils.SCOrg_tools_misc.error(f"Error in get_hardpoint_mapping_from_guid GUID {guid}: {e}")
             return None
 
     @staticmethod
@@ -790,9 +775,9 @@ class SCOrg_tools_import():
                         geometry_path = process_bones_file.pop(0)  # Get the first file in the array, which is the base armature DAE file
 
                     if not geometry_path.exists():
-                        print(f"Error: .DAE file not found at: {geometry_path}")
+                        misc_utils.SCOrg_tools_misc.error(f".DAE file not found at: {geometry_path}")
                         if globals_and_threading.debug: print(f"DEBUG: Attempted DAE import path: {geometry_path}, but file was missing")
-                        if str(geometry_path) not in __class__.missing_files:
+                        if str(geometry_path) not in globals_and_threading.missing_files:
                             try:
                                 rel_path = str(geometry_path.relative_to(__class__.extract_dir)).replace("\\", "/")
                             except ValueError:
@@ -800,7 +785,7 @@ class SCOrg_tools_import():
                             if not rel_path.startswith('$') and 'ddna.glossmap' not in rel_path.lower():
                                 if not rel_path.lower().startswith("data/"):
                                     rel_path = "Data/" + rel_path
-                                __class__.missing_files.add(rel_path);
+                                globals_and_threading.missing_files.add(rel_path);
                                 print(f"Added to missing_files (loc 2): {rel_path}")
                         continue
 
@@ -844,7 +829,7 @@ class SCOrg_tools_import():
                         for file in process_bones_file:
                             if not file.is_file():
                                 if globals_and_threading.debug: print(f"⚠️ ERROR: Bones file missing: {file}")
-                                if str(file) not in __class__.missing_files:
+                                if str(file) not in globals_and_threading.missing_files:
                                     try:
                                         rel_path = str(file.relative_to(__class__.extract_dir))
                                     except ValueError:
@@ -852,7 +837,7 @@ class SCOrg_tools_import():
                                     if not rel_path.startswith('$') and 'ddna.glossmap' not in rel_path.lower():
                                         if not rel_path.lower().startswith("data/"):
                                             rel_path = "Data/" + rel_path
-                                        __class__.missing_files.add(rel_path)
+                                        globals_and_threading.missing_files.add(rel_path)
                                 continue
                             if globals_and_threading.debug: print(f"Processing bones file: {file}")
                             __class__.import_file(file, root_obj_name)
@@ -917,7 +902,7 @@ class SCOrg_tools_import():
             return
 
         if not geometry_path.exists():
-            print(f"Error: .DAE file not found at: {geometry_path}")
+            misc_utils.SCOrg_tools_misc.error(f".DAE file not found at: {geometry_path}")
             if globals_and_threading.debug: print(f"DEBUG: Attempted DAE import path: {geometry_path}, but file was missing")
             try:
                 rel_path = str(geometry_path.relative_to(__class__.extract_dir)).replace("\\", "/")
@@ -926,7 +911,7 @@ class SCOrg_tools_import():
             if not rel_path.startswith('$') and 'ddna.glossmap' not in rel_path.lower():
                 if not rel_path.lower().startswith("data/"):
                     rel_path = "Data/" + rel_path
-                __class__.missing_files.add(rel_path)
+                globals_and_threading.missing_files.add(rel_path)
                 print(f"Added to missing_files (loc 3): {rel_path}")
             return
 
@@ -964,7 +949,7 @@ class SCOrg_tools_import():
         os.system('cls')
         __class__.imported_guid_objects = {}
         __class__.INCLUDE_HARDPOINTS = [] # all
-        __class__.missing_files = set()
+        globals_and_threading.missing_files = set()
         __class__.set_translation_new_data_preference()
 
         misc_utils.SCOrg_tools_misc.select_base_collection() # Ensure the base collection is active before importing
@@ -996,16 +981,9 @@ class SCOrg_tools_import():
         
         blender_utils.SCOrg_tools_blender.fix_modifiers(displacement_strength)
         
-        print(f"Total missing files: {len(__class__.missing_files)}")
-        if len(__class__.missing_files) > 0:
-            # De-duplicate the list
-            unique_missing_files = list(__class__.missing_files)
-            sorted_missing_files = sorted(unique_missing_files, key=str.lower)
-            misc_utils.SCOrg_tools_misc.show_text_popup(
-                text_content=sorted_missing_files,
-                header_text="The following files were missing, please extract them with StarFab, under Data -> Data.p4k:",
-                is_extraction_popup=True
-            )
+        print(f"Total missing files: {len(globals_and_threading.missing_files)}")
+        if len(globals_and_threading.missing_files) > 0:
+            globals_and_threading.show_missing_files_popup()
         __class__.set_translation_new_data_preference(reset=True)
 
     @staticmethod
@@ -1187,7 +1165,7 @@ class SCOrg_tools_import():
             if 'ddna.glossmap' in missing_path.lower():
                 continue
             if not missing_path.startswith('$'):
-                __class__.missing_files.add(missing_path)
+                globals_and_threading.missing_files.add(missing_path)
         
         if globals_and_threading.debug:
             print(f"DEBUG: Found {len(unique_missing)} unique missing texture/material paths")
@@ -1202,7 +1180,7 @@ class SCOrg_tools_import():
             extract_dir = getattr(prefs, 'extract_dir', None)
             __class__.extract_dir = Path(extract_dir) if extract_dir else None
         if not __class__.extract_dir:
-            if globals_and_threading.debug: print("ERROR: extract_dir is not set. Please set it in the addon preferences.")
+            if globals_and_threading.debug: misc_utils.SCOrg_tools_misc.error("extract_dir is not set. Please set it in the addon preferences.")
             return None
 
         p4k = globals_and_threading.p4k
@@ -1267,7 +1245,7 @@ class SCOrg_tools_import():
                                         missing_path = 'Data/' + missing_path.split('Data/', 1)[-1] if 'Data/' in missing_path else 'Data/' + missing_path
                                         
                                     if not missing_path.startswith('$') and 'ddna.glossmap' not in missing_path.lower():
-                                        __class__.missing_files.add(missing_path)
+                                        globals_and_threading.missing_files.add(missing_path)
                                         missing_checked.append(filename)
                             else:
                                 # Multiple files with same name, need to search for the correct material
@@ -1331,7 +1309,7 @@ class SCOrg_tools_import():
                                             missing_path = 'Data/' + missing_path.split('Data/', 1)[-1] if 'Data/' in missing_path else 'Data/' + missing_path
                                             
                                         if not missing_path.startswith('$') and 'ddna.glossmap' not in missing_path.lower():
-                                            __class__.missing_files.add(missing_path)
+                                            globals_and_threading.missing_files.add(missing_path)
                                 
                                 if not found_filepath:
                                     # If we didn't find the material in any of the files, assume it's the first one
@@ -1452,9 +1430,9 @@ class SCOrg_tools_import():
             )
             
             # Extract missing texture paths from captured output
-            print(f"DEBUG: Before texture extraction, missing_files has {len(__class__.missing_files)} items")
+            print(f"DEBUG: Before texture extraction, missing_files has {len(globals_and_threading.missing_files)} items")
             __class__.extract_missing_textures_from_output(captured_stdout, captured_stderr)
-            print(f"DEBUG: After texture extraction, missing_files has {len(__class__.missing_files)} items")
+            print(f"DEBUG: After texture extraction, missing_files has {len(globals_and_threading.missing_files)} items")
         
         # Ensure progress shows 100% complete
         ui_tools.progress_bar_popup("import_materials", len(material_names), len(material_names), "Material import complete")
