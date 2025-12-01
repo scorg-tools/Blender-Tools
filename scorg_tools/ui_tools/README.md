@@ -1,6 +1,17 @@
-# UI Tools
+<pre>
+           ░██           ░██                          ░██            
+                         ░██                          ░██            
+░██    ░██ ░██        ░████████  ░███████   ░███████  ░██  ░███████  
+░██    ░██ ░██           ░██    ░██    ░██ ░██    ░██ ░██ ░██        
+░██    ░██ ░██           ░██    ░██    ░██ ░██    ░██ ░██  ░███████  
+░██   ░███ ░██           ░██    ░██    ░██ ░██    ░██ ░██        ░██ 
+ ░█████░██ ░██ ░██████    ░████  ░███████   ░███████  ░██  ░███████  
+</pre>
 
-A lightweight custom popup system for Blender addons featuring auto-layout, text input, buttons, and keyboard shortcuts.
+# ui_tools
+ui_tools is a lightweight Python library for Blender add-ons, providing a custom popup system to create interactive user interfaces such as progress bars, text inputs, buttons, and informational messages. It allows developers to build flexible, themed UI components that integrate seamlessly with Blender's design, enabling add-ons to offer better user experiences for tasks like data import, processing feedback, or configuration dialogs without being limited to standard Blender panels.
+
+The library works by utilizing Blender's BLF module for accurate text rendering and measurement,combined with space-specific draw handlers for real-time display in areas like the 3D Viewport. It employs modal operators for handling user interactions and events, ensuring responsive and interruptible popups. For multi-threading support, ui_tools enables developers to write background operations that run concurrently with the UI, providing real-time feedback through progress bars for long-running tasks; updates from background threads are throttled to maintain performance, while popup initialization and display occur on the main thread to adhere to Blender's UI threading rules, allowing add-ons to perform intensive computations without freezing the interface.
 
 ## Features
 
@@ -204,7 +215,7 @@ def batch_processing_example(context):
     popup.show()
     
     # 4. Start Thread Manager
-    tm = ui_tools.ThreadManager() # Defaults to CPU count or 4 workers
+    tm = ui_tools.ThreadManager()  # Defaults to CPU count or 4 workers
     
     # 5. Define Worker Function
     def process_item(item_id):
@@ -217,173 +228,7 @@ def batch_processing_example(context):
     items = list(range(30))
     
     # 7. Process Batch
-    # The progress callback is called automatically as threads finish
-    futures = tm.process_batch(
-    from . import ui_tools
-    import time
-    
-    # 1. Create Popup with prevent_close=True
-    # blocking=True prevents interacting with the viewport while running
-    popup = ui_tools.Popup("Processing...", prevent_close=True, blocking=True)
-    
-    # 2. Add Progress Bar
-    progress = ui_tools.ProgressBar(text="Initializing...")
-    popup.add_widget(progress)
-    
-    # 3. Add a Cancel Button
-    def on_cancel():
-        popup.cancelled = True # Signal cancellation
-        
-    # Keep reference to button to change it later
-    cancel_btn = ui_tools.Button("Force Cancel", callback=on_cancel)
-    popup.add_widget(cancel_btn)
-    
-    popup.show()
-    
-    # 4. Start Thread Manager
-    tm = ui_tools.ThreadManager()
-    tm.start()
-    
-    # 5. Define Background Task
-    def background_task():
-        try:
-            for i in range(101):
-                # Check for cancellation
-                if popup.cancelled:
-                    return
-                    
-                # Update progress (thread-safe)
-                progress.update(i, 100, f"Processing item {i}...")
-                
-                # Simulate work
-                time.sleep(0.05)
-                
-            # Finish
-            progress.update(100, 100, "Done!")
-            time.sleep(0.5)
-            
-            # Allow closing
-            popup.prevent_close = False
-            
-            # Change Cancel button to Close
-            cancel_btn.text = "Close"
-            cancel_btn.callback = lambda: setattr(popup, 'finished', True)
-            
-            # Trigger redraw to show button change
-            progress.update(100, 100, "Done!") 
-            
-        except Exception as e:
-            print(f"Error: {e}")
-            popup.prevent_close = False
-
-    # 6. Submit Task
-    tm.submit(background_task)
-```
-
-### Multi-threaded Batch Processing
-Process multiple items in parallel using the thread pool.
-
-
-```python
-def threaded_progress_example(context):
-    from . import ui_tools
-    import time
-    
-    # 1. Create Popup with prevent_close=True
-    # blocking=True prevents interacting with the viewport while running
-    popup = ui_tools.Popup("Processing...", prevent_close=True, blocking=True)
-    
-    # 2. Add Progress Bar
-    progress = ui_tools.ProgressBar(text="Initializing...")
-    popup.add_widget(progress)
-    
-    # 3. Add a Cancel Button
-    def on_cancel():
-        popup.cancelled = True # Signal cancellation
-        
-    # Keep reference to button to change it later
-    cancel_btn = ui_tools.Button("Force Cancel", callback=on_cancel)
-    popup.add_widget(cancel_btn)
-    
-    popup.show()
-    
-    # 4. Start Thread Manager
-    tm = ui_tools.ThreadManager()
-    tm.start()
-    
-    # 5. Define Background Task
-    def background_task():
-        try:
-            for i in range(101):
-                # Check for cancellation
-                if popup.cancelled:
-                    return
-                    
-                # Update progress (thread-safe)
-                progress.update(i, 100, f"Processing item {i}...")
-                
-                # Simulate work
-                time.sleep(0.05)
-                
-            # Finish
-            progress.update(100, 100, "Done!")
-            time.sleep(0.5)
-            
-            # Allow closing
-            popup.prevent_close = False
-            
-            # Change Cancel button to Close
-            cancel_btn.text = "Close"
-            cancel_btn.callback = lambda: setattr(popup, 'finished', True)
-            
-            # Trigger redraw to show button change
-            progress.update(100, 100, "Done!") 
-            
-        except Exception as e:
-            print(f"Error: {e}")
-            popup.prevent_close = False
-
-    # 6. Submit Task
-    tm.submit(background_task)
-```
-
-### Multi-threaded Batch Processing
-Process multiple items in parallel using the thread pool.
-
-```python
-def batch_processing_example(context):
-    from . import ui_tools
-    import time
-    import random
-    
-    # 1. Create Popup
-    popup = ui_tools.Popup("Batch Processing", prevent_close=True)
-    
-    # 2. Add Progress Bar
-    progress = ui_tools.ProgressBar(text="Processing items...")
-    popup.add_widget(progress)
-    
-    # 3. Add Status Label
-    status_label = ui_tools.Label("Ready to start...")
-    popup.add_widget(status_label)
-    
-    popup.show()
-    
-    # 4. Start Thread Manager
-    tm = ui_tools.ThreadManager() # Defaults to CPU count or 4 workers
-    
-    # 5. Define Worker Function
-    def process_item(item_id):
-        # Simulate work with random duration - Your code goes here
-        time.sleep(random.uniform(0.5, 3.0))
-        print(f"Finished item: {item_id}")
-        return f"item {item_id}"
-        
-    # 6. Define Items to Process
-    items = list(range(30))
-    
-    # 7. Process Batch
-    # The progress callback is called automatically as threads finish
+    # Correct argument order: func, items, progress_callback
     futures = tm.process_batch(
         process_item, 
         items, 
@@ -414,6 +259,73 @@ def batch_processing_example(context):
     # Attach completion check to all futures
     for f in futures:
         f.add_done_callback(on_all_done)
+```
+
+### Cancellable Threaded Task
+Run a long task with a cancel button and prevent_close.
+
+```python
+def cancellable_threaded_example(context):
+    from . import ui_tools
+    import time
+    
+    # 1. Create Popup with prevent_close=True
+    # blocking=True prevents interacting with the viewport while running
+    popup = ui_tools.Popup("Processing...", prevent_close=True, blocking=True)
+    
+    # 2. Add Progress Bar
+    progress = ui_tools.ProgressBar(text="Initializing...")
+    popup.add_widget(progress)
+    
+    # 3. Add a Cancel Button
+    def on_cancel():
+        popup.cancelled = True  # Signal cancellation
+        
+    # Keep reference to button to change it later
+    cancel_btn = ui_tools.Button("Cancel", callback=on_cancel)
+    popup.add_widget(cancel_btn)
+    
+    popup.show()
+    
+    # 4. Start Thread Manager
+    tm = ui_tools.ThreadManager()
+    tm.start()
+    
+    # 5. Define Background Task
+    def background_task():
+        try:
+            for i in range(101):
+                # Check for cancellation
+                if popup.cancelled:
+                    print("Task cancelled by user")
+                    return
+                    
+                # Update progress (thread-safe)
+                progress.update(i, 100, f"Processing item {i}...")
+                
+                # Simulate work
+                time.sleep(0.05)
+                
+            # Finish
+            progress.update(100, 100, "Done!")
+            time.sleep(0.5)
+            
+            # Allow closing
+            popup.prevent_close = False
+            
+            # Change Cancel button to Close
+            cancel_btn.text = "Close"
+            cancel_btn.callback = lambda: setattr(popup, 'finished', True)
+            
+            # Trigger redraw to show button change
+            progress.update(100, 100, "Done!") 
+            
+        except Exception as e:
+            print(f"Error: {e}")
+            popup.prevent_close = False
+
+    # 6. Submit Task
+    tm.submit(background_task)
 ```
 
 ### Popup
@@ -457,6 +369,21 @@ Row()
 ```
 - Container for horizontal layout (e.g., buttons)
 
+### ThreadManager
+```python
+ThreadManager(max_workers=None)
+```
+- `max_workers`: Number of worker threads (defaults to CPU count or 4)
+- Methods:
+  - `start()`: Start the thread manager (optional, auto-starts on first use)
+  - `submit(func, *args)`: Submit a single task
+  - `process_batch(func, items, progress_callback=None)`: Process multiple items in parallel
+    - `func`: Worker function that takes one item as argument
+    - `items`: List of items to process
+    - `progress_callback`: Optional callback with signature `callback(current, total)`
+    - Returns: List of futures
+  - `stop()`: Stop the thread manager and wait for all tasks
+
 ## Tips
 
 - **Dragging**: Click and drag the popup background to move it
@@ -464,6 +391,7 @@ Row()
 - **Auto-sizing**: Leave `width` and `height` as `None` for automatic sizing
 - **Text Wrapping**: Long text in Labels automatically wraps
 - **Auto OK Button**: If you don't add any buttons, an "OK" button is added automatically
+- **Thread Safety**: Use `progress.update()` from background threads, it's designed to be thread-safe
 
 ## License
 
