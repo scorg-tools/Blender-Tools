@@ -4,7 +4,6 @@ from pathlib import Path # ADDED: Ensure Path is imported
 import os
 # Import globals
 from . import globals_and_threading
-from . import globals_and_threading
 from . import misc_utils
 from . import import_utils
 
@@ -152,14 +151,11 @@ class VIEW3D_PT_scorg_tools_panel(bpy.types.Panel):
             layout.label(text="Utilities")
 
             # Show Missing Files Button (if any)
-            if import_utils.SCOrg_tools_import.missing_files:
+            if globals_and_threading.missing_files:
                 # Sort the files for display
-                sorted_files = sorted(import_utils.SCOrg_tools_import.missing_files, key=str.lower)
+                sorted_files = sorted(globals_and_threading.missing_files, key=str.lower)
                 
-                op = layout.operator("scorg.text_popup", text="Show Missing Files", icon='ERROR')
-                op.text_content = "\n".join(sorted_files)
-                op.header_text = "The following files were missing, please extract them with StarFab, under Data -> Data.p4k:"
-                op.is_extraction_popup = True
+                op = layout.operator("scorg.show_missing_files", text="Show Missing Files", icon='ERROR')
                 layout.separator()
 
             # --- Sections dependent on P4K being loaded ---
