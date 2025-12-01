@@ -11,7 +11,9 @@
 # ui_tools
 ui_tools is a lightweight Python library for Blender add-ons, providing a custom popup system to create interactive user interfaces such as progress bars, text inputs, buttons, and informational messages. It allows developers to build flexible, themed UI components that integrate seamlessly with Blender's design, enabling add-ons to offer better user experiences for tasks like data import, processing feedback, or configuration dialogs without being limited to standard Blender panels.
 
-The library works by utilizing Blender's BLF module for accurate text rendering and measurement,combined with space-specific draw handlers for real-time display in areas like the 3D Viewport. It employs modal operators for handling user interactions and events, ensuring responsive and interruptible popups. For multi-threading support, ui_tools enables developers to write background operations that run concurrently with the UI, providing real-time feedback through progress bars for long-running tasks; updates from background threads are throttled to maintain performance, while popup initialization and display occur on the main thread to adhere to Blender's UI threading rules, allowing add-ons to perform intensive computations without freezing the interface.
+The library works by utilizing Blender's BLF module for accurate text rendering and measurement, combined with space-specific draw handlers for real-time display in areas like the 3D Viewport. It employs modal operators for handling user interactions and events, ensuring responsive and interruptible popups. For multi-threading support, ui_tools enables developers to write background operations that run concurrently with the UI, providing real-time feedback through progress bars for long-running tasks; updates from background threads are throttled to maintain performance, while popup initialization and display occur on the main thread to adhere to Blender's UI threading rules, allowing add-ons to perform intensive computations without freezing the interface.
+
+Popups support automatic scrolling for content that exceeds the display height, and multiple popups can be queued to display sequentially, making it easy to create complex, multi-step user interactions.
 
 ## Features
 
@@ -19,6 +21,8 @@ The library works by utilizing Blender's BLF module for accurate text rendering 
 - 📝 **Text Input** - Multi-line text input with selection support
 - 🔘 **Auto-Layout** - Automatic text wrapping and height adjustment
 - ⌨️ **Keyboard Shortcuts** - Enter for OK, Escape for Cancel
+- 📜 **Scrollable Content** - Automatic scrolling for content that exceeds popup height
+- 📋 **Popup Queue** - Show multiple popups sequentially
 - 🎯 **Easy Integration** - Drop into any existing Blender addon with minimal setup
 
 ## Installation
@@ -130,6 +134,48 @@ class MY_OT_show_popup(bpy.types.Operator):
         
         ui_tools.Popup("My Popup", "Hello from my addon!").show()
         return {'FINISHED'}
+```
+
+### Scrollable Content
+Display content that exceeds the popup height with automatic scrolling.
+
+```python
+def scrollable_content_example(context):
+    from . import ui_tools
+    
+    popup = ui_tools.Popup("Scroll Test", width=400, height=300)
+    
+    # Add a very long label - will automatically enable scrolling
+    long_text = "\n".join(f"This is line {i}" for i in range(1, 101))
+    popup.add.label(long_text)
+    
+    # Add other widgets that will scroll with the content
+    popup.add.text_input("Type here... this is some pre-filled text that will scroll with the content.")
+    
+    # Add a close button at the bottom
+    popup.add_close_button("Close")
+    
+    popup.show()
+```
+
+### Popup Queue
+Show multiple popups sequentially. The second popup will display after the first closes.
+
+```python
+def popup_queue_example(context):
+    from . import ui_tools
+    
+    # Create first popup
+    popup1 = ui_tools.Popup("First Message", "This is the first popup in the queue.")
+    popup1.add_close_button("OK")
+    popup1.show()
+    
+    # Create second popup - this will show after the first closes
+    popup2 = ui_tools.Popup("Second Message", "This is the second popup, shown after the first closes.")
+    popup2.add_close_button("OK")
+    popup2.show()
+    
+    # Both popups are queued - first shows immediately, second waits
 ```
 
 ## API Reference
@@ -344,6 +390,45 @@ Popup(title, label=None, width=None, height=None, prevent_close=False, blocking=
   - `cancelled`: Set to `True` to cancel (returns CANCELLED)
 
 ### Label
+                
+            # Finish
+            progress.update(100, 100, "Done!")
+            time.sleep(0.5)
+            
+            # Allow closing
+            popup.prevent_close = False
+            
+            # Change Cancel button to Close
+            cancel_btn.text = "Close"
+            cancel_btn.callback = lambda: setattr(popup, 'finished', True)
+            
+            # Trigger redraw to show button change
+            progress.update(100, 100, "Done!") 
+            
+        except Exception as e:
+            print(f"Error: {e}")
+            popup.prevent_close = False
+
+    # 6. Submit Task
+    tm.submit(background_task)
+```
+
+### Popup
+```python
+Popup(title, label=None, width=None, height=None, prevent_close=False, blocking=False)
+```
+- `title`: Popup window title
+- `label`: Optional message text
+- `prevent_close`: If True, prevents closing via Enter/Esc (useful for progress bars)
+- `blocking`: If True, prevents interacting with the window behind the popup (navigation, clicks)
+- `width`, `height`: Optional fixed size (defaults to auto-sizing)
+- Properties:
+  - `on_enter`: Callback for Enter key
+  - `on_cancel`: Callback for Escape key
+  - `finished`: Set to `True` to close (returns FINISHED)
+  - `cancelled`: Set to `True` to cancel (returns CANCELLED)
+
+### Label
 ```python
 Label(text)
 ```
@@ -392,6 +477,8 @@ ThreadManager(max_workers=None)
 - **Text Wrapping**: Long text in Labels automatically wraps
 - **Auto OK Button**: If you don't add any buttons, an "OK" button is added automatically
 - **Thread Safety**: Use `progress.update()` from background threads, it's designed to be thread-safe
+- **Scrolling**: Content taller than the popup height automatically enables scrolling
+- **Popup Queue**: Create multiple popups - they will display sequentially as each is closed
 
 ## License
 

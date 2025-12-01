@@ -846,9 +846,17 @@ class ProgressBar(Widget):
             text_padding = int(10 * ui_scale)
             available_width = self.scaled_width - (2 * text_padding)
             
-            # Check if text overflows
+            # Check if text overflows and truncate if necessary
             if text_width > available_width:
-                # Right-align text and clip overflow on the left
+                # Truncate from the start to fit the available width
+                for i in range(len(display_text) + 1):
+                    truncated_text = display_text[i:]
+                    tw, th = blf.dimensions(0, truncated_text)
+                    if tw <= available_width:
+                        display_text = truncated_text
+                        text_width = tw
+                        break
+                # Right-align the truncated text
                 text_x = self.global_x + self.scaled_width - text_padding - text_width
             else:
                 # Center text normally
@@ -857,21 +865,9 @@ class ProgressBar(Widget):
             center_y = self.global_y + (self.scaled_height / 2)
             text_y = center_y - (text_height / 3)
             
-            # Enable clipping for the text area
-            scissor_x = int(self.global_x + text_padding)
-            scissor_y = int(self.global_y)
-            scissor_w = int(available_width)
-            scissor_h = int(self.scaled_height)
-            
-            gpu.state.scissor_set(scissor_x, scissor_y, scissor_w, scissor_h)
-            gpu.state.scissor_test_set(True)
-            
             blf.color(0, *self.text_color)
             blf.position(0, text_x, text_y, 0)
             blf.draw(0, display_text)
-            
-            # Disable scissor test
-            gpu.state.scissor_test_set(False)
 
 class Scrollbar(Widget):
     def __init__(self, orientation='vertical', width=16, parent=None):
