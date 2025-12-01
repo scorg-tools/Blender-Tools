@@ -2447,9 +2447,8 @@ class SCOrg_tools_import():
                     fail_count += 1
                     report_lines.append(f"❌ Exception: {exc}")
                 
-                # Update progress every 2 tasks or at the end
-                if completed_count % 2 == 0 or completed_count == total_tasks:
-                    ui_tools.progress_bar_popup("extract_missing_files", completed_count, total_tasks, f"Processed {completed_count}/{total_tasks}")
+                # Update progress
+                ui_tools.progress_bar_popup("extract_missing_files", completed_count, total_tasks, f"Processed {completed_count}/{total_tasks}")
         
         # Clear progress
         ui_tools.close_progress_bar_popup("extract_missing_files")

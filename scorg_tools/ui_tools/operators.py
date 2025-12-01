@@ -16,6 +16,12 @@ is_showing_popup = False
 # Configurable operator prefix (can be set before registration)
 OPERATOR_PREFIX = "uitools"
 
+def draw_popup_callback(popup, context):
+    if popup:
+        # Layout is set once in invoke, no need to update every frame
+        popup.draw(context)
+        popup.draw(context)
+
 class UITOOLS_OT_custom_popup(bpy.types.Operator):
     bl_idname = "uitools.custom_popup"
     bl_label = "Custom Popup"
@@ -153,7 +159,7 @@ class UITOOLS_OT_custom_popup(bpy.types.Operator):
                         break
             
             self.draw_handler = self.space.draw_handler_add(
-                self.draw_callback, (context,), 'WINDOW', 'POST_PIXEL'
+                draw_popup_callback, (self.active_popup, context), 'WINDOW', 'POST_PIXEL'
             )
             
             context.window_manager.modal_handler_add(self)
@@ -178,11 +184,6 @@ class UITOOLS_OT_custom_popup(bpy.types.Operator):
             print(f"Failed to show popup: {e}")
             return {'CANCELLED'}
 
-    def draw_callback(self, context):
-        if self.active_popup:
-            # Layout is set once in invoke, no need to update every frame
-            self.active_popup.draw(context)
-            self.active_popup.draw(context)
 
     def remove_handler(self, context):
         if self.draw_handler and self.space:

@@ -331,11 +331,8 @@ class VIEW3D_OT_export_missing(bpy.types.Operator):
                     globals_and_threading.missing_files = set()
                 
                 from . import ui_tools
-                header = f"Extraction Complete\nSuccess: {success_count} | Failed: {fail_count}\n\nNow the missing files have been extracted, please re-import the model again."
-                popup = ui_tools.Popup(title="Extraction Complete", width=800)
-                popup.add.label(header + "\n\n" + "\n".join(report_lines))
-                popup.add.button("OK", lambda: None)
-                popup.show()
+                message = f"Extraction Complete\nSuccess: {success_count} | Failed: {fail_count}\n\nNow the missing files have been extracted, please re-import the model again."
+                ui_tools.Popup("Extraction Complete", message + "\n\n" + "\n".join(report_lines), width=800).show()
             bpy.app.timers.register(show_completion, first_interval=0.1)
         
         # Register the extraction to run asynchronously

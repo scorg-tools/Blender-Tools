@@ -310,6 +310,16 @@ class Button(Widget):
                 if was_active and self.hover:
                     if self.callback:
                         self.callback()
+                    else:
+                        # Auto-close logic for standard buttons
+                        if self.text.lower() in ["ok", "okay", "close"]:
+                            # Traverse up to find the Popup
+                            p = self.parent
+                            while p:
+                                if type(p).__name__ == 'Popup':
+                                    p.finished = True
+                                    break
+                                p = p.parent
                     return True
                 return was_active # Consume event if we were active
         return False
