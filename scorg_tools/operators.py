@@ -6,6 +6,7 @@ from . import misc_utils
 from . import tint_utils
 from . import import_utils
 from . import blender_utils
+from . import ui_tools
 from pathlib import Path
 import subprocess
 import os
@@ -187,16 +188,160 @@ class VIEW3D_OT_import_loadout(bpy.types.Operator):
     bl_idname = "view3d.import_loadout"
     bl_label = "Import missing loadout"
     bl_description = "Import missing ship components, and materials for the current ship and apply a number of fixes"
+    bl_options = {'REGISTER', 'UNDO'}
 
-    def execute(self, context):
+    def __init__(self):
+        self.entries = []
+        self.current_index = 0
+        self.empties_to_fill = []
+        self.top_level_loadout = None
+        self.displacement_strength = 0
+        self.batch_size = 5  # Process 5 entries per modal call
+        self.state = 'init'  # 'init', 'hardpoints', 'postprocess'
+        self.postprocess_steps = []
+        self.current_step = 0
+
+    def invoke(self, context, event):
         # Ensure extract_dir is a Path object before checking
         prefs = bpy.context.preferences.addons["scorg_tools"].preferences
         extract_dir_path = Path(prefs.extract_dir)
 
-        if extract_dir_path.is_dir() and str(extract_dir_path) != "": # Also check if it's not an empty string
-            import_utils.SCOrg_tools_import.run_import()
-        else:
+        if not (extract_dir_path.is_dir() and str(extract_dir_path) != ""):
             misc_utils.SCOrg_tools_misc.error("Error: Data Extract Directory not set or does not exist. Please set it in preferences.")
+            return {'CANCELLED'}
+
+        # Initialize import state
+        os.system('cls')
+        import_utils.SCOrg_tools_import.imported_guid_objects = {}
+        import_utils.SCOrg_tools_import.INCLUDE_HARDPOINTS = [] # all
+        globals_and_threading.missing_files = set()
+        import_utils.SCOrg_tools_import.set_translation_new_data_preference()
+
+        misc_utils.SCOrg_tools_misc.select_base_collection() # Ensure the base collection is active before importing
+        record = misc_utils.SCOrg_tools_misc.get_ship_record()
+        
+        globals_and_threading.imported_record = record
+
+        # Check if record is None before trying to access its properties
+        if record is None:
+            misc_utils.SCOrg_tools_misc.error("Could not get ship record. Please import a StarFab Blueprint first.")
+            return {'CANCELLED'}
+
+        # Use ship displacement preference for fix_modifiers later
+        self.displacement_strength = bpy.context.preferences.addons["scorg_tools"].preferences.decal_displacement_ship
+
+        # Safely access Components and loadout
+        self.top_level_loadout = import_utils.SCOrg_tools_import.get_loadout_from_record(record)
+
+        if self.top_level_loadout is None:
+            blender_utils.SCOrg_tools_blender.fix_modifiers(self.displacement_strength)
+            misc_utils.SCOrg_tools_misc.error("Could not find top-level loadout in ship record. Check the structure of the record.")
+            return {'CANCELLED'}
+
+        self.empties_to_fill = import_utils.SCOrg_tools_import.get_all_empties_blueprint()
+
+        if globals_and_threading.debug: print(f"Total hardpoints to import: {len(self.empties_to_fill)}")
+
+        # Collect top-level entries
+        self.entries = self.top_level_loadout.properties.get('entries', [])
+        self.current_index = 0
+        self.state = 'hardpoints'
+
+        # Prepare post-processing steps
+        self.postprocess_steps = []
+        prefs = bpy.context.preferences.addons["scorg_tools"].preferences
+        if prefs.enable_weld_weighted_normal and not False:  # material_only=False
+            self.postprocess_steps.append(('blender_utils', 'add_weld_and_weighted_normal_modifiers', []))
+        if prefs.enable_displace_decals and not False:
+            self.postprocess_steps.append(('blender_utils', 'add_displace_modifiers_for_decal', [self.displacement_strength]))
+        if prefs.enable_remove_duplicate_displace and not False:
+            self.postprocess_steps.append(('blender_utils', 'remove_duplicate_displace_modifiers', []))
+        if prefs.enable_remove_proxy_geometry and not False:
+            self.postprocess_steps.append(('blender_utils', 'remove_proxy_material_geometry', []))
+        if prefs.enable_remap_material_users and not False:
+            self.postprocess_steps.append(('blender_utils', 'remap_material_users', []))
+        if prefs.enable_import_missing_materials and not False:
+            self.postprocess_steps.append(('import_utils', 'import_missing_materials', []))
+        if prefs.enable_fix_materials_case:
+            self.postprocess_steps.append(('blender_utils', 'fix_materials_case_sensitivity', []))
+        if prefs.enable_set_glass_transparent:
+            self.postprocess_steps.append(('blender_utils', 'set_glass_materials_transparent', []))
+        if prefs.enable_fix_stencil_materials:
+            self.postprocess_steps.append(('blender_utils', 'fix_stencil_materials', []))
+        if prefs.enable_3d_pom:
+            self.postprocess_steps.append(('blender_utils', 'replace_pom_materials', []))
+        if prefs.enable_remove_engine_flame_materials:
+            self.postprocess_steps.append(('blender_utils', 'set_engine_flame_mat_transparent', []))
+        if prefs.enable_tidyup:
+            self.postprocess_steps.append(('blender_utils', 'tidyup', []))
+        
+        self.current_step = 0
+
+        # Initialize progress
+        ui_tools.progress_bar_popup("import_hardpoints", 0, len(self.entries), "Starting hardpoint import...")
+
+        context.window_manager.modal_handler_add(self)
+        return {'RUNNING_MODAL'}
+
+    def modal(self, context, event):
+        if event.type == 'ESC':
+            ui_tools.close_progress_bar_popup("import_hardpoints")
+            return {'CANCELLED'}
+
+        if self.state == 'hardpoints':
+            processed = 0
+            while self.current_index < len(self.entries) and processed < self.batch_size:
+                entry = self.entries[self.current_index]
+                
+                # Process this entry
+                hardpoint_mapping = {}  # For top level, no mapping
+                import_utils.SCOrg_tools_import.process_single_entry(
+                    entry, self.empties_to_fill, is_top_level=True, parent_guid=None, hardpoint_mapping=hardpoint_mapping
+                )
+                
+                self.current_index += 1
+                processed += 1
+            
+            # Update progress
+            ui_tools.progress_bar_popup("import_hardpoints", self.current_index, len(self.entries), f"Importing hardpoints {self.current_index}/{len(self.entries)}...")
+            
+            # Force UI update occasionally
+            if self.current_index % 10 == 0 or self.current_index >= len(self.entries):
+                blender_utils.SCOrg_tools_blender.update_viewport_with_timer(interval_seconds=0.1)
+            
+            if self.current_index >= len(self.entries):
+                self.state = 'postprocess'
+                self.current_step = 0
+                ui_tools.progress_bar_popup("postprocess", 0, len(self.postprocess_steps), "Starting post-processing...")
+            
+            return {'RUNNING_MODAL'}
+        
+        elif self.state == 'postprocess':
+            if self.current_step < len(self.postprocess_steps):
+                module_name, step_name, args = self.postprocess_steps[self.current_step]
+                if module_name == 'blender_utils':
+                    method = getattr(blender_utils.SCOrg_tools_blender, step_name)
+                elif module_name == 'import_utils':
+                    method = getattr(import_utils.SCOrg_tools_import, step_name)
+                method(*args)
+                blender_utils.SCOrg_tools_blender.update_viewport_with_timer(redraw_now=True)
+                
+                self.current_step += 1
+                ui_tools.progress_bar_popup("postprocess", self.current_step, len(self.postprocess_steps), f"Post-processing {self.current_step}/{len(self.postprocess_steps)}...")
+                
+                return {'RUNNING_MODAL'}
+            else:
+                # Finished post-processing
+                print(f"Total missing files: {len(globals_and_threading.missing_files)}")
+                if len(globals_and_threading.missing_files) > 0:
+                    globals_and_threading.show_missing_files_popup()
+                import_utils.SCOrg_tools_import.set_translation_new_data_preference(reset=True)
+
+                ui_tools.progress_bar_popup("postprocess", len(self.postprocess_steps), len(self.postprocess_steps), "Post-processing complete")
+                ui_tools.close_progress_bar_popup("postprocess")
+                
+                return {'FINISHED'}
+        
         return {'FINISHED'}
 
 class VIEW3D_OT_make_instance_real(bpy.types.Operator):

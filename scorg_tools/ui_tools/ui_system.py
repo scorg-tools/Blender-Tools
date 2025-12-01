@@ -779,7 +779,7 @@ class ProgressBar(Widget):
         self.padding = 5
         self.font_size_mult = 1.5
         self.last_update_time = 0
-        self.update_interval = 0.1 # Throttle redraws
+        self.update_interval = 0.2 # Throttle redraws
 
     def update(self, current, max_value=None, text=None, force_redraw=False):
         """
@@ -806,6 +806,8 @@ class ProgressBar(Widget):
                     for window in bpy.context.window_manager.windows:
                         for area in window.screen.areas:
                             area.tag_redraw()
+                    # Force immediate redraw to prevent UI freezing during intensive tasks
+                    bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
                 except:
                     pass
             
