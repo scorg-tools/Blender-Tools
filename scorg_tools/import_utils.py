@@ -245,7 +245,7 @@ class SCOrg_tools_import():
         if geometry_path:
             if globals_and_threading.debug: print(f"Loading geo: {geometry_path}")
             if not geometry_path.exists():
-                misc_utils.SCOrg_tools_misc.error(f".DAE file not found at: {geometry_path}")
+                print(f".DAE file not found at: {geometry_path}")
                 if globals_and_threading.debug:
                     print(f"DEBUG: Attempted DAE import path: {geometry_path}, but file was missing")
                 
@@ -801,7 +801,7 @@ class SCOrg_tools_import():
                     geometry_path = process_bones_file.pop(0)  # Get the first file in the array, which is the base armature DAE file
 
                 if not geometry_path.exists():
-                    misc_utils.SCOrg_tools_misc.error(f".DAE file not found at: {geometry_path}")
+                    print(f".DAE file not found at: {geometry_path}")
                     if globals_and_threading.debug: print(f"DEBUG: Attempted DAE import path: {geometry_path}, but file was missing")
                     if str(geometry_path) not in globals_and_threading.missing_files:
                         try:
@@ -903,12 +903,12 @@ class SCOrg_tools_import():
                 else:
                     empty['orig_name'] = re.sub(r'\.\d+$', '', empty.name)
 
-            __class__.import_hardpoint_hierarchy(nested_loadout, nested_empties, is_top_level=False, parent_guid=guid_str)
+            __class__.import_hardpoint_hierarchy(nested_loadout, nested_empties, is_top_level=False, parent_guid=guid_str, skip_import_geometry=skip_import_geometry or skip_geometry_for_nested)
         else:
             if globals_and_threading.debug: print("DEBUG: No nested loadout to process")
 
     @staticmethod
-    def import_hardpoint_hierarchy(loadout, empties_to_fill, is_top_level=True, parent_guid=None):
+    def import_hardpoint_hierarchy(loadout, empties_to_fill, is_top_level=True, parent_guid=None, skip_import_geometry=False):
         # Check if loadout is None to prevent AttributeError
         if loadout is None:
             if globals_and_threading.debug: print("DEBUG: Loadout is None, skipping hierarchy import")
@@ -930,6 +930,7 @@ class SCOrg_tools_import():
             ui_tools.progress_bar_popup("import_hardpoints", 0, len(entries), "Starting hardpoint import...")
         
         for i, entry in enumerate(entries):
+            skip_geometry_for_nested = False
             blender_utils.SCOrg_tools_blender.update_viewport_with_timer(interval_seconds=0.1)
 
             props = getattr(entry, 'properties', entry)
@@ -1003,6 +1004,7 @@ class SCOrg_tools_import():
             if not __class__.is_guid(guid_str): # must be 00000000-0000-0000-0000-000000000000 or blank
                 if not entity_class_name:
                     if globals_and_threading.debug: print("DEBUG: GUID is all zeros, but no entityClassName found, skipping geometry import")
+                    skip_geometry_for_nested = True
                     # Still recurse into nested loadout if present
                     if should_process_nested and nested_loadout:
                         entries_count = len(nested_loadout.properties.get('entries', [])) if nested_loadout else 0
@@ -1016,9 +1018,9 @@ class SCOrg_tools_import():
                                 for child in obj.children:
                                     collect_empties(child)
                             collect_empties(filled_hardpoint)
-                            __class__.import_hardpoint_hierarchy(nested_loadout, nested_empties, is_top_level=False, parent_guid=guid_str)
+                            __class__.import_hardpoint_hierarchy(nested_loadout, nested_empties, is_top_level=False, parent_guid=guid_str, skip_import_geometry=skip_import_geometry or skip_geometry_for_nested)
                         else:
-                            __class__.import_hardpoint_hierarchy(nested_loadout, empties_to_fill, is_top_level=False, parent_guid=guid_str)
+                            __class__.import_hardpoint_hierarchy(nested_loadout, empties_to_fill, is_top_level=False, parent_guid=guid_str, skip_import_geometry=skip_import_geometry or skip_geometry_for_nested)
                     else:
                         if globals_and_threading.debug: print("DEBUG: No nested loadout found, recursion ends here")
                     continue
@@ -1043,9 +1045,11 @@ class SCOrg_tools_import():
 
             # Only import geometry if we have an empty hardpoint
             if should_import_geometry:
+                skip_geometry_for_nested = False
                 # Check if this specific hardpoint already has children (is already filled)
                 if len(matching_empty.children) > 0:
                     if globals_and_threading.debug: print(f"DEBUG: Hardpoint '{matching_empty.name}' already has children, skipping geometry import to avoid duplication")
+                    skip_geometry_for_nested = True
                     # Still allow nested loadout processing to continue - don't skip the entire section
                 elif guid_str in __class__.imported_guid_objects:
                     # If the GUID is already imported, duplicate the hierarchy linked
@@ -1057,87 +1061,118 @@ class SCOrg_tools_import():
                     geometry_path = __class__.get_geometry_path(guid = guid_str)
                     if geometry_path is None:
                         if globals_and_threading.debug: print(f"ERROR: No geometry for GUID {guid_str}: {geometry_path}")
-                        continue
+                        skip_geometry_for_nested = True
 
-                    process_bones_file = False
-                    # if the geometry path is an array, it means we have a CDF XML file that points to the real geometry
-                    if isinstance(geometry_path, list):
-                        if globals_and_threading.debug: print(f"DEBUG: CDF XML file found with references to: {geometry_path}")
-                        process_bones_file = geometry_path
-                        geometry_path = process_bones_file.pop(0)  # Get the first file in the array, which is the base armature DAE file
+                    else:
+                        process_bones_file = False
+                        # if the geometry path is an array, it means we have a CDF XML file that points to the real geometry
+                        if isinstance(geometry_path, list):
+                            if globals_and_threading.debug: print(f"DEBUG: CDF XML file found with references to: {geometry_path}")
+                            process_bones_file = geometry_path
+                            geometry_path = process_bones_file.pop(0)  # Get the first file in the array, which is the base armature DAE file
 
-                    if not geometry_path.exists():
-                        misc_utils.SCOrg_tools_misc.error(f".DAE file not found at: {geometry_path}")
-                        if globals_and_threading.debug: print(f"DEBUG: Attempted DAE import path: {geometry_path}, but file was missing")
-                        if str(geometry_path) not in globals_and_threading.missing_files:
-                            try:
-                                rel_path = str(geometry_path.relative_to(__class__.extract_dir)).replace("\\", "/")
-                            except ValueError:
-                                rel_path = str(geometry_path).replace("\\", "/")
-                            if not rel_path.startswith('$') and 'ddna.glossmap' not in rel_path.lower():
-                                if not rel_path.lower().startswith("data/"):
-                                    rel_path = "Data/" + rel_path
-                                globals_and_threading.missing_files.add(rel_path);
-                                print(f"Added to missing_files (loc 2): {rel_path}")
-                        continue
+                        if not geometry_path.exists():
+                            print(f".DAE file not found at: {geometry_path}")
+                            if globals_and_threading.debug: print(f"DEBUG: Attempted DAE import path: {geometry_path}, but file was missing")
+                            if str(geometry_path) not in globals_and_threading.missing_files:
+                                try:
+                                    rel_path = str(geometry_path.relative_to(__class__.extract_dir)).replace("\\", "/")
+                                except ValueError:
+                                    rel_path = str(geometry_path).replace("\\", "/")
+                                if not rel_path.startswith('$'):
+                                    if not rel_path.lower().startswith("data/"):
+                                        rel_path = "Data/" + rel_path
+                                    globals_and_threading.missing_files.add(rel_path);
+                                    print(f"Added to missing_files (loc 2): {rel_path}")
+                            skip_geometry_for_nested = True
 
-                    # Get a set of all objects before import
-                    before = set(bpy.data.objects)
+                        else:
+                            skip_geometry_for_nested = True
+                            if not skip_import_geometry:
+                                # Get a set of all objects before import
+                                before = set(bpy.data.objects)
 
-                    bpy.ops.object.select_all(action='DESELECT')
-                    result = __class__.import_dae(geometry_path)
-                    if result != True:
-                        if globals_and_threading.debug: print(f"ERROR: Failed to import DAE for {guid_str}: {geometry_path}")
-                        continue
+                                bpy.ops.object.select_all(action='DESELECT')
+                                result = __class__.import_dae(geometry_path)
+                                if result != True:
+                                    if globals_and_threading.debug: print(f"ERROR: Failed to import DAE for {guid_str}: {geometry_path}")
+                                    # skip_geometry_for_nested already True
 
-                    # Get a set of all objects after import
-                    after = set(bpy.data.objects)
-                    # The difference is the set of newly imported objects
-                    imported_objs = list(after - before)
+                                else:
+                                    # Get a set of all objects after import
+                                    after = set(bpy.data.objects)
+                                    # The difference is the set of newly imported objects
+                                    imported_objs = list(after - before)
 
-                    root_objs = [obj for obj in imported_objs if obj.parent is None]
-                    if not root_objs:
-                        if globals_and_threading.debug: print(f"WARNING: No root object found for: {geometry_path}")
-                        continue
+                                    root_objs = [obj for obj in imported_objs if obj.parent is None]
+                                    if not root_objs:
+                                        if globals_and_threading.debug: print(f"WARNING: No root object found for: {geometry_path}")
+                                        # skip_geometry_for_nested already True
+                                    else:
+                                        root_obj = root_objs[0]
+                                        root_obj.parent = matching_empty
+                                        root_obj.matrix_parent_inverse.identity()
+                                        __class__.imported_guid_objects[guid_str] = root_obj
+                                        skip_geometry_for_nested = False
 
-                    root_obj = root_objs[0]
-                    root_obj.parent = matching_empty
-                    root_obj.matrix_parent_inverse.identity()
-                    __class__.imported_guid_objects[guid_str] = root_obj
+                                        if process_bones_file:
+                                            if globals_and_threading.debug: print("Deleting meshes for CDF import")
+                                            # Store the root object name before deletion
+                                            root_obj_name = root_obj.name
+                                            # Delete all meshes to avoid conflicts with CDF imports, the imported .dae objects will be selected
+                                            __class__.replace_selected_mesh_with_empties()
+                                            
+                                            if globals_and_threading.debug: print(f"Converting bones to empties for {guid_str}: {geometry_path}")
+                                            # Ensure we're in object mode before converting armatures
+                                            if bpy.context.mode != 'OBJECT':
+                                                bpy.ops.object.mode_set(mode='OBJECT')
+                                            blender_utils.SCOrg_tools_blender.convert_armatures_to_empties()
+                                            
+                                            for file in process_bones_file:
+                                                if not file.is_file():
+                                                    if globals_and_threading.debug: print(f"⚠️ ERROR: Bones file missing: {file}")
+                                                    if str(file) not in globals_and_threading.missing_files:
+                                                        try:
+                                                            rel_path = str(file.relative_to(__class__.extract_dir))
+                                                        except ValueError:
+                                                            rel_path = str(file)
+                                                        if not rel_path.startswith('$') and 'ddna.glossmap' not in rel_path.lower():
+                                                            if not rel_path.lower().startswith("data/"):
+                                                                rel_path = "Data/" + rel_path
+                                                            globals_and_threading.missing_files.add(rel_path)
+                                                    continue
+                                                if globals_and_threading.debug: print(f"Processing bones file: {file}")
+                                                __class__.import_file(file, root_obj_name)
+                                            if globals_and_threading.debug: print("DEBUG: Finished processing bones files")
 
-                    if process_bones_file:
-                        if globals_and_threading.debug: print("Deleting meshes for CDF import")
-                        # Store the root object name before deletion
-                        root_obj_name = root_obj.name
-                        # Delete all meshes to avoid conflicts with CDF imports, the imported .dae objects will be selected
-                        __class__.replace_selected_mesh_with_empties()
-                        
-                        if globals_and_threading.debug: print(f"Converting bones to empties for {guid_str}: {geometry_path}")
-                        # Ensure we're in object mode before converting armatures
-                        if bpy.context.mode != 'OBJECT':
-                            bpy.ops.object.mode_set(mode='OBJECT')
-                        blender_utils.SCOrg_tools_blender.convert_armatures_to_empties()
-                        
-                        for file in process_bones_file:
-                            if not file.is_file():
-                                if globals_and_threading.debug: print(f"⚠️ ERROR: Bones file missing: {file}")
-                                if str(file) not in globals_and_threading.missing_files:
-                                    try:
-                                        rel_path = str(file.relative_to(__class__.extract_dir))
-                                    except ValueError:
-                                        rel_path = str(file)
-                                    if not rel_path.startswith('$') and 'ddna.glossmap' not in rel_path.lower():
-                                        if not rel_path.lower().startswith("data/"):
-                                            rel_path = "Data/" + rel_path
-                                        globals_and_threading.missing_files.add(rel_path)
-                                continue
-                            if globals_and_threading.debug: print(f"Processing bones file: {file}")
-                            __class__.import_file(file, root_obj_name)
-                        if globals_and_threading.debug: print("DEBUG: Finished processing bones files")
+                                        if globals_and_threading.debug: print(f"Imported object for '{item_port_name}' GUID {guid_str} → {geometry_path}")
+                                        # Delete all meshes to avoid conflicts with CDF imports, the imported .dae objects will be selected
+                                        __class__.replace_selected_mesh_with_empties()
+                                        
+                                        if globals_and_threading.debug: print(f"Converting bones to empties for {guid_str}: {geometry_path}")
+                                        # Ensure we're in object mode before converting armatures
+                                        if bpy.context.mode != 'OBJECT':
+                                            bpy.ops.object.mode_set(mode='OBJECT')
+                                        blender_utils.SCOrg_tools_blender.convert_armatures_to_empties()
+                                        
+                                        for file in process_bones_file:
+                                            if not file.is_file():
+                                                if globals_and_threading.debug: print(f"⚠️ ERROR: Bones file missing: {file}")
+                                                if str(file) not in globals_and_threading.missing_files:
+                                                    try:
+                                                        rel_path = str(file.relative_to(__class__.extract_dir))
+                                                    except ValueError:
+                                                        rel_path = str(file)
+                                                    if not rel_path.startswith('$') and 'ddna.glossmap' not in rel_path.lower():
+                                                        if not rel_path.lower().startswith("data/"):
+                                                            rel_path = "Data/" + rel_path
+                                                        globals_and_threading.missing_files.add(rel_path)
+                                                continue
+                                            if globals_and_threading.debug: print(f"Processing bones file: {file}")
+                                            __class__.import_file(file, root_obj_name)
+                                        if globals_and_threading.debug: print("DEBUG: Finished processing bones files")
 
-                    if globals_and_threading.debug: print(f"Imported object for '{item_port_name}' GUID {guid_str} → {geometry_path}")
-
-            # Process nested loadout regardless of whether we imported geometry
+                                    if globals_and_threading.debug: print(f"Imported object for '{item_port_name}' GUID {guid_str} → {geometry_path}")            # Process nested loadout regardless of whether we imported geometry
             if should_process_nested and nested_loadout:
                 entries_count = len(nested_loadout.properties.get('entries', []))
                 if globals_and_threading.debug: print(f"DEBUG: Processing nested loadout with {entries_count} entries for GUID {guid_str}...")
@@ -1169,7 +1204,7 @@ class SCOrg_tools_import():
                     else:
                         empty['orig_name'] = re.sub(r'\.\d+$', '', empty.name)
 
-                __class__.import_hardpoint_hierarchy(nested_loadout, nested_empties, is_top_level=False, parent_guid=guid_str)
+                __class__.import_hardpoint_hierarchy(nested_loadout, nested_empties, is_top_level=False, parent_guid=guid_str, skip_import_geometry=skip_import_geometry or skip_geometry_for_nested)
             else:
                 if globals_and_threading.debug: print("DEBUG: No nested loadout to process")
 
@@ -1194,17 +1229,11 @@ class SCOrg_tools_import():
             return
 
         if not geometry_path.exists():
-            misc_utils.SCOrg_tools_misc.error(f".DAE file not found at: {geometry_path}")
+            print(f".DAE file not found at: {geometry_path}")
             if globals_and_threading.debug: print(f"DEBUG: Attempted DAE import path: {geometry_path}, but file was missing")
-            try:
-                rel_path = str(geometry_path.relative_to(__class__.extract_dir)).replace("\\", "/")
-            except ValueError:
-                rel_path = str(geometry_path).replace("\\", "/")
-            if not rel_path.startswith('$') and 'ddna.glossmap' not in rel_path.lower():
-                if not rel_path.lower().startswith("data/"):
-                    rel_path = "Data/" + rel_path
-                globals_and_threading.missing_files.add(rel_path)
-                print(f"Added to missing_files (loc 3): {rel_path}")
+            rel_path = __class__.get_relative_path_for_missing_files(geometry_path)
+            globals_and_threading.missing_files.add(rel_path)
+            print(f"Added to missing_files (loc 3): {rel_path}")
             return
 
         # Get a set of all objects before import
@@ -1365,6 +1394,29 @@ class SCOrg_tools_import():
             if globals_and_threading.debug:
                 print(f"DEBUG: Error in case_insensitive_path_exists: {e}")
             return False
+
+    @staticmethod
+    def get_relative_path_for_missing_files(file_path):
+        """
+        Convert a file path to a relative path suitable for missing files list.
+        
+        Args:
+            file_path: Path object or string path
+        
+        Returns:
+            str: Relative path with Data/ prefix if needed
+        """
+        file_path = Path(file_path)
+        if __class__.extract_dir:
+            try:
+                rel_path = str(file_path.relative_to(__class__.extract_dir)).replace("\\", "/")
+            except ValueError:
+                rel_path = str(file_path).replace("\\", "/")
+        else:
+            rel_path = str(file_path).replace("\\", "/")
+        if not rel_path.lower().startswith("data/"):
+            rel_path = "Data/" + rel_path
+        return rel_path
 
     @staticmethod
     def extract_missing_textures_from_output(captured_stdout, captured_stderr):
@@ -1947,19 +1999,34 @@ class SCOrg_tools_import():
     @staticmethod
     def import_dae(geometry_path: typing.Union[str, Path]):
         """Import a .dae file using Blender's built-in Collada importer."""
+        geometry_path = Path(geometry_path)
+        if __class__.extract_dir is None:
+            prefs = bpy.context.preferences.addons["scorg_tools"].preferences
+            extract_dir = getattr(prefs, 'extract_dir', None)
+            __class__.extract_dir = Path(extract_dir) if extract_dir else None
+        
         file = geometry_path.with_suffix(".dae")
         if not file.is_file():
             if globals_and_threading.debug: print(f"Skipping file {geometry_path.stem}: dae does not exist {geometry_path}")
+            # Add to missing files
+            rel_path = __class__.get_relative_path_for_missing_files(geometry_path)
+            globals_and_threading.missing_files.add(rel_path)
             return False
 
         try:
             result = bpy.ops.wm.collada_import(filepath=str(geometry_path), auto_connect=False)
         except RuntimeError as e:
             if globals_and_threading.debug: print(f"ERROR: Collada import failed for {geometry_path}: {e}")
+            # Add to missing files, assuming the file might be corrupted or incomplete
+            rel_path = __class__.get_relative_path_for_missing_files(geometry_path)
+            globals_and_threading.missing_files.add(rel_path)
             return False
         
         if 'FINISHED' not in result:
             if globals_and_threading.debug: print(f"❌ ERROR: Failed to import DAE for: {geometry_path}")
+            # Add to missing files
+            rel_path = __class__.get_relative_path_for_missing_files(geometry_path)
+            globals_and_threading.missing_files.add(rel_path)
             return False
         return True
 

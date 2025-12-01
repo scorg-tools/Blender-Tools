@@ -169,7 +169,7 @@ def show_missing_files_popup():
     missing_files_text = "The following files were not found:\n\n" + "\n".join(sorted(missing_files))
     
     # Create popup using ui_tools
-    popup = ui_tools.Popup(title="Missing Files", width=800)
+    popup = ui_tools.Popup(title="Missing Files", width=900)
     popup.add.label(missing_files_text)
     
     # Add buttons in a row
