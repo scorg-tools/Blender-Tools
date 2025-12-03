@@ -5,12 +5,22 @@ from pathlib import Path
 import os
 import typing
 import re
+import subprocess
+import time
+import shutil
 # Import globals
 from . import globals_and_threading
 from . import misc_utils # For SCOrg_tools_misc.error, get_ship_record, select_base_collection
 from . import ui_tools
 from . import blender_utils # For SCOrg_tools_blender.fix_modifiers
 from . import tint_utils # For SCOrg_tools_tint.get_tint_pallets
+
+# CGF Converter constants
+CGF_CONVERTER_DEFAULT_OPTS = (
+    '-en "$physics_proxy" -em proxy -em nocollision_faces -prefixmatnames -notex'
+)
+CGF_CONVERTER = shutil.which("cgf-converter")
+CGF_CONVERTER_TIMEOUT = 5 * 60  # 5 minutes timeout
 
 class SCOrg_tools_import():
     item_name = None
@@ -518,6 +528,9 @@ class SCOrg_tools_import():
                             try:
                                 path = comp.properties.Geometry.properties.Geometry.properties.Geometry.properties.path
                                 if path:
+                                    path = __class__.get_preferred_geometry_path(path)
+                                    if not path:
+                                        continue  # Skip this component if filtered out
                                     path = path.removeprefix("Data/") # Rare objects have this prefix and they shouldn't see b8f6e23e-8a06-47e4-81c9-3f22c34b99e9
                                     if original_path:
                                         return path  # Return the original path without modification
@@ -566,6 +579,130 @@ class SCOrg_tools_import():
         except Exception as e:
             misc_utils.SCOrg_tools_misc.error(f"Error in get_geometry_path_by_guid GUID {guid}: {e}")
         return None
+
+    @staticmethod
+    def get_preferred_geometry_path(path):
+        """
+        Apply CGF file filtering: skip 'm' variants and prefer .cga over .cgf if both exist.
+        Returns the preferred path or None if skipped.
+        """
+        if not path:
+            return path
+        
+        path_obj = Path(path)
+        suffix = path_obj.suffix.lower()
+        
+        # Skip 'm' variants
+        if path_obj.name.lower().endswith('m'):
+            return None
+        
+        # If it's .cgf, check if .cga exists
+        if suffix == '.cgf':
+            cga_path = path_obj.with_suffix('.cga')
+            full_cga_path = __class__.extract_dir / cga_path
+            if full_cga_path.exists():
+                return str(cga_path)
+        
+        return path
+
+    @staticmethod
+    def convert_cgf_to_dae(cgf_path, dae_path=None, converter_path=None):
+        """
+        Convert a CGF file to DAE using cgf-converter.
+        Returns True if successful, False otherwise.
+        """
+        if globals_and_threading.debug:
+            print(f"DEBUG: convert_cgf_to_dae called for {cgf_path}")
+            import sys
+            sys.stdout.flush()
+        
+        # Use provided converter path or fallback to global default
+        converter_cmd = converter_path if converter_path else CGF_CONVERTER
+        
+        if not converter_cmd:
+            msg = "cgf-converter not found in PATH or preferences"
+            print(f"ERROR: {msg}")
+            misc_utils.SCOrg_tools_misc.error(msg)
+            return False
+        
+        cgf_path = Path(cgf_path)
+        if not cgf_path.exists():
+            return False
+        
+        if dae_path is None:
+            dae_path = cgf_path.with_suffix('.dae')
+        
+        obj_dir = dae_path.parent
+        
+        # Build argument list for subprocess (shell=False for better parallel execution)
+        args = [
+            converter_cmd,
+            '-en', '$physics_proxy',
+            '-em', 'proxy',
+            '-em', 'nocollision_faces',
+            '-prefixmatnames',
+            '-notex',
+            str(cgf_path),
+            '-objectdir', str(obj_dir)
+        ]
+        
+        if globals_and_threading.debug:
+            import threading
+            print(f"DEBUG [{time.time()*1000:.0f}ms]: Thread {threading.current_thread().name} starting cgf-converter for {cgf_path.name}")
+            print(f"DEBUG [{time.time()*1000:.0f}ms]: Command: {' '.join(args)}")
+        
+        try:
+            # Use Popen for non-blocking execution - allows multiple processes to run in parallel
+            process = subprocess.Popen(
+                args,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT
+            )
+            
+            if globals_and_threading.debug:
+                import threading
+                print(f"DEBUG [{time.time()*1000:.0f}ms]: Thread {threading.current_thread().name} subprocess started, PID={process.pid}")
+            
+            # Poll process with timeout (non-blocking approach like StarFab)
+            start_time = time.time()
+            while (time.time() - start_time) < CGF_CONVERTER_TIMEOUT:
+                if process.poll() is not None:
+                    break
+                time.sleep(0.1)  # Check every 100ms
+            else:
+                # Timed out, kill the process
+                process.terminate()
+                print(f"ERROR: cgf-converter timed out for {cgf_path}")
+                return False
+            
+            if globals_and_threading.debug:
+                import threading
+                elapsed = time.time() - start_time
+                print(f"DEBUG [{time.time()*1000:.0f}ms]: Thread {threading.current_thread().name} subprocess completed for {cgf_path.name} in {elapsed:.2f}s")
+            
+            if process.returncode != 0:
+                errmsg = process.stdout.read().decode('utf-8') if process.stdout else ""
+                if globals_and_threading.debug:
+                    print(f"DEBUG: cgf-converter failed with return code {process.returncode}")
+                    print(f"DEBUG: cgf-converter output: {errmsg}")
+                if "is being used by another process" not in errmsg.lower():
+                    misc_utils.SCOrg_tools_misc.error(f"cgf-converter failed for {cgf_path}: {errmsg}")
+                return False
+            
+            if not dae_path.exists():
+                errmsg = result.stdout + result.stderr
+                print(f"DEBUG: cgf-converter returned success but DAE file missing: {dae_path}")
+                print(f"DEBUG: cgf-converter output: {errmsg}")
+                return False
+
+            return True
+            
+        except subprocess.TimeoutExpired:
+            misc_utils.SCOrg_tools_misc.error(f"cgf-converter timed out for {cgf_path}")
+            return False
+        except Exception as e:
+            misc_utils.SCOrg_tools_misc.error(f"Error running cgf-converter: {e}")
+            return False
 
     @staticmethod
     def get_hardpoint_mapping_from_guid(guid):
@@ -668,13 +805,15 @@ class SCOrg_tools_import():
         return tasks        
 
     @staticmethod
-    def process_single_entry(entry, empties_to_fill, is_top_level=True, parent_guid=None, hardpoint_mapping=None):
+    def process_single_entry(entry, empties_to_fill, is_top_level=True, parent_guid=None, hardpoint_mapping=None, skip_import_geometry=False):
         """
         Process a single entry from the loadout, including its nested loadout.
         This is extracted from the loop in import_hardpoint_hierarchy.
         """
         if hardpoint_mapping is None:
             hardpoint_mapping = {}
+        
+        skip_geometry_for_nested = False
         
         props = getattr(entry, 'properties', entry)
         item_port_name = props.get('itemPortName')
@@ -763,17 +902,31 @@ class SCOrg_tools_import():
                     if globals_and_threading.debug: print(f"DEBUG: Could not resolve GUID for entityClassName '{entity_class_name}', skipping import")
                     return
 
-        if not nested_loadout:
-            # If no nested loadout, load the record for the GUID and check for a default loadout
-            if globals_and_threading.debug: print (f"DEBUG: No nested loadout found, loading record for GUID: {guid_str}")
+        # Check if nested loadout is empty or missing
+        loadout_is_empty = False
+        if nested_loadout:
+            # Check if the nested loadout has any entries
+            entries = nested_loadout.properties.get('entries', []) if hasattr(nested_loadout, 'properties') else []
+            loadout_is_empty = len(entries) == 0
+            if globals_and_threading.debug and loadout_is_empty:
+                print(f"DEBUG: Nested loadout exists but is empty (0 entries)")
+        
+        if not nested_loadout or loadout_is_empty:
+            # If no nested loadout or it's empty, load the record for the GUID and check for a default loadout
+            if globals_and_threading.debug: 
+                status = "empty" if loadout_is_empty else "not found"
+                print(f"DEBUG: Nested loadout {status}, loading record for GUID: {guid_str}")
             child_record = __class__.get_record(guid_str)
             if child_record:
-                nested_loadout = __class__.get_loadout_from_record(child_record)
-                should_process_nested = nested_loadout is not None
-                if not nested_loadout:
-                   if globals_and_threading.debug: print(f"DEBUG: Could not find a nested loadout for GUID {guid_str}: {nested_loadout}")
+                entity_loadout = __class__.get_loadout_from_record(child_record)
+                if entity_loadout:
+                    # Use the entity's default loadout instead of the empty one
+                    nested_loadout = entity_loadout
+                    should_process_nested = True
+                    if globals_and_threading.debug: print(f"DEBUG: Loaded default loadout from entity class for GUID {guid_str}")
                 else:
-                    if globals_and_threading.debug: print(f"DEBUG: Found nested loadout for GUID {guid_str}")
+                    if globals_and_threading.debug: print(f"DEBUG: Could not find a nested loadout for GUID {guid_str}: {entity_loadout}")
+
 
         # Only import geometry if we have an empty hardpoint
         if should_import_geometry:
@@ -1146,33 +1299,8 @@ class SCOrg_tools_import():
                                             if globals_and_threading.debug: print("DEBUG: Finished processing bones files")
 
                                         if globals_and_threading.debug: print(f"Imported object for '{item_port_name}' GUID {guid_str} → {geometry_path}")
-                                        # Delete all meshes to avoid conflicts with CDF imports, the imported .dae objects will be selected
-                                        __class__.replace_selected_mesh_with_empties()
-                                        
-                                        if globals_and_threading.debug: print(f"Converting bones to empties for {guid_str}: {geometry_path}")
-                                        # Ensure we're in object mode before converting armatures
-                                        if bpy.context.mode != 'OBJECT':
-                                            bpy.ops.object.mode_set(mode='OBJECT')
-                                        blender_utils.SCOrg_tools_blender.convert_armatures_to_empties()
-                                        
-                                        for file in process_bones_file:
-                                            if not file.is_file():
-                                                if globals_and_threading.debug: print(f"⚠️ ERROR: Bones file missing: {file}")
-                                                if str(file) not in globals_and_threading.missing_files:
-                                                    try:
-                                                        rel_path = str(file.relative_to(__class__.extract_dir))
-                                                    except ValueError:
-                                                        rel_path = str(file)
-                                                    if not rel_path.startswith('$') and 'ddna.glossmap' not in rel_path.lower():
-                                                        if not rel_path.lower().startswith("data/"):
-                                                            rel_path = "Data/" + rel_path
-                                                        globals_and_threading.missing_files.add(rel_path)
-                                                continue
-                                            if globals_and_threading.debug: print(f"Processing bones file: {file}")
-                                            __class__.import_file(file, root_obj_name)
-                                        if globals_and_threading.debug: print("DEBUG: Finished processing bones files")
 
-                                    if globals_and_threading.debug: print(f"Imported object for '{item_port_name}' GUID {guid_str} → {geometry_path}")            # Process nested loadout regardless of whether we imported geometry
+            # Process nested loadout regardless of whether we imported geometry
             if should_process_nested and nested_loadout:
                 entries_count = len(nested_loadout.properties.get('entries', []))
                 if globals_and_threading.debug: print(f"DEBUG: Processing nested loadout with {entries_count} entries for GUID {guid_str}...")
@@ -2007,11 +2135,24 @@ class SCOrg_tools_import():
         
         file = geometry_path.with_suffix(".dae")
         if not file.is_file():
-            if globals_and_threading.debug: print(f"Skipping file {geometry_path.stem}: dae does not exist {geometry_path}")
-            # Add to missing files
-            rel_path = __class__.get_relative_path_for_missing_files(geometry_path)
-            globals_and_threading.missing_files.add(rel_path)
-            return False
+            # Try to convert from CGF if it exists
+            cgf_file = geometry_path.with_suffix(".cgf")
+            if cgf_file.is_file():
+                if globals_and_threading.debug: print(f"DAE not found, attempting to convert from CGF: {cgf_file}")
+                if __class__.convert_cgf_to_dae(cgf_file, file):
+                    if globals_and_threading.debug: print(f"Successfully converted {cgf_file} to {file}")
+                else:
+                    if globals_and_threading.debug: print(f"Failed to convert {cgf_file}")
+                    # Add CGF to missing files
+                    rel_path = __class__.get_relative_path_for_missing_files(cgf_file)
+                    globals_and_threading.missing_files.add(rel_path)
+                    return False
+            else:
+                if globals_and_threading.debug: print(f"Skipping file {geometry_path.stem}: dae does not exist {geometry_path}")
+                # Add to missing files
+                rel_path = __class__.get_relative_path_for_missing_files(geometry_path)
+                globals_and_threading.missing_files.add(rel_path)
+                return False
 
         try:
             result = bpy.ops.wm.collada_import(filepath=str(geometry_path), auto_connect=False)
@@ -2452,12 +2593,19 @@ class SCOrg_tools_import():
         def process_single_file(task_data):
             # Unpack task data
             search_path = task_data['search_path']
+            actual_path = task_data['actual_path']
             content = task_data['content']
             extract_dir = task_data['extract_dir']
             conversion_exts = task_data['conversion_exts']
             cgf_converter = task_data['cgf_converter']
             texconv_path = task_data['texconv_path']
             texture_exts = task_data['texture_exts']
+            
+            if globals_and_threading.debug:
+                import threading
+                print(f"DEBUG [{time.time()*1000:.0f}ms]: Thread {threading.current_thread().name} starting process_single_file for {search_path}")
+            
+            internal_path = actual_path  # For companion files and texture parts
             
             try:
                 # Extract file manually to control the path
@@ -2467,11 +2615,15 @@ class SCOrg_tools_import():
                 # Since we have content, we don't need p4k_file anymore
                 
                 # Strip "Data/" prefix if present to avoid Data/Data/ structure
-                relative_path = search_path
-                if relative_path.lower().startswith("data/"):
-                    relative_path = relative_path[5:] # Remove "Data/"
-                elif relative_path.lower().startswith("data\\"):
-                        relative_path = relative_path[5:]
+                if globals_and_threading.debug:
+                    print(f"DEBUG: actual_path = {actual_path}")
+                base = 'Data'
+                if actual_path.lower().startswith(base.lower() + '/'):
+                    relative_path = actual_path[len(base) + 1:]
+                elif actual_path.lower().startswith(base.lower() + '\\'):
+                    relative_path = actual_path[len(base) + 1:]
+                else:
+                    relative_path = actual_path
                 
                 # Construct the full destination path
                 final_path = extract_dir / relative_path
@@ -2531,19 +2683,8 @@ class SCOrg_tools_import():
                         return (True, f"⚠️ {msg}", extracted_path)
                     else:
                         try:
-                            startupinfo = None
-                            if os.name == 'nt':
-                                startupinfo = subprocess.STARTUPINFO()
-                                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                            
-                            result = subprocess.run(
-                                [cgf_converter, str(extracted_path)],
-                                capture_output=True,
-                                text=True,
-                                startupinfo=startupinfo
-                            )
-                            
-                            if result.returncode == 0:
+                            converted_dae = extracted_path.with_suffix('.dae')
+                            if __class__.convert_cgf_to_dae(extracted_path, converted_dae, converter_path=cgf_converter):
                                 # Delete the original file and all companion files
                                 files_to_delete = [f for f in [extracted_path] + companion_files 
                                                     if f.suffix.lower() not in ['.chr', '.skinm', '.cdf']]
@@ -2555,21 +2696,25 @@ class SCOrg_tools_import():
                                         pass
                                 
                                 # Check if we need to rename the result
-                                converted_dae = extracted_path.with_suffix('.dae')
                                 target_dae = extracted_path.with_name(Path(search_path).name)
                                 
+                                # Only rename if the target has the same extension as the converted file
+                                # This prevents renaming .dae to .cga if the user requested .cga but we converted to .dae
                                 if converted_dae.exists() and not target_dae.exists() and converted_dae.name != target_dae.name:
-                                    try:
-                                        converted_dae.rename(target_dae)
-                                        msg = f"Extracted, Converted & Renamed: {target_dae.name}"
-                                    except Exception as e:
-                                        msg = f"Extracted & Converted: {extracted_path.name} (Rename failed: {e})"
+                                    if converted_dae.suffix.lower() == target_dae.suffix.lower():
+                                        try:
+                                            converted_dae.rename(target_dae)
+                                            msg = f"Extracted, Converted & Renamed: {target_dae.name}"
+                                        except Exception as e:
+                                            msg = f"Extracted & Converted: {extracted_path.name} (Rename failed: {e})"
+                                    else:
+                                        msg = f"Extracted & Converted: {converted_dae.name} (Skipped rename to {target_dae.name} due to extension mismatch)"
                                 else:
                                     msg = f"Extracted, Converted & Cleaned: {extracted_path.name}"
                                 if globals_and_threading.debug: print(msg)
                                 return (True, f"✅ {msg}", extracted_path)
                             else:
-                                msg = f"Extracted {extracted_path.name} but conversion failed: {result.stderr}"
+                                msg = f"Extracted {extracted_path.name} but conversion failed"
                                 if globals_and_threading.debug: print(msg)
                                 return (True, f"⚠️ {msg}", extracted_path)
                         except Exception as e:
@@ -2636,8 +2781,16 @@ class SCOrg_tools_import():
                         # Check BC5_SNORM
                         is_bc5 = False
                         try:
-                            info_result = subprocess.run([texconv_path, '-nologo', '-fileinfo', str(extracted_path)], capture_output=True, text=True, timeout=10)
-                            if 'BC5_SNORM' in info_result.stdout:
+                            if globals_and_threading.debug:
+                                import threading
+                                print(f"DEBUG [{time.time()*1000:.0f}ms]: Thread {threading.current_thread().name} checking BC5_SNORM for {extracted_path.name}")
+                            process = subprocess.Popen(
+                                [texconv_path, '-nologo', '-fileinfo', str(extracted_path)],
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE
+                            )
+                            stdout, stderr = process.communicate(timeout=10)
+                            if b'BC5_SNORM' in stdout:
                                 is_bc5 = True
                         except Exception:
                             pass
@@ -2652,14 +2805,35 @@ class SCOrg_tools_import():
                                 startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
                             
                             cmd = [texconv_path, '-y'] + extra_args + ['-ft', output_format, str(extracted_path), '-o', str(extracted_path.parent)]
-                            result = subprocess.run(
+                            
+                            if globals_and_threading.debug:
+                                import threading
+                                print(f"DEBUG [{time.time()*1000:.0f}ms]: Thread {threading.current_thread().name} starting texconv for {extracted_path.name}")
+                            
+                            # Use Popen for non-blocking execution
+                            texconv_start = time.time()
+                            process = subprocess.Popen(
                                 cmd,
-                                capture_output=True,
-                                text=True,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE,
                                 startupinfo=startupinfo
                             )
                             
-                            if result.returncode == 0:
+                            # Wait for completion with timeout
+                            try:
+                                stdout, stderr = process.communicate(timeout=60)  # 60s timeout for texture conversion
+                            except subprocess.TimeoutExpired:
+                                process.terminate()
+                                msg = f"Extracted {extracted_path.name} but conversion timed out"
+                                if globals_and_threading.debug: print(msg)
+                                return (True, f"⚠️ {msg}", extracted_path)
+                            
+                            if globals_and_threading.debug:
+                                import threading
+                                elapsed = time.time() - texconv_start
+                                print(f"DEBUG [{time.time()*1000:.0f}ms]: Thread {threading.current_thread().name} texconv completed for {extracted_path.name} in {elapsed:.2f}s")
+                            
+                            if process.returncode == 0:
                                 # Delete all DDS files
                                 files_to_delete = [extracted_path] + split_parts
                                 for file_to_del in files_to_delete:
@@ -2672,7 +2846,7 @@ class SCOrg_tools_import():
                                 if globals_and_threading.debug: print(msg)
                                 return (True, f"✅ {msg}", extracted_path)
                             else:
-                                msg = f"Extracted {extracted_path.name} but conversion failed: {result.stderr}"
+                                msg = f"Extracted {extracted_path.name} but conversion failed: {stderr.decode('utf-8') if stderr else ''}"
                                 if globals_and_threading.debug: print(msg)
                                 return (True, f"⚠️ {msg}", extracted_path)
                         except Exception as e:
@@ -2749,6 +2923,7 @@ class SCOrg_tools_import():
                         content = f.read()
                     return {
                         'search_path': search_path,
+                        'actual_path': found_p4k_file.filename,
                         'content': content,
                         'extract_dir': extract_dir,
                         'conversion_exts': conversion_exts,

@@ -196,7 +196,7 @@ class VIEW3D_OT_import_loadout(bpy.types.Operator):
         self.empties_to_fill = []
         self.top_level_loadout = None
         self.displacement_strength = 0
-        self.batch_size = 5  # Process 5 entries per modal call
+        self.batch_size = 1  # Process 1 entry per modal call for better responsiveness
         self.state = 'init'  # 'init', 'hardpoints', 'postprocess'
         self.postprocess_steps = []
         self.current_step = 0
@@ -280,13 +280,21 @@ class VIEW3D_OT_import_loadout(bpy.types.Operator):
         # Initialize progress
         ui_tools.progress_bar_popup("import_hardpoints", 0, len(self.entries), "Starting hardpoint import...")
 
+        # Add a timer to keep the modal running even without user events
+        self._timer = context.window_manager.event_timer_add(0.1, window=context.window)
+
         context.window_manager.modal_handler_add(self)
         return {'RUNNING_MODAL'}
 
     def modal(self, context, event):
         if event.type == 'ESC':
             ui_tools.close_progress_bar_popup("import_hardpoints")
+            context.window_manager.event_timer_remove(self._timer)
             return {'CANCELLED'}
+
+        # Handle timer events to keep processing
+        if event.type == 'TIMER':
+            pass  # Continue processing below
 
         if self.state == 'hardpoints':
             processed = 0
@@ -305,9 +313,8 @@ class VIEW3D_OT_import_loadout(bpy.types.Operator):
             # Update progress
             ui_tools.progress_bar_popup("import_hardpoints", self.current_index, len(self.entries), f"Importing hardpoints {self.current_index}/{len(self.entries)}...")
             
-            # Force UI update occasionally
-            if self.current_index % 10 == 0 or self.current_index >= len(self.entries):
-                blender_utils.SCOrg_tools_blender.update_viewport_with_timer(interval_seconds=0.1)
+            # Force UI update
+            bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
             
             if self.current_index >= len(self.entries):
                 self.state = 'postprocess'
@@ -329,6 +336,9 @@ class VIEW3D_OT_import_loadout(bpy.types.Operator):
                 self.current_step += 1
                 ui_tools.progress_bar_popup("postprocess", self.current_step, len(self.postprocess_steps), f"Post-processing {self.current_step}/{len(self.postprocess_steps)}...")
                 
+                # Force UI update
+                bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
+                
                 return {'RUNNING_MODAL'}
             else:
                 # Finished post-processing
@@ -339,6 +349,9 @@ class VIEW3D_OT_import_loadout(bpy.types.Operator):
 
                 ui_tools.progress_bar_popup("postprocess", len(self.postprocess_steps), len(self.postprocess_steps), "Post-processing complete")
                 ui_tools.close_progress_bar_popup("postprocess")
+                
+                # Remove timer
+                context.window_manager.event_timer_remove(self._timer)
                 
                 return {'FINISHED'}
         
